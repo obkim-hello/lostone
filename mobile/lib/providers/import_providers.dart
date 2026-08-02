@@ -80,6 +80,13 @@ class ImportNotifier extends StateNotifier<ImportState> {
     DataSource? source,
     ParseOptions options = const ParseOptions(),
   }) async {
+    if (filePaths.isEmpty) {
+      state = const ImportState(
+        phase: ImportPhase.failed,
+        error: 'No files selected',
+      );
+      return;
+    }
     state = const ImportState(phase: ImportPhase.parsing);
     try {
       final Conversation conversation = await _service.importFiles(

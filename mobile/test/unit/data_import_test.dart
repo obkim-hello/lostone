@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -6,11 +7,37 @@ import 'package:lostone/models/message.dart';
 import 'package:lostone/models/parse_result.dart';
 import 'package:lostone/services/data_import_service.dart';
 import 'package:lostone/services/data_preprocessor.dart';
+import 'package:lostone/services/parser_registry.dart';
 import 'package:lostone/services/parsers/apple_time.dart';
+import 'package:lostone/services/parsers/data_parser.dart';
 import 'package:lostone/services/parsers/parse_exceptions.dart';
 import 'package:lostone/services/parsers/wechat_parser.dart';
 
 const String _fixtures = 'test/fixtures';
+
+class _ThrowingParser implements DataParser {
+  const _ThrowingParser();
+
+  @override
+  DataSource get source => DataSource.wechat;
+
+  @override
+  Future<bool> canParse(String filePath) async => filePath.endsWith('.throwme');
+
+  @override
+  Stream<ParseEvent> parse(
+    String filePath, {
+    ParseOptions options = const ParseOptions(),
+  }) =>
+      throw const FormatException('boom');
+
+  @override
+  Future<ParseResult> parseAll(
+    String filePath, {
+    ParseOptions options = const ParseOptions(),
+  }) =>
+      throw const FormatException('boom');
+}
 
 Message _msg({
   required String id,
@@ -321,6 +348,61 @@ void main() {
       expect(c.participants, contains('妈妈'));
       expect(c.stats.afterDedup, c.messages.length);
       expect(c.messages.any((Message m) => m.isFromMe), isTrue);
+    });
+
+    test('isolates non-ParseException parser failures as warnings', () async {
+      final DataImportService service = DataImportService(
+        registry: ParserRegistry(<DataParser>[
+          const WeChatParser(),
+          const _ThrowingParser(),
+        ]),
+      );
+
+      final Conversation c = await service.importFiles(<String>[
+        '$_fixtures/boom.throwme',
+        '$_fixtures/wechat_sample.csv',
+      ]);
+
+      expect(c.messages, isNotEmpty);
+      expect(
+        c.warnings.any((ParseWarning w) => w.code == 'parse_failed'),
+        isTrue,
+      );
+    });
+
+    test('surfaces parser warnings and media index on the conversation', () async {
+      final Conversation c = await DataImportService()
+          .importFiles(<String>['$_fixtures/wechat_missing_media.html']);
+
+      expect(
+        c.warnings.any((ParseWarning w) => w.code == 'missing_media'),
+        isTrue,
+      );
+      expect(c.mediaIndex, isNotEmpty);
+    });
+  });
+
+  group('WeChatParser encoding', () {
+    test('skips malformed-encoding lines with a warning, no crash', () async {
+      final Directory tmp =
+          await Directory.systemTemp.createTemp('lostone_enc');
+      final File bad = File('${tmp.path}/bad.csv');
+      final List<int> bytes = <int>[
+        ...utf8.encode('sender,content,timestamp\n'),
+        ...utf8.encode('张三,你好,2024-01-01 12:00:00\n'),
+        0xFF, 0xFE, 0x41,
+        ...utf8.encode(',x,2024-01-01 12:00:01\n'),
+      ];
+      await bad.writeAsBytes(bytes);
+
+      final ParseResult r = await const WeChatParser().parseAll(bad.path);
+      await tmp.delete(recursive: true);
+
+      expect(r.messages.any((Message m) => m.content == '你好'), isTrue);
+      expect(
+        r.warnings.any((ParseWarning w) => w.code == 'malformed_row'),
+        isTrue,
+      );
     });
   });
 }

@@ -19,6 +19,7 @@ class DataImportService {
         _preprocessor = preprocessor;
 
   static const String _tag = 'DataImportService';
+  static const int _maxFileBytes = 200 * 1024 * 1024;
 
   final ParserRegistry _registry;
   final DataPreprocessor _preprocessor;
@@ -40,36 +41,58 @@ class DataImportService {
       throw ArgumentError.value(filePaths, 'filePaths', 'must not be empty');
     }
     final List<Message> parsed = <Message>[];
+    final List<MediaIndexEntry> mediaIndex = <MediaIndexEntry>[];
+    final List<ParseWarning> warnings = <ParseWarning>[];
     int parsedFiles = 0;
     for (final String path in filePaths) {
-      final List<Message>? messages =
-          await _parseOne(path, source: source, options: options);
-      if (messages == null) {
+      final ParseResult? result =
+          await _parseOne(path, warnings, source: source, options: options);
+      if (result == null) {
         continue;
       }
       parsedFiles++;
-      parsed.addAll(messages);
+      parsed.addAll(result.messages);
+      mediaIndex.addAll(result.mediaIndex);
+      warnings.addAll(result.warnings);
     }
     if (parsedFiles == 0) {
       throw ImportException('No importable data found in the selected files');
     }
     final ({List<Message> messages, int skipped}) result =
         _preprocessor.process(parsed);
-    return _assemble(result.messages, parsed.length, result.skipped, source);
+    return _assemble(
+      result.messages,
+      parsed.length,
+      result.skipped,
+      source,
+      mediaIndex,
+      warnings,
+    );
   }
 
-  Future<List<Message>?> _parseOne(
-    String path, {
+  Future<ParseResult?> _parseOne(
+    String path,
+    List<ParseWarning> warnings, {
     required DataSource? source,
     required ParseOptions options,
   }) async {
-    if (!File(path).existsSync()) {
+    final File file = File(path);
+    if (!file.existsSync()) {
+      warnings.add(const ParseWarning('file_not_found', 'file not found'));
       AppLogger.warning(_tag, 'file not found, skipped');
+      return null;
+    }
+    if (file.lengthSync() > _maxFileBytes) {
+      warnings.add(
+        const ParseWarning('file_too_large', 'file exceeds size limit'),
+      );
+      AppLogger.warning(_tag, 'file too large, skipped');
       return null;
     }
     try {
       final DataParser? parser = await _registry.match(path, source: source);
       if (parser == null) {
+        warnings.add(const ParseWarning('no_parser', 'no parser matched'));
         AppLogger.warning(_tag, 'no parser matched, skipped');
         return null;
       }
@@ -79,9 +102,12 @@ class DataImportService {
         'parsed ${result.messages.length} msgs, '
         '${result.warnings.length} warnings',
       );
-      return result.messages;
-    } on ParseException catch (e) {
-      AppLogger.warning(_tag, 'parse failed (${e.source.name}), skipped');
+      return result;
+    } on Exception catch (e) {
+      warnings.add(
+        ParseWarning('parse_failed', 'parse failed: ${e.runtimeType}'),
+      );
+      AppLogger.warning(_tag, 'parse failed (${e.runtimeType}), skipped');
       return null;
     }
   }
@@ -91,6 +117,8 @@ class DataImportService {
     int totalParsed,
     int skipped,
     DataSource? source,
+    List<MediaIndexEntry> mediaIndex,
+    List<ParseWarning> warnings,
   ) {
     final List<String> participants = <String>[];
     final Set<String> seen = <String>{};
@@ -112,6 +140,8 @@ class DataImportService {
       participants: participants,
       messages: messages,
       stats: stats,
+      mediaIndex: mediaIndex,
+      warnings: warnings,
     );
   }
 }

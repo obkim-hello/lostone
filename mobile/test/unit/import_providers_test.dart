@@ -52,6 +52,21 @@ void main() {
       expect(state.error, isNotNull);
     });
 
+    test('empty file list transitions to failed, not stuck in parsing',
+        () async {
+      final ProviderContainer container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      await container
+          .read(importStateProvider.notifier)
+          .importFiles(<String>[]);
+
+      final ImportState state = container.read(importStateProvider);
+      expect(state.phase, ImportPhase.failed);
+      expect(state.isTerminal, isTrue);
+      expect(state.error, isNotNull);
+    });
+
     test('reset returns to idle', () async {
       final ProviderContainer container = ProviderContainer();
       addTearDown(container.dispose);

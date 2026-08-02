@@ -45,6 +45,17 @@ class MediaIndexEntry {
 
   /// 源字节是否存在（缺失/被移动时为 false → `missing_media` 告警）。
   final bool available;
+
+  /// JSON 序列化。
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'source': source.name,
+        'senderId': senderId,
+        'timestamp': timestamp.toIso8601String(),
+        'type': type.name,
+        'sourceRef': sourceRef,
+        'storedPath': storedPath,
+        'available': available,
+      };
 }
 
 /// 流式解析事件。解析以事件流产出，峰值内存与文件大小解耦。
@@ -97,6 +108,13 @@ class ParseWarning {
 
   /// 触发告警的行号/位置（可空）。
   final int? line;
+
+  /// JSON 序列化。
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'code': code,
+        'message': message,
+        'line': line,
+      };
 }
 
 /// 排空事件流后的聚合结果（供小文件/测试便捷使用）。

@@ -90,10 +90,12 @@ const Set<MessageType> _mediaTypes = <MessageType>{
   MessageType.location,
 };
 
-Stream<String> _lines(String filePath) =>
-    File(filePath).openRead().transform(utf8.decoder).transform(
-          const LineSplitter(),
-        );
+const String _replacementChar = '�';
+
+Stream<String> _lines(String filePath) => File(filePath)
+    .openRead()
+    .transform(const Utf8Decoder(allowMalformed: true))
+    .transform(const LineSplitter());
 
 Stream<ParseEvent> _csvEvents(String filePath, ParseOptions options) async* {
   const CsvToListConverter converter =
@@ -105,6 +107,12 @@ Stream<ParseEvent> _csvEvents(String filePath, ParseOptions options) async* {
   await for (final String line in _lines(filePath)) {
     lineNo++;
     if (line.trim().isEmpty) {
+      continue;
+    }
+    if (line.contains(_replacementChar)) {
+      yield WarningEvent(
+        ParseWarning('malformed_row', 'invalid encoding', line: lineNo),
+      );
       continue;
     }
     final List<dynamic> row = converter.convert(line).first;
@@ -146,6 +154,12 @@ Stream<ParseEvent> _txtEvents(String filePath, ParseOptions options) async* {
   await for (final String line in _lines(filePath)) {
     lineNo++;
     sawLine = true;
+    if (line.contains(_replacementChar)) {
+      yield WarningEvent(
+        ParseWarning('malformed_row', 'invalid encoding', line: lineNo),
+      );
+      continue;
+    }
     final RegExpMatch? match = header.firstMatch(line);
     if (match != null) {
       if (sender != null) {
@@ -200,6 +214,12 @@ Stream<ParseEvent> _htmlEvents(String filePath, ParseOptions options) async* {
   await for (final String line in _lines(filePath)) {
     lineNo++;
     sawLine = true;
+    if (line.contains(_replacementChar)) {
+      yield WarningEvent(
+        ParseWarning('malformed_row', 'invalid encoding', line: lineNo),
+      );
+      continue;
+    }
     if (!line.contains('class="msg"')) {
       continue;
     }

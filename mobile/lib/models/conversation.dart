@@ -1,4 +1,5 @@
 import 'message.dart';
+import 'parse_result.dart';
 
 /// 导入结果统计。
 class ImportStats {
@@ -47,6 +48,8 @@ class Conversation {
     required this.participants,
     required this.messages,
     required this.stats,
+    this.mediaIndex = const <MediaIndexEntry>[],
+    this.warnings = const <ParseWarning>[],
   });
 
   /// 主要数据源。
@@ -62,11 +65,21 @@ class Conversation {
   /// 导入统计。
   final ImportStats stats;
 
+  /// 跨文件累积的媒体索引层（只存引用，不含字节）。
+  final List<MediaIndexEntry> mediaIndex;
+
+  /// 跨文件累积的非致命告警（如 `missing_media`、`malformed_row`、
+  /// `empty_file`、`file_too_large` 等），供 UI 呈现。
+  final List<ParseWarning> warnings;
+
   /// JSON 序列化。
   Map<String, dynamic> toJson() => <String, dynamic>{
         'source': source.name,
         'participants': participants,
         'messages': messages.map((Message m) => m.toJson()).toList(),
         'stats': stats.toJson(),
+        'mediaIndex':
+            mediaIndex.map((MediaIndexEntry e) => e.toJson()).toList(),
+        'warnings': warnings.map((ParseWarning w) => w.toJson()).toList(),
       };
 }
