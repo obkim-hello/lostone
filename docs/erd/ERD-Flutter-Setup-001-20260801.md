@@ -2,11 +2,11 @@
 
 > 工程需求文档 - Flutter 项目配置
 >
-> **版本**：v1.0
+> **版本**：v1.1
 > **状态**：已批准
 > **作者**：Claude
 > **日期**：2026-08-01
-> **批准日期**：2026-08-01
+> **批准日期**：2026-08-02（v1.1 版本修订）
 > **批准人**：Project Owner
 > **关联 PRD**：PRD-Project-Setup-001-20260801.md
 
@@ -20,7 +20,7 @@
 | **模块名称** | Flutter 项目配置（Flutter Setup） |
 | **关联 PRD** | PRD-Project-Setup-001-20260801.md |
 | **关联 Spec** | SPEC-Project-Config-001-20260801.md |
-| **技术栈** | Flutter 3.24+, Dart 3.0+ |
+| **技术栈** | Flutter 3.38+, Dart 3.11+ |
 
 ---
 
@@ -48,8 +48,8 @@
 ## 2. 设计约束
 
 ### 2.1 技术约束
-- **语言**：Dart 3.0+
-- **框架**：Flutter 3.24+
+- **语言**：Dart 3.11+
+- **框架**：Flutter 3.38+
 - **平台**：iOS 17+, macOS 14+
 - **最低配置**：
   - CPU：Apple M1 或同等性能
@@ -213,8 +213,8 @@ description: Lostone - AI Persona App
 version: 0.1.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
-  flutter: '>=3.24.0'
+  sdk: '>=3.11.0 <4.0.0'
+  flutter: '>=3.38.4'
 
 dependencies:
   flutter:
@@ -736,6 +736,7 @@ flutter build macos --release
 | 日期 | 版本 | 变更内容 | 作者 |
 |------|------|---------|------|
 | 2026-08-01 | v1.0 | 初始版本 | Claude |
+| 2026-08-02 | v1.1 | 对齐实际工具链版本：§2.1 及内嵌 pubspec 由 Flutter 3.24/Dart 3.0 更正为 Flutter 3.38.4+/Dart 3.11+ | Claude |
 
 ---
 

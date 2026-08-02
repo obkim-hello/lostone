@@ -32,8 +32,7 @@
 **已完成**：
 - ✅ 项目文档体系建立
 - ✅ 文档模板（PRD/ERD/Spec）
-- ✅ 模块 001 三文档（项目初始化）——已批准
-- ✅ 模块 001 Flutter 骨架 + 单元/Widget 测试（20/20 通过）
+- ✅ 模块 001（项目初始化）——**已完成**（三文档 v1.1 已批准、骨架 + 测试 20/20、iOS/web 运行验证通过；macOS 桌面延后）
 - ✅ 模块 001 原生 runner（`ios/`、`macos/`、`web/`），可 `flutter run`
 - ✅ Git 仓库和 GitHub 设置
 
@@ -160,7 +159,7 @@ lostone/
 
 | 模块 | PRD | ERD | Spec | 状态 |
 |------|-----|-----|------|------|
-| 001 - 项目初始化 | [PRD](docs/prd/PRD-Project-Setup-001-20260801.md) | [ERD](docs/erd/ERD-Flutter-Setup-001-20260801.md) | [Spec](docs/spec/SPEC-Project-Config-001-20260801.md) | ✅ 已批准 · 🚧 开发中 |
+| 001 - 项目初始化 | [PRD](docs/prd/PRD-Project-Setup-001-20260801.md) | [ERD](docs/erd/ERD-Flutter-Setup-001-20260801.md) | [Spec](docs/spec/SPEC-Project-Config-001-20260801.md) | ✅ 已完成（v1.1） |
 | 002 - 数据导入 | [PRD](docs/prd/PRD-Data-Import-002-20260801.md) | [ERD](docs/erd/ERD-Data-Parsers-002-20260801.md) | [Spec](docs/spec/SPEC-Data-Parser-002-20260801.md) | 📝 草稿 · 评审中 |
 | ... | ... | ... | ... | ... |
 
