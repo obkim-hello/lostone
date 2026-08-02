@@ -1,0 +1,734 @@
+# ERD-003-Persona 生成引擎
+
+> 工程需求文档 - Persona 生成引擎（Persona Engine）
+>
+> **版本**：v1.0
+> **状态**：📝 草稿
+> **作者**：Claude
+> **日期**：2026-08-02
+> **优先级**：P0
+
+---
+
+## 📋 文档信息
+
+| 项目 | 内容 |
+|------|------|
+| **ERD 编号** | ERD-003 |
+| **模块名称** | Persona 生成引擎（Persona Engine） |
+| **关联 PRD** | PRD-Persona-Generation-003-20260802.md |
+| **关联 Spec** | SPEC-Persona-Builder-003-20260802.md |
+| **依赖模块** | ERD-Data-Parsers-002（数据导入）|
+| **批准日期** | 待批准 |
+| **批准人** | 待批准 |
+
+---
+
+## 1. 技术目标与约束
+
+### 1.1 技术目标
+- 提供一条**确定性、可复现、可解释**的 Persona 生成流水线：`Conversation → Memories → 性格特征 → 五层 Persona → .persona(JSON)`。
+- 纯 Dart 实现，无原生依赖、无网络、无 LLM，可完全单元测试（对齐模块 002 的可测性风格）。
+- 五层 Persona 模型与 `.persona` 文件格式稳定、版本化、向后兼容，作为下游模块 004/005/006 的唯一契约。
+- 支持增量更新（merge）与幂等，version 语义明确。
+
+### 1.2 设计约束
+- **技术栈**：Flutter 3.38+ / Dart 3.11+（与仓库 `pubspec.yaml` `sdk: '>=3.11.0 <4.0.0'` 一致）。
+- **确定性**：相同输入（含消息顺序归一化后）→ 相同输出（含 prompt 渲染）。禁用 `DateTime.now()`/随机数进入分析结论（生成时间戳仅作元信息，由调用方注入或单独字段隔离）。
+- **隔离**：本模块**不**落盘、**不**加密——只产出 `Persona` 对象与 JSON 字节；持久化/加密由存储层（模块 008）负责。
+- **隐私**：日志脱敏；`.persona` 与 prompt 不冗余存整段原文，只存计数/短示例/消息 id 引用。
+- **性能**：≤ 60s / 1000 条（PRD §4.1）；单遍/受影响重算，避免多份全量拷贝。
+- **中文优先**：初版语言分析以中文 + 通用 Unicode 为主，基于规则 + n-gram 统计，不引入重型 NLP 依赖；预留分词/停用词注入点。
+
+### 1.3 依赖关系
+```
+模块 002（数据导入）
+  └── Conversation / Message / MessageType / DataSource（输入契约）
+        └── ★ 模块 003（Persona 生成引擎）★
+              ├── MemoriesAnalyzer
+              ├── PersonaAnalyzer
+              ├── PersonaBuilder（编排 + 版本 + 增量）
+              ├── Persona 模型 + .persona 序列化
+              └── PromptTemplate（渲染 system prompt）
+                    └── 模块 004/005（LLM Runtime，消费 prompt）
+                    └── 模块 008（存储/加密，落盘 .persona）
+```
+
+---
+
+## 2. 架构设计
+
+### 2.1 模块架构
+```
+lib/
+├── models/
+│   ├── persona.dart              # Persona 五层聚合根 + 元信息
+│   ├── persona_layers.dart       # HardRules/Identity/ExpressionStyle/EmotionalLogic/RelationalBehavior
+│   ├── memories.dart             # Memories/TimelineSpan/KeyEvent/Preference
+│   └── evidence.dart             # Evidence（可解释性引用）+ Confidence
+├── services/
+│   └── persona/
+│       ├── memories_analyzer.dart    # 记忆提取
+│       ├── persona_analyzer.dart     # 性格分析
+│       ├── persona_builder.dart      # 编排/版本/增量
+│       ├── persona_codec.dart        # toJson/fromJson + schema 迁移
+│       ├── prompt_template.dart      # Persona → system prompt
+│       └── text_stats.dart           # n-gram/标点/emoji 统计工具
+test/
+├── unit/
+│   ├── persona_model_test.dart
+│   ├── memories_analyzer_test.dart
+│   ├── persona_analyzer_test.dart
+│   ├── persona_builder_test.dart
+│   ├── persona_codec_test.dart
+│   └── prompt_template_test.dart
+└── integration/
+    └── persona_pipeline_test.dart
+```
+
+### 2.2 数据流
+```
+Conversation
+  │  (筛选目标人物消息 personSenderIds / myIdentifiers 补集)
+  ▼
+MemoriesAnalyzer ── Memories(timeline, keyEvents, preferences)
+  │
+  ▼
+PersonaAnalyzer ── ExpressionStyle + EmotionalLogic + tags + Evidence/Confidence
+  │
+  ▼
+PersonaBuilder ── 组装 Identity + HardRules(默认/沿用用户) + 上述层 + 元信息
+  │            └── 增量: mergeMessages → 受影响重算 → merge → version++
+  ▼
+Persona ──► PersonaCodec.toJson ──► .persona (bytes)
+        └──► PromptTemplate.render ──► system prompt (String)
+```
+
+---
+
+## 3. 数据结构定义
+
+### 3.1 核心数据模型
+
+```dart
+/// Persona 语义模型的当前 schema 版本。
+///
+/// 读取更高版本的 `.persona` 应报错；读取更低版本按迁移规则升级。
+const int kPersonaSchemaVersion = 1;
+
+/// 一个人格模型：五层结构 + 生成元信息。
+///
+/// Persona 是对话系统（模块 004/005/006）的唯一输入契约，
+/// 不直接暴露原始聊天记录。
+class Persona {
+  /// 创建一个 Persona。
+  const Persona({
+    required this.id,
+    required this.schemaVersion,
+    required this.personaVersion,
+    required this.generatedAt,
+    required this.identity,
+    required this.hardRules,
+    required this.expressionStyle,
+    required this.emotionalLogic,
+    required this.relationalBehavior,
+    required this.tags,
+    required this.memories,
+    required this.source,
+  });
+
+  /// 稳定标识。**确定性派生**：由来源签名（参与者集合 + 目标人物 id
+  /// + 首条消息键）哈希得到——相同输入得到相同 id；增量更新时从
+  /// [existing] 原样沿用，跨版本不变。因其确定性，它不违反 §确定性不变式。
+  final String id;
+
+  /// 语义 schema 版本，见 [kPersonaSchemaVersion]。
+  final int schemaVersion;
+
+  /// 内容版本，随每次（含增量）成功生成递增，首次为 1。
+  final int personaVersion;
+
+  /// 生成时间（UTC）。仅元信息，不参与任何分析结论。
+  final DateTime generatedAt;
+
+  /// 第 2 层：身份。
+  final Identity identity;
+
+  /// 第 1 层：硬规则（用户可编辑禁忌，增量永不覆盖）。
+  final HardRules hardRules;
+
+  /// 第 3 层：表达风格。
+  final ExpressionStyle expressionStyle;
+
+  /// 第 4 层：情感逻辑。
+  final EmotionalLogic emotionalLogic;
+
+  /// 第 5 层：关系行为。
+  final RelationalBehavior relationalBehavior;
+
+  /// 由统计特征映射出的性格标签（每个附触发依据与置信度）。
+  final List<PersonaTag> tags;
+
+  /// 提取出的记忆（时间线/关键事件/偏好）。
+  final Memories memories;
+
+  /// 数据来源摘要（数据源、消息数、时间跨度、参与者）。
+  final PersonaSource source;
+}
+```
+
+```dart
+/// 第 1 层 · 硬规则：显式禁忌与不可逾越的边界。
+///
+/// 由用户编辑；[PersonaBuilder] 增量更新时**永不覆盖**已有硬规则。
+class HardRules {
+  /// 创建硬规则层。
+  const HardRules({
+    this.forbiddenTopics = const <String>[],
+    this.mustNeverClaim = const <String>[],
+    this.safetyNotes = const <String>[],
+  });
+
+  /// 禁止触碰的话题。
+  final List<String> forbiddenTopics;
+
+  /// AI 绝不可声称的内容（如"我还活着"）。
+  final List<String> mustNeverClaim;
+
+  /// 其他安全/伦理约束说明。
+  final List<String> safetyNotes;
+}
+```
+
+```dart
+/// 第 2 层 · 身份：这个人是谁。
+class Identity {
+  /// 创建身份层。
+  const Identity({
+    required this.displayName,
+    this.relationToUser,
+    this.aliases = const <String>[],
+    this.confidence = Confidence.low,
+  });
+
+  /// 显示名称（如"妈妈"）。无可用名称时回退为
+  /// [PersonaBuildOptions.defaultDisplayName]（默认"未命名"），
+  /// 保证空会话下该字段仍非空。
+  final String displayName;
+
+  /// 与用户的关系（母亲/朋友/爱人…）。
+  final String? relationToUser;
+
+  /// 昵称/称呼别名（从消息中观察到）。
+  final List<String> aliases;
+
+  /// 该层的置信度。
+  final Confidence confidence;
+}
+```
+
+```dart
+/// 第 3 层 · 表达风格：怎么说话。
+class ExpressionStyle {
+  /// 创建表达风格层。
+  const ExpressionStyle({
+    this.catchphrases = const <TermStat>[],
+    this.emojiUsage = const <TermStat>[],
+    this.punctuation = const <TermStat>[],
+    this.avgMessageLength = 0,
+    this.confidence = Confidence.low,
+  });
+
+  /// 高频口头禅/句首词（带计数）。
+  final List<TermStat> catchphrases;
+
+  /// 高频 emoji/表情（带计数）。
+  final List<TermStat> emojiUsage;
+
+  /// 标点习惯统计（如省略号、感叹号密度）。
+  final List<TermStat> punctuation;
+
+  /// 平均消息字符长度。
+  final int avgMessageLength;
+
+  /// 该层置信度。
+  final Confidence confidence;
+}
+```
+
+```dart
+/// 第 4 层 · 情感逻辑：如何表达与回应情绪。
+class EmotionalLogic {
+  /// 创建情感逻辑层。
+  const EmotionalLogic({
+    this.positiveRatio = 0,
+    this.negativeRatio = 0,
+    this.comfortPatterns = const <TermStat>[],
+    this.concernPatterns = const <TermStat>[],
+    this.confidence = Confidence.low,
+  });
+
+  /// 正向情感词占比 [0,1]。
+  final double positiveRatio;
+
+  /// 负向情感词占比 [0,1]。
+  final double negativeRatio;
+
+  /// 安慰类话语模式（带计数）。
+  final List<TermStat> comfortPatterns;
+
+  /// 关心/叮嘱类话语模式（带计数）。
+  final List<TermStat> concernPatterns;
+
+  /// 该层置信度。
+  final Confidence confidence;
+}
+```
+
+```dart
+/// 第 5 层 · 关系行为：与用户互动的模式。
+class RelationalBehavior {
+  /// 创建关系行为层。
+  const RelationalBehavior({
+    this.termsForUser = const <TermStat>[],
+    this.initiationRatio = 0,
+    this.avgResponseGapMinutes = 0,
+    this.confidence = Confidence.low,
+  });
+
+  /// 对用户的称呼（带计数）。
+  final List<TermStat> termsForUser;
+
+  /// 主动发起对话的比例 [0,1]。
+  final double initiationRatio;
+
+  /// 平均回复间隔（分钟）。
+  final double avgResponseGapMinutes;
+
+  /// 该层置信度。
+  final Confidence confidence;
+}
+```
+
+```dart
+/// 提取出的记忆集合。
+class Memories {
+  /// 创建记忆集合。
+  const Memories({
+    required this.timeline,
+    this.keyEvents = const <KeyEvent>[],
+    this.preferences = const <Preference>[],
+  });
+
+  /// 时间线区间与活跃度。
+  final TimelineSpan timeline;
+
+  /// 关键事件（带证据）。
+  final List<KeyEvent> keyEvents;
+
+  /// 偏好/习惯（带计数与证据）。
+  final List<Preference> preferences;
+}
+
+/// 会话时间跨度与活跃度分布。
+class TimelineSpan {
+  /// 创建时间线区间。
+  const TimelineSpan({
+    required this.start,
+    required this.end,
+    required this.messageCount,
+    this.activeHours = const <int, int>{},
+  });
+
+  /// 起始时间（UTC）。空会话（[messageCount] == 0）时为 null。
+  final DateTime? start;
+
+  /// 结束时间（UTC）。空会话（[messageCount] == 0）时为 null。
+  final DateTime? end;
+
+  /// 目标人物消息总数。
+  final int messageCount;
+
+  /// 活跃时段直方图：小时(0-23) → 消息数。
+  ///
+  /// 小时按 [Message.timestamp] 归一到 UTC 后取 `hour` 分桶
+  /// （保证确定性，见 §5.1）。
+  final Map<int, int> activeHours;
+}
+
+/// 一个被标记的关键事件。
+class KeyEvent {
+  /// 创建关键事件。
+  const KeyEvent({
+    required this.at,
+    required this.summary,
+    required this.evidence,
+  });
+
+  /// 事件时间（UTC）。
+  final DateTime at;
+
+  /// 事件摘要（模板拼装，非 LLM）。
+  final String summary;
+
+  /// 支撑该事件的证据。
+  final Evidence evidence;
+}
+
+/// 一项偏好/习惯。
+class Preference {
+  /// 创建偏好项。
+  const Preference({
+    required this.term,
+    required this.count,
+    required this.evidence,
+  });
+
+  /// 偏好词/短语。
+  final String term;
+
+  /// 出现次数。
+  final int count;
+
+  /// 支撑证据。
+  final Evidence evidence;
+}
+```
+
+```dart
+/// 词/短语统计项。
+class TermStat {
+  /// 创建统计项。
+  const TermStat({required this.term, required this.count});
+
+  /// 词或短语。
+  final String term;
+
+  /// 出现次数。
+  final int count;
+}
+
+/// 可解释性证据：把结论回溯到真实消息。
+///
+/// 只存**消息键**、计数与短示例，不冗余存整段原文（隐私约束）。
+///
+/// 消息键 = `source|senderId|timestamp.iso8601|content|type`，
+/// 与模块 002 `DataPreprocessor` 的去重键一致，跨导入稳定；
+/// 不使用 `Message.id`（后者仅单次导入内可引用、跨导入不稳定）。
+class Evidence {
+  /// 创建证据。
+  const Evidence({
+    this.messageKeys = const <String>[],
+    this.sampleExcerpt,
+    this.occurrences = 0,
+  });
+
+  /// 支撑该结论的消息键列表（可截断）。
+  final List<String> messageKeys;
+
+  /// 一条短示例（脱敏/截断，≤ 60 字符）。
+  final String? sampleExcerpt;
+
+  /// 命中总次数。
+  final int occurrences;
+}
+
+/// 性格标签：由统计特征映射出的有限标签。
+class PersonaTag {
+  /// 创建标签。
+  const PersonaTag({
+    required this.label,
+    required this.evidence,
+    this.confidence = Confidence.low,
+  });
+
+  /// 标签文本（如"话痨"/"爱用表情"/"报喜不报忧"）。
+  final String label;
+
+  /// 触发该标签的依据。
+  final Evidence evidence;
+
+  /// 该标签的置信度。
+  final Confidence confidence;
+}
+
+/// 结论置信度。
+enum Confidence {
+  /// 素材不足或信号弱。
+  low,
+
+  /// 中等样本量。
+  medium,
+
+  /// 样本充足、信号明确。
+  high,
+}
+
+/// 数据来源摘要。
+class PersonaSource {
+  /// 创建来源摘要。
+  const PersonaSource({
+    required this.sources,
+    required this.totalMessages,
+    required this.personMessages,
+    required this.mergedMessageKeys,
+  });
+
+  /// 涉及的数据源集合。
+  final Set<DataSource> sources;
+
+  /// 会话总消息数。
+  final int totalMessages;
+
+  /// 目标人物消息数。
+  final int personMessages;
+
+  /// 已并入的**消息键**集合（增量去重基石，键定义见 [Evidence]）。
+  ///
+  /// 与模块 002 `DataPreprocessor` 去重键一致；用 `Message.id` 会因其
+  /// 跨导入不稳定/不唯一而导致漏并或重复计数。
+  final Set<String> mergedMessageKeys;
+}
+```
+
+### 3.2 数据关系
+- `Persona` 1—1 各层；1—* `PersonaTag`；1—1 `Memories`；1—1 `PersonaSource`。
+- `KeyEvent`/`Preference`/`PersonaTag`/各证据 → `Evidence`（引用**消息键**，非 `Message.id`）。
+- **消息键（唯一去重依据）**：`source|senderId|timestamp.iso8601|content|type`，与模块 002 `DataPreprocessor._dedupKey`（`data_preprocessor.dart`）逐字段一致。`Message.id` 不参与去重/合并——它仅在单次导入内可引用、跨导入既不唯一也不稳定（见 `message.dart` 对 `id` 的定义）。
+- 增量更新的幂等由 `PersonaSource.mergedMessageKeys` 保证（按消息键去重）。
+- `.persona` JSON 顶层含 `schemaVersion` + `personaVersion`；读取时先校验 `schemaVersion`。
+
+---
+
+## 4. 接口设计
+
+### 4.1 对外接口（API）
+
+```dart
+/// 记忆提取器：从会话中提取时间线/关键事件/偏好。
+abstract class MemoriesAnalyzer {
+  /// 分析目标人物消息，返回记忆集合。
+  ///
+  /// [personMessages] 必须已按时间升序、去重。
+  Memories analyze(List<Message> personMessages);
+}
+
+/// 性格分析器：统计语言风格与情感模式。
+abstract class PersonaAnalyzer {
+  /// 生成表达风格层。
+  ExpressionStyle analyzeExpression(List<Message> personMessages);
+
+  /// 生成情感逻辑层。
+  EmotionalLogic analyzeEmotion(List<Message> personMessages);
+
+  /// 生成关系行为层（需用户消息做对照）。
+  RelationalBehavior analyzeRelation(
+    List<Message> personMessages,
+    List<Message> userMessages,
+  );
+
+  /// 由统计特征映射出标签集合。
+  List<PersonaTag> deriveTags(
+    ExpressionStyle style,
+    EmotionalLogic emotion,
+  );
+}
+
+/// Persona 构建器：编排全流程、管理版本与增量。
+abstract class PersonaBuilder {
+  /// 首次全量生成。
+  ///
+  /// [personSenderIds] 为空时用 [PersonaBuildOptions.myIdentifiers]
+  /// 的补集推断目标人物。
+  Future<Persona> build(
+    Conversation conversation, {
+    Set<String> personSenderIds,
+    PersonaBuildOptions options,
+  });
+
+  /// 增量更新：把 [newConversation] 并入 [existing]。
+  ///
+  /// 幂等：重复并入相同消息不改变统计结果，硬规则永不覆盖。
+  Future<Persona> update(
+    Persona existing,
+    Conversation newConversation, {
+    Set<String> personSenderIds,
+    PersonaBuildOptions options,
+  });
+}
+
+/// `.persona` 编解码器。
+abstract class PersonaCodec {
+  /// 序列化为 JSON 字节（UTF-8）。
+  List<int> encode(Persona persona);
+
+  /// 从 JSON 字节反序列化。
+  ///
+  /// 抛出 [PersonaSchemaException]：schema 版本不兼容且无迁移路径。
+  /// 抛出 [FormatException]：JSON 结构非法。
+  Persona decode(List<int> bytes);
+}
+
+/// Prompt 模板渲染器。
+abstract class PromptTemplate {
+  /// 把 Persona 渲染为确定性的 system prompt。
+  String render(Persona persona, {PromptOptions options});
+}
+
+/// Prompt 渲染选项。
+class PromptOptions {
+  /// 创建渲染选项。
+  const PromptOptions({
+    this.tone = PromptTone.warm,
+    this.maxChars = 2000,
+  });
+
+  /// 语气档位。
+  final PromptTone tone;
+
+  /// 输出长度上限（字符）。
+  final int maxChars;
+}
+
+/// Prompt 语气档位。
+enum PromptTone {
+  /// 简洁。
+  concise,
+
+  /// 温暖（默认）。
+  warm,
+
+  /// 详尽。
+  detailed,
+}
+
+/// `.persona` schema 版本不兼容（高于当前且无迁移路径）时抛出。
+class PersonaSchemaException implements Exception {
+  /// 创建异常。
+  const PersonaSchemaException(this.message);
+
+  /// 错误说明。
+  final String message;
+}
+```
+
+### 4.2 内部接口
+- `text_stats.dart`：`List<TermStat> topNgrams(...)`、`List<TermStat> punctuationStats(...)`、`List<TermStat> emojiStats(...)`、`double sentimentRatio(...)`（基于内置词表，可注入）。
+- 目标人物筛选：`(List<Message> person, List<Message> user) splitBySender(Conversation, Set<String> personIds, Set<String> myIdentifiers)`。
+
+---
+
+## 5. 实现细节
+
+### 5.1 关键算法
+
+**记忆提取（MemoriesAnalyzer）**
+- 时间线：一遍扫描求 min/max 时间、按 `hour` 累加活跃度直方图、计数。
+- 关键事件启发式：滑窗频次骤变（较基线 ×N）、超长消息、纪念性关键词命中；每个事件保留证据消息 id。
+- 偏好：对目标人物文本做 n-gram（默认 bigram/trigram，中文按字/词，英文按空白）统计 Top-K，去停用词。
+
+**性格分析（PersonaAnalyzer）**
+- 口头禅：句首 token 与高频短语统计；标点：正则统计 `…`/`!`/`?`/重复标点密度；emoji：Unicode emoji + 常见颜文字表。
+- 情感：正/负情感词表命中密度 → 比率；安慰/关心模式：关键词/句式规则。
+- 标签：阈值规则映射（如 `avgMessageLength > X → 话痨`），每标签附触发依据（`PersonaTag.evidence`）。
+
+**增量更新（PersonaBuilder.update）**
+- 计算 `new` 每条消息的**消息键**（与模块 002 去重键一致）；键已在 `existing.source.mergedMessageKeys` 中则跳过（幂等），否则纳入。
+- 仅当有真正新增消息时重算受影响统计并 merge（计数累加、时间线并集、Top-N 重排）；`mergedMessageKeys = existing ∪ new_keys`。
+- 硬规则：直接沿用 `existing.hardRules`，绝不用分析结果覆盖。
+- `id`：沿用 `existing.id`（跨版本不变）。
+- 时间归一：所有 `timestamp` 统一转 UTC 后再做时间线/活跃时段分桶，保证确定性。
+- `personaVersion += 1`；`generatedAt` 由调用方注入的时钟提供（默认参数不使用 `DateTime.now()` 于纯分析路径）。
+
+### 5.2 边界与错误
+- 空会话 / 无目标人物消息：返回结构完整但各层 `Confidence.low` 的 Persona，`personMessages == 0`；不抛异常、不编造。
+- schema 版本高于当前：`decode` 抛 `PersonaSchemaException`。
+- JSON 非法：抛 `FormatException`（不静默返回半成品）。
+
+### 5.3 技术选型
+| 技术点 | 选型 | 理由 |
+|--------|------|------|
+| 序列化 | `dart:convert` JSON | 无依赖、可读、与 GLOSSARY `.persona` 一致；Protobuf 见 ADR-003（暂不采用）|
+| 情感/停用词 | 内置轻量词表 + 可注入 | 避免重型 NLP 依赖，保持确定性与可测 |
+| n-gram | 自实现 `text_stats` | 完全可控、可测、无外部依赖 |
+| 时钟 | 注入式 `DateTime Function()` | 保证分析确定性、可测（禁 `DateTime.now()` 进结论）|
+
+---
+
+## 6. 测试策略
+
+### 6.1 单元测试（目标 > 80%）
+- `persona_model_test`：五层默认值、无 null 层。
+- `memories_analyzer_test`：时间线 min/max/直方图、关键事件命中、n-gram 偏好、空输入。
+- `persona_analyzer_test`：口头禅/标点/emoji 计数、情感比率、标签阈值、证据回溯。
+- `persona_codec_test`：`decode(encode(p))` 值相等（往返无损）；坏 JSON→FormatException；高 schema→PersonaSchemaException。
+- `persona_builder_test`：首次生成 version=1；增量去重幂等；硬规则不被覆盖；version 递增。
+- `prompt_template_test`：同输入同输出；仅含 Persona 字段内容。
+
+### 6.2 集成测试
+- `persona_pipeline_test`：合成 `Conversation`（含目标人物+用户消息）→ build → update（追加）→ 断言 merge、version、置信度提升。
+
+### 6.3 测试数据
+- **仅使用合成 fixture**。严禁使用任何真实导出数据（隐私约束，见 PRD §4.2 与项目安全要求）。合成会话覆盖：中英文混合、emoji、多标点、超短/超长消息、无目标人物、重复消息（幂等）。
+
+---
+
+## 7. 性能与优化
+
+### 7.1 性能指标
+| 指标 | 目标值 | 测量方法 |
+|------|--------|---------|
+| 全量生成 | ≤ 60s / 1000 条 | 集成基准（宿主机）|
+| 增量更新 | 显著 < 同规模全量 | 对比基准 |
+| 内存峰值 | ~O(语料规模) | 避免多份全量拷贝 |
+
+### 7.2 优化策略
+- 单遍统计聚合，尽量流式/迭代，不重复遍历。
+- 增量只重算受影响部分；Top-N 用有界堆/计数表。
+- 大文本分块处理，避免一次性巨型中间结构。
+
+---
+
+## 8. 安全考虑
+
+### 8.1 安全要求
+- 无网络、无外传（可在无网络环境验证）。
+- 日志脱敏：不打印消息原文、称呼、地址等；仅打印计数/类别。
+- `.persona` 与 prompt 仅含 Persona 字段；`Evidence` 只存 id/计数/短示例，`sampleExcerpt` 需截断。
+- 落盘与加密由存储层（模块 008）负责；本模块产物为明文，调用方须交由加密存储。
+- **绝不使用真实导出数据做测试/示例**——仅合成 fixture。
+
+### 8.2 隐私合规
+- 与 ADR-002（隐私优先）/项目隐私要求一致：100% 本地、用户可删除、开源可审计。
+
+---
+
+## 9. 部署与运维
+
+> 引擎层随 App 内嵌，无独立部署。产物（`.persona`）由存储层管理，可导出/删除（Phase 4 UI）。
+
+---
+
+## 10. 附录
+
+### 10.1 参考资料
+- PRD-Persona-Generation-003-20260802.md
+- SPEC-Persona-Builder-003-20260802.md
+- GLOSSARY（五层结构 / `.persona` / 增量更新）
+- ERD-Data-Parsers-002（Conversation/Message 输入契约）
+- CLAUDE.md（Dart 规范、性能指标、隐私要求）
+
+### 10.2 技术债务
+- 中文分词初版为规则/n-gram，语义准确度有限；后续可评估引入可选分词器。
+- LLM 增强（用模型润色人格描述）留待模块 004/005 之后。
+- Protobuf 化 `.persona`（ADR-003）留待评估。
+
+### 10.3 变更记录
+| 日期 | 版本 | 变更内容 | 作者 |
+|------|------|---------|------|
+| 2026-08-02 | v1.0（草稿）| 初始草稿 | Claude |
+| 2026-08-02 | v1.0.1（草稿）| 代理评审修订：(B1) 去重/合并键改为消息内容键（`source\|senderId\|timestamp\|content\|type`，对齐模块 002，非 `Message.id`），`PersonaSource.mergedMessageIds`→`mergedMessageKeys`、`Evidence.messageIds`→`messageKeys`；(B2) 定义 `PersonaTag` 并加入 `Persona.tags`；(B3) 空会话下 `TimelineSpan.start/end` 改可空、`displayName` 回退 `defaultDisplayName`；(M1) `Persona.id` 明确确定性派生；补 `PromptOptions`/`PromptTone`/`PersonaSchemaException` 定义；活跃时段按 UTC 分桶 | Claude |
+
+---
+
+> 本文档为**草稿**，开发状态**阻塞**，需三文档评审批准后方可编码。技术栈须与仓库实际工具链保持一致。
