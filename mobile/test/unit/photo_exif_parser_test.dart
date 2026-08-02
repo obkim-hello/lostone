@@ -148,6 +148,35 @@ void main() {
       expect(entry.storedPath, isNull);
     });
 
+    test('corrupt/truncated photo degrades to a warning, never throws',
+        () async {
+      final String corrupt = '${tmp.path}/corrupt.jpg';
+      await File(corrupt).writeAsBytes(Uint8List.fromList(<int>[
+        0xff, 0xd8, 0xff, 0xe1, 0x00, 0xff, 0x45, 0x78, 0x69, 0x66,
+        0x00, 0x00, 0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00,
+      ]));
+
+      final ParseResult r = await const PhotoExifParser().parseAll(corrupt);
+
+      expect(r.messages, isEmpty);
+      expect(r.warnings, isNotEmpty);
+    });
+
+    test('a corrupt photo does not abort a batch import', () async {
+      final String corrupt = '${tmp.path}/corrupt2.jpg';
+      await File(corrupt).writeAsBytes(Uint8List.fromList(<int>[
+        0xff, 0xd8, 0xff, 0xe1, 0x00, 0xff, 0x45, 0x78, 0x69, 0x66,
+        0x00, 0x00, 0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00,
+      ]));
+
+      final Conversation c = await DataImportService().importFiles(
+        <String>[corrupt, withExif],
+        source: DataSource.photo,
+      );
+
+      expect(c.messages.length, 1);
+    });
+
     test('is selected by the registry for a .jpg file', () async {
       final Conversation c = await DataImportService().importFiles(
         <String>[withExif],

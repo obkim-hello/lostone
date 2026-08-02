@@ -19,6 +19,10 @@ import 'data_parser.dart';
 ///
 /// 照片文件即媒体：`Message.mediaPath` 与 `MediaIndexEntry.sourceRef` 均为
 /// 传入文件路径，`available` 恒真（字节可读）。
+///
+/// 稳健性：损坏/截断的图片可能令底层 `exif` 解码抛 `RangeError`（`Error`
+/// 而非 `Exception`），故本解析器兜底捕获任意失败并降级为 `corrupt_photo`
+/// 告警跳过该文件，绝不让异常逃逸中断整批导入。
 class PhotoExifParser implements DataParser {
   /// 创建照片 EXIF 解析器。
   const PhotoExifParser();
@@ -39,8 +43,19 @@ class PhotoExifParser implements DataParser {
     String filePath, {
     ParseOptions options = const ParseOptions(),
   }) async* {
-    final List<int> bytes = await File(filePath).readAsBytes();
-    final Map<String, IfdTag> tags = await readExifFromBytes(bytes);
+    Map<String, IfdTag> tags;
+    try {
+      final List<int> bytes = await File(filePath).readAsBytes();
+      tags = await readExifFromBytes(bytes);
+    } on Object catch (e) {
+      yield WarningEvent(
+        ParseWarning(
+          'corrupt_photo',
+          'unreadable photo (${e.runtimeType}): ${p.basename(filePath)}',
+        ),
+      );
+      return;
+    }
     final DateTime? timestamp =
         _parseExifDateTime(tags['EXIF DateTimeOriginal']?.printable);
     if (timestamp == null) {
@@ -150,7 +165,14 @@ DateTime? _parseExifDateTime(String? raw) {
       hour == null ||
       minute == null ||
       second == null ||
-      year == 0) {
+      year == 0 ||
+      month < 1 ||
+      month > 12 ||
+      day < 1 ||
+      day > 31 ||
+      hour > 23 ||
+      minute > 59 ||
+      second > 59) {
     return null;
   }
   return DateTime(year, month, day, hour, minute, second);
@@ -165,6 +187,9 @@ double? _gpsDecimal(Map<String, IfdTag> tags, String valueKey, String refKey) {
   final double minutes = values.ratios[1].toDouble();
   final double seconds = values.ratios[2].toDouble();
   final double decimal = degrees + minutes / 60.0 + seconds / 3600.0;
+  if (decimal.isNaN || decimal.isInfinite) {
+    return null;
+  }
   final String ref = tags[refKey]?.printable.trim().toUpperCase() ?? '';
   if (ref == 'S' || ref == 'W') {
     return -decimal;
