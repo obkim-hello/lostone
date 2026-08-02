@@ -1,12 +1,17 @@
 import '../models/message.dart';
 import 'parsers/data_parser.dart';
+import 'parsers/instagram_parser.dart';
 import 'parsers/wechat_parser.dart';
 
 /// 解析器注册与调度：按可选数据源 + `canParse` 探测选出解析器。
 class ParserRegistry {
   /// 创建注册表。未提供时注册默认解析器集合。
   ParserRegistry([List<DataParser>? parsers])
-      : _parsers = parsers ?? <DataParser>[const WeChatParser()];
+      : _parsers = parsers ??
+            <DataParser>[
+              const WeChatParser(),
+              const InstagramParser(),
+            ];
 
   final List<DataParser> _parsers;
 
