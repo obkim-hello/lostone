@@ -94,7 +94,7 @@
 | ParserRegistry / DataImportService | ✅ 已完成 | 调度 + 单文件失败隔离（所有 Exception）+ 组装 Conversation；告警/媒体索引跨文件累积并透出；file_too_large（>200MB）拒绝 |
 | InstagramParser（Meta DYI JSON） | ✅ 已完成 | `message_1.json`（participants+messages）；文本 + photos/videos/gifs/audio_files 分条 + 媒体索引；timestamp_ms→UTC；jsonDecode 错误→ParseException；missing_media |
 | WeiboParser（direct_messages API v2 JSON） | ✅ 已完成 | ERD §4.3 输入契约；`created_at` 微博/Twitter 风格带时区归一 UTC + Unix 秒/毫秒；`sender_screen_name`/`sender_id` 命中 myIdentifiers 判 isFromMe；纯文本无媒体；缺时间→malformed_row、空文本→empty_message、JSON 非法/缺数组→ParseException |
-| IMessageParser（chat.db 只读） | ✅ 已完成 | `sqlite3` 游标逐行流式；message⋈handle；`date`→appleDateToDateTime；is_from_me/targetContact；`text` 为空时回退解码 `attributedBody`（streamtyped，ERD §4.2）；确无正文→empty_message（设备端 sqlite3_flutter_libs 打包待推进） |
+| IMessageParser（chat.db 只读） | ✅ 已完成 | `sqlite3` 游标逐行流式；message⋈handle；`date`→appleDateToDateTime；is_from_me/targetContact；`text` 为空时回退解码 `attributedBody`（streamtyped，ERD §4.2）；确无正文→empty_message（设备端原生库 `sqlite3_flutter_libs` 已声明于 pubspec，`flutter pub get` 解析通过；真机绑定验证待设备） |
 | PhotoExifParser（照片 EXIF） | ✅ 已完成 | `exif` 包；`DateTimeOriginal`→时间戳（含 0 年/月/日/越界拒绝），缺失→missing_exif；`extractLocation` 时显式解析 GPS IFD 换算十进制经纬度写入 metadata（含 NaN 保护，ERD §6.2 line734）；损坏/截断图片兜底 corrupt_photo 告警（RangeError 不逃逸）；照片即媒体（mediaPath==sourceRef，available 恒真）；fixture 由 Dart 直构 EXIF/TIFF 字节（无需外部工具） |
 | MediaStore 分层落地（ERD §4.4） | ✅ 已完成 | `MediaTier` 门控字节拷贝（textOnly 不拷 / photoAndVoice 图+语音 / all 全部）+ `storedPath` 回填；`MediaStorageMode`（copyIntoSandbox / referenceInPlace）；源缺失→available=false 不中断；文件名冲突去重；`isExcludedFromBackup` 经注入钩子（宿主 no-op/iOS 原生），仅首次拷贝前触发一次；入参不可变。原生沙盒/bookmark 装配分阶段推进 |
 | 导入状态管理（Riverpod） | ✅ 已完成 | `ImportPhase`/`ImportState`/`ImportNotifier`/`importStateProvider`（ERD §5.2）；空列表转 failed |
@@ -103,7 +103,7 @@
 
 ### 分阶段推进（需真机 / 大样本 / 待补文档，本切片不含）
 - [ ] WeiboParser 输入契约 Owner 终审（已按微博 API v2 `direct_messages` 结构在 ERD §4.3 固化并实现，待 Owner 确认真实导出格式；若官方格式变更再增补版本说明）
-- [ ] IMessageParser 设备端打包（`sqlite3_flutter_libs` 原生库；解析逻辑已完成并在宿主验证）
+- [ ] IMessageParser 真机绑定验证（`sqlite3_flutter_libs` 已加入 pubspec 并解析通过；解析逻辑宿主已验证，剩真机 chat.db 读取端到端验证）
 - [ ] IMessageParser 完整 `attributedBody` typedstream 解码器（保留富文本/内联附件占位；现为纯文本尽力回退，需真机导出样本验证）
 - [ ] MediaStore 原生装配（iOS 沙盒目录 path_provider + `isExcludedFromBackup` 原生实现 / macOS security-scoped bookmark 持久化；分层落地核心逻辑已完成并宿主验证）
 - [ ] file_picker 导入 UI（Phase 4 视觉稿统一；状态层 `import_providers` 已就绪）
@@ -246,6 +246,7 @@ Spec：⚪ 待创建
 | 2026-08-02 | — | 新增 MediaStore 分层落地（ERD §4.4）：`MediaTier` 门控字节拷贝 + `storedPath` 回填；copyIntoSandbox/referenceInPlace 双模式；源缺失→available=false 不中断整批；文件名冲突去重；`isExcludedFromBackup` 注入钩子（宿主 no-op/iOS 原生）仅首次拷贝前触发一次；入参不可变——将原"MediaStore 原生落地"阻塞项收窄至仅剩 path_provider/原生 bookmark 装配。`flutter test` 86/86、`flutter analyze` 0 警告 | Claude |
 | 2026-08-02 | — | 新增 WeiboParser（ERD §3.4 file scope 最后一项）：ERD §4.3 固化微博 API v2 `direct_messages` 输入契约（非臆造，锚定真实结构）；实现 created_at 时区归一 UTC + Unix 秒/毫秒、sender→isFromMe、告警降级；注册进 registry（与 Instagram 结构互斥）。原"WeiboParser 待补文档"阻塞项转为 Owner 终审。`flutter test` 95/95、`flutter analyze` 0 警告 | Claude |
 | 2026-08-02 | — | 落地 ERD §7.3 吞吐压测宿主版（WeChat 流式）：生成 10 万条 CSV，经事件流懒消费断言全解析、0 告警、≥5000 msg/min（实测 ~6s）。验证 openRead+LineSplitter 流式路径不全量载入。5GB 峰值内存采样仍需设备/CI。`flutter test` 96/96、`flutter analyze` 0 警告 | Claude |
+| 2026-08-02 | — | iMessage 设备端打包推进：pubspec 加入 `sqlite3_flutter_libs ^0.5.24`（解析为 0.5.42），`flutter pub get` 通过；ERD §4.3 依赖表同步。原生 SQLite 库随 iOS/macOS 打包，剩真机 chat.db 端到端验证。`flutter test` 96/96、`flutter analyze` 0 警告 | Claude |
 
 ---
 

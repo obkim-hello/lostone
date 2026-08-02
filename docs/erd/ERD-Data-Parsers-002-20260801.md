@@ -599,7 +599,8 @@ dependencies:
   archive: ^3.6.0         # zip 流式解压（iOS 导入）
   csv: ^6.0.0             # 微信 CSV
   html: ^0.15.4           # 仅小文件/well-formed 片段回退；大文件走自研分块 tokenizer（见 §8.1）
-  sqlite3: ^2.4.0         # iMessage chat.db
+  sqlite3: ^2.4.0         # iMessage chat.db（FFI 绑定）
+  sqlite3_flutter_libs: ^0.5.24  # 设备端打包原生 SQLite 库（iOS/macOS）
   exif: ^3.3.0            # 照片 EXIF
   path: ^1.9.0            # 路径处理
   path_provider: ^2.1.0   # 沙盒目录
