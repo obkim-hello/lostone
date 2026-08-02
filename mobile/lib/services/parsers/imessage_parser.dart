@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:sqlite3/sqlite3.dart';
 
@@ -14,9 +16,11 @@ import 'parse_exceptions.dart';
 /// `handle_id`）、`handle`（`id`）。`date` 为 Apple 绝对时间，经
 /// [appleDateToDateTime] 归一（秒/纳秒自适应）。
 ///
-/// 以游标逐行消费，峰值内存与库大小解耦。附件行（`text` 为空）产出
-/// `empty_message` 告警而非消息。`ParseOptions.targetContact` 指定时，
-/// 仅保留该 handle 与「我」发出的消息。
+/// 以游标逐行消费，峰值内存与库大小解耦。`text` 为空时回退解码
+/// `attributedBody`（iOS 14+/macOS 11+ 将正文存入该 `streamtyped`
+/// NSAttributedString BLOB，见 ERD §4.2）；解码失败或确无正文的附件行
+/// 产出 `empty_message` 告警而非消息。`ParseOptions.targetContact` 指定
+/// 时，仅保留该 handle 与「我」发出的消息。
 ///
 /// 注意：在设备上运行需 `sqlite3_flutter_libs` 打包原生库（分阶段推进）；
 /// 桌面/测试宿主复用系统 libsqlite3。
@@ -66,7 +70,8 @@ class IMessageParser implements DataParser {
     }
     try {
       final PreparedStatement stmt = db.prepare(
-        'SELECT m.ROWID AS rowid, m.text AS text, m.date AS date, '
+        'SELECT m.ROWID AS rowid, m.text AS text, '
+        'm.attributedBody AS attributed_body, m.date AS date, '
         'm.is_from_me AS is_from_me, h.id AS handle '
         'FROM message m LEFT JOIN handle h ON m.handle_id = h.ROWID '
         'ORDER BY m.date ASC, m.ROWID ASC',
@@ -123,7 +128,13 @@ Stream<ParseEvent> _rowEvents(Row row, ParseOptions options) async* {
       handle != options.targetContact) {
     return;
   }
-  final String text = (row['text'] as String?)?.trim() ?? '';
+  String text = (row['text'] as String?)?.trim() ?? '';
+  if (text.isEmpty) {
+    final Object? blob = row['attributed_body'];
+    if (blob is Uint8List) {
+      text = _decodeAttributedBody(blob)?.trim() ?? '';
+    }
+  }
   if (text.isEmpty) {
     yield const WarningEvent(
       ParseWarning('empty_message', 'message has no text body'),
@@ -143,4 +154,61 @@ Stream<ParseEvent> _rowEvents(Row row, ParseOptions options) async* {
       content: text,
     ),
   );
+}
+
+String? _decodeAttributedBody(Uint8List bytes) {
+  final int marker = _indexOfAscii(bytes, 'NSString');
+  if (marker < 0) {
+    return null;
+  }
+  int i = marker + 'NSString'.length;
+  while (i < bytes.length && bytes[i] != 0x2b) {
+    i++;
+  }
+  if (i >= bytes.length) {
+    return null;
+  }
+  i++;
+  if (i >= bytes.length) {
+    return null;
+  }
+  int length = bytes[i];
+  i++;
+  if (length == 0x81) {
+    if (i + 1 >= bytes.length) {
+      return null;
+    }
+    length = bytes[i] | (bytes[i + 1] << 8);
+    i += 2;
+  } else if (length == 0x82) {
+    if (i + 3 >= bytes.length) {
+      return null;
+    }
+    length = bytes[i] |
+        (bytes[i + 1] << 8) |
+        (bytes[i + 2] << 16) |
+        (bytes[i + 3] << 24);
+    i += 4;
+  }
+  if (length <= 0 || i + length > bytes.length) {
+    return null;
+  }
+  return utf8.decode(bytes.sublist(i, i + length), allowMalformed: true);
+}
+
+int _indexOfAscii(Uint8List bytes, String needle) {
+  final List<int> pattern = needle.codeUnits;
+  for (int i = 0; i + pattern.length <= bytes.length; i++) {
+    bool match = true;
+    for (int j = 0; j < pattern.length; j++) {
+      if (bytes[i + j] != pattern[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) {
+      return i;
+    }
+  }
+  return -1;
 }

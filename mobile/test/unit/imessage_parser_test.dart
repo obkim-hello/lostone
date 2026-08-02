@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lostone/models/conversation.dart';
@@ -18,7 +20,8 @@ Future<String> _buildChatDb(Directory dir) async {
     ..execute('CREATE TABLE handle(ROWID INTEGER PRIMARY KEY, id TEXT)')
     ..execute(
       'CREATE TABLE message(ROWID INTEGER PRIMARY KEY, text TEXT, '
-      'date INTEGER, is_from_me INTEGER, handle_id INTEGER)',
+      'attributedBody BLOB, date INTEGER, is_from_me INTEGER, '
+      'handle_id INTEGER)',
     )
     ..execute('CREATE TABLE chat(ROWID INTEGER PRIMARY KEY, chat_identifier TEXT)')
     ..execute(
@@ -26,13 +29,31 @@ Future<String> _buildChatDb(Directory dir) async {
     )
     ..execute("INSERT INTO handle VALUES (1, 'mom@example.com')")
     ..execute(
-      "INSERT INTO message VALUES "
+      'INSERT INTO message(ROWID, text, date, is_from_me, handle_id) VALUES '
       "(1, '记得吃早饭', $_nanos20220101, 0, 1),"
       "(2, '好的', ${_nanos20220101 + _oneMinuteNanos}, 1, 0),"
       "(3, NULL, ${_nanos20220101 + 2 * _oneMinuteNanos}, 0, 1)",
     );
   db.dispose();
   return path;
+}
+
+Uint8List _attributedBody(String text) {
+  final List<int> textBytes = utf8.encode(text);
+  return Uint8List.fromList(<int>[
+    0x04,
+    0x0b,
+    ...utf8.encode('streamtyped'),
+    ...utf8.encode('NSString'),
+    0x01,
+    0x94,
+    0x84,
+    0x01,
+    0x2b,
+    textBytes.length,
+    ...textBytes,
+    0x86,
+  ]);
 }
 
 void main() {
@@ -105,6 +126,30 @@ void main() {
       );
       expect(narrowed.messages.length, 1);
       expect(narrowed.messages.single.isFromMe, isTrue);
+    });
+
+    test('falls back to attributedBody when text is NULL', () async {
+      final Database db = sqlite3.open(dbPath);
+      final PreparedStatement stmt = db.prepare(
+        'INSERT INTO message(ROWID, text, attributedBody, date, '
+        'is_from_me, handle_id) VALUES (?, NULL, ?, ?, ?, ?)',
+      );
+      stmt.execute(<Object?>[
+        4,
+        _attributedBody('晚安好好休息'),
+        _nanos20220101 + 3 * _oneMinuteNanos,
+        0,
+        1,
+      ]);
+      stmt.dispose();
+      db.dispose();
+
+      final ParseResult r = await const IMessageParser().parseAll(dbPath);
+
+      final Message recovered =
+          r.messages.firstWhere((Message m) => m.content == '晚安好好休息');
+      expect(recovered.senderId, 'mom@example.com');
+      expect(recovered.isFromMe, isFalse);
     });
 
     test('is selected by the registry for a .db file', () async {

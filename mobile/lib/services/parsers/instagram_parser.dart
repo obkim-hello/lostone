@@ -21,8 +21,9 @@ import 'parse_exceptions.dart';
 /// }
 /// ```
 ///
-/// 一条消息可同时含文本与若干图片：文本产出一条文本消息，
-/// 每张图片产出一条图片消息 + 一条媒体索引；`uri` 指向文件缺失时产出 `missing_media`。
+/// 一条消息可同时含文本与若干媒体（`photos`/`videos`/`gifs`/`audio_files`）：
+/// 文本产出一条文本消息，每个媒体产出一条对应类型消息 + 一条媒体索引；
+/// `uri` 指向文件缺失时产出 `missing_media`。
 /// JSON 为整文档结构，须整体读入（非行式流式）。
 class InstagramParser implements DataParser {
   /// 创建 Instagram 解析器。
@@ -54,7 +55,16 @@ class InstagramParser implements DataParser {
     ParseOptions options = const ParseOptions(),
   }) async* {
     final String dir = p.dirname(filePath);
-    final Object? decoded = jsonDecode(await File(filePath).readAsString());
+    Object? decoded;
+    try {
+      decoded = jsonDecode(await File(filePath).readAsString());
+    } on FormatException catch (e) {
+      throw ParseException(
+        DataSource.instagram,
+        'Invalid Instagram export JSON',
+        details: e.message,
+      );
+    }
     if (decoded is! Map<String, dynamic> || decoded['messages'] is! List) {
       throw ParseException(
         DataSource.instagram,
@@ -81,16 +91,19 @@ class InstagramParser implements DataParser {
       if (content != null && content.isNotEmpty) {
         yield MessageEvent(_textMessage(sender, ts, index++, isFromMe, content));
       }
-      final List<dynamic> photos =
-          raw['photos'] is List ? raw['photos'] as List<dynamic> : <dynamic>[];
-      for (final dynamic photo in photos) {
-        final String? uri = photo is Map<String, dynamic>
-            ? photo['uri'] as String?
-            : null;
-        if (uri == null || uri.isEmpty) {
-          continue;
+      for (final _MediaKind kind in _mediaKinds) {
+        final List<dynamic> items = raw[kind.field] is List
+            ? raw[kind.field] as List<dynamic>
+            : <dynamic>[];
+        for (final dynamic item in items) {
+          final String? uri = item is Map<String, dynamic>
+              ? item['uri'] as String?
+              : null;
+          if (uri == null || uri.isEmpty) {
+            continue;
+          }
+          yield* _mediaEvents(sender, ts, index++, isFromMe, uri, dir, kind);
         }
-        yield* _photoEvents(sender, ts, index++, isFromMe, uri, dir);
       }
     }
   }
@@ -121,13 +134,29 @@ class InstagramParser implements DataParser {
   }
 }
 
-Stream<ParseEvent> _photoEvents(
+class _MediaKind {
+  const _MediaKind(this.field, this.type, this.label);
+
+  final String field;
+  final MessageType type;
+  final String label;
+}
+
+const List<_MediaKind> _mediaKinds = <_MediaKind>[
+  _MediaKind('photos', MessageType.image, '[图片]'),
+  _MediaKind('videos', MessageType.video, '[视频]'),
+  _MediaKind('gifs', MessageType.video, '[动图]'),
+  _MediaKind('audio_files', MessageType.voice, '[语音]'),
+];
+
+Stream<ParseEvent> _mediaEvents(
   String sender,
   DateTime timestamp,
   int index,
   bool isFromMe,
   String uri,
   String dir,
+  _MediaKind kind,
 ) async* {
   final bool available = File(p.join(dir, uri)).existsSync();
   yield MessageEvent(
@@ -138,8 +167,8 @@ Stream<ParseEvent> _photoEvents(
       senderName: sender,
       isFromMe: isFromMe,
       timestamp: timestamp,
-      type: MessageType.image,
-      content: '[图片]',
+      type: kind.type,
+      content: kind.label,
       mediaPath: uri,
     ),
   );
@@ -148,7 +177,7 @@ Stream<ParseEvent> _photoEvents(
       source: DataSource.instagram,
       senderId: sender,
       timestamp: timestamp,
-      type: MessageType.image,
+      type: kind.type,
       sourceRef: uri,
       available: available,
     ),
