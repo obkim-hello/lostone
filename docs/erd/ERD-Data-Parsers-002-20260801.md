@@ -571,6 +571,10 @@ importFiles(paths)
   → 组装 Conversation + ImportStats
 ```
 
+**解析器特定要求（规范细节见 SPEC §3.4）**：
+- **WeChatParser**：必须支持多行正文续行（消息头之后的非头行追加到上一条），媒体占位符按类型保留（`[图片]→image`、`[语音]→voice` 等，`[撤回了一条消息]→system`），CSV 列名按别名集容错。
+- **PhotoExifParser**：`exif` 包默认只取 `DateTimeOriginal`；`extractLocation=true` 时须**显式解析 GPS IFD**（`GPSLatitude`/`GPSLongitude` + 参考方向）并换算十进制经纬度写入 `metadata`。此处无参考实现可抄，实现者须自行接线并测试。
+
 ### 6.3 错误处理
 
 #### 错误类型

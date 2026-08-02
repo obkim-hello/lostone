@@ -249,6 +249,56 @@ class Message {
 
 ---
 
+### 3.4 微信解析细节（规范性）
+
+以下规则为 `WeChatParser` 的**规范要求**，实现与测试必须覆盖。
+
+#### 3.4.1 多行消息续行（🔴 正确性要求）
+微信 TXT/HTML 导出中，单条消息的正文可跨多行：只有能匹配「消息头」（发送者 + 时间戳）的行才开启一条新消息，**其后不匹配消息头的行属于上一条消息正文**，须追加（以 `\n` 连接），不得逐行丢弃。
+
+**算法**：
+```
+current = null
+for line in lines:
+  if matchesHeader(line):
+      if current != null: emit(current)
+      current = newMessage(from: line)
+  else if current != null:
+      current.content += '\n' + line          // 续行追加
+  else:
+      warn('orphan_line')                      // 首条消息前的游离行
+emit(current)  // flush 末条
+```
+朴素的逐行解析会静默丢弃每条多行消息的后续行，属于真实缺陷，必须有 fixture 覆盖。
+
+#### 3.4.2 媒体占位符处理（type-and-keep，不丢弃）
+微信将非文本消息导出为占位标记。除「撤回」外，一律**保留为带类型的消息**（保留对话节奏信号），而非当作系统消息丢弃：
+
+| 占位符 | 处理 | `type` | 说明 |
+|--------|------|--------|------|
+| `[图片]` | 保留 | `image` | |
+| `[语音]` | 保留 | `voice` | |
+| `[视频]` | 保留 | `video` | |
+| `[表情]` | 保留 | `image` | 贴纸/表情 |
+| `[位置]` | 保留 | `location` | |
+| `[文件]` `[名片]` `[链接]` `[红包]` `[转账]` | 保留 | `text` | 无专用枚举，`content` 存原占位符，`metadata['placeholder']` 存原始标记 |
+| `[撤回了一条消息]` | **标记** | `system` | 由预处理过滤（对话中无实际内容） |
+
+> `content` 对媒体类占位符存占位摘要（如 `[图片]`）；真实媒体文件引用（若导出含）存 `mediaPath`。
+
+#### 3.4.3 CSV 列名别名（容错）
+不同导出工具列名不一，解析器须按下表别名集识别列（大小写不敏感，取首个命中）：
+
+| 逻辑列 | 接受的别名 |
+|--------|-----------|
+| 发送者 | `sender`, `发送人`, `from`, `NickName`, `talker` |
+| 内容 | `content`, `内容`, `message`, `Message`, `StrContent` |
+| 时间 | `timestamp`, `时间`, `time`, `StrTime`, `CreateTime` |
+
+无法定位必需列（发送者/内容/时间任一）时，抛 `ParseException`（致命）。
+
+---
+
 ## 4. 边界情况
 
 ### 4.1 输入边界
@@ -261,6 +311,11 @@ class Message {
 | 不支持的扩展名 | `.docx` | `canParse` 返回 false；无匹配解析器 |
 | 超大文件 | > 200 MB | 拒绝并告警 `file_too_large` |
 | 编码异常/乱码行 | 非法 UTF-8 | 跳过该行 + 告警 `malformed_row` |
+| 多行正文消息 | 消息头后跟续行 | 续行追加到上一条正文（见 §3.4.1），不丢弃 |
+| 消息头前的游离行 | 首条消息头之前有文本 | 跳过 + 告警 `orphan_line` |
+| 媒体占位符 | `[图片]`/`[语音]`/… | 保留为对应 `type`（见 §3.4.2） |
+| 撤回消息 | `[撤回了一条消息]` | 标记 `system`，预处理阶段过滤 |
+| CSV 缺必需列 | 无发送者/内容/时间列 | 抛 `ParseException` |
 | 缺失 EXIF 的照片 | 无 `DateTimeOriginal` | 跳过该照片 + 告警 `missing_exif` |
 | 未授权却要求提取 GPS | extractLocation=true | 退化为不提取 + 告警 `location_not_authorized` |
 
@@ -445,6 +500,59 @@ test('Message survives JSON round-trip', () {
 });
 ```
 
+#### 测试用例 8：微信多行消息续行（§3.4.1）
+```dart
+test('WeChat multi-line message keeps continuation lines', () async {
+  final ParseResult r =
+      await WeChatParser().parse('test/fixtures/wechat_multiline.txt');
+  final Message m =
+      r.messages.firstWhere((Message x) => x.content.contains('第一行'));
+
+  expect(m.content, contains('第二行'));
+  expect(m.content, contains('第三行'));
+  expect(m.content, '第一行\n第二行\n第三行');
+});
+```
+
+#### 测试用例 9：微信媒体占位符按类型保留（§3.4.2）
+```dart
+test('WeChat media placeholders are typed, not dropped', () async {
+  final ParseResult r =
+      await WeChatParser().parse('test/fixtures/wechat_media.csv');
+
+  expect(r.messages.any((Message m) => m.type == MessageType.image), isTrue);
+  expect(r.messages.any((Message m) => m.type == MessageType.voice), isTrue);
+  // [红包] 无专用枚举 → text + metadata 标记
+  final Message hongbao =
+      r.messages.firstWhere((Message m) => m.content == '[红包]');
+  expect(hongbao.type, MessageType.text);
+  expect(hongbao.metadata['placeholder'], '[红包]');
+  // [撤回了一条消息] → system，预处理后应被过滤
+  final result = DataPreprocessor().process(r.messages);
+  expect(
+    result.messages.any((Message m) => m.type == MessageType.system),
+    isFalse,
+  );
+});
+```
+
+#### 测试用例 10：CSV 列名别名与缺列（§3.4.3）
+```dart
+test('WeChat CSV accepts column aliases', () async {
+  // 表头使用 发送人/内容/时间
+  final ParseResult r =
+      await WeChatParser().parse('test/fixtures/wechat_aliased_cols.csv');
+  expect(r.messages, isNotEmpty);
+});
+
+test('WeChat CSV throws when a required column is missing', () {
+  expect(
+    () => WeChatParser().parse('test/fixtures/wechat_missing_col.csv'),
+    throwsA(isA<ParseException>()),
+  );
+});
+```
+
 ### 7.2 测试覆盖率
 
 | 代码类型 | 覆盖率目标 | 实际覆盖率 |
@@ -458,6 +566,10 @@ test('Message survives JSON round-trip', () {
 test/fixtures/
 ├── wechat_sample.csv       # 含文本/图片/语音/系统消息
 ├── wechat_sample.html
+├── wechat_multiline.txt    # 含跨多行正文的消息（§3.4.1）
+├── wechat_media.csv        # 含各类媒体占位符 + [红包] + [撤回了一条消息]（§3.4.2）
+├── wechat_aliased_cols.csv # 表头用中文别名 发送人/内容/时间（§3.4.3）
+├── wechat_missing_col.csv  # 缺必需列，触发 ParseException
 ├── imessage_sample.db      # 脱敏 chat.db
 ├── weibo_sample.json
 ├── instagram_sample.json
