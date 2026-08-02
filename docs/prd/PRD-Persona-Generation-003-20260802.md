@@ -250,7 +250,7 @@
 | 数据项 | 类型 | 必填 | 来源 | 验证规则 |
 |--------|------|------|------|----------|
 | conversation | `Conversation` | 是 | 模块 002 | 非空消息列表 |
-| personSenderIds | `Set<String>` | 否 | 用户选择 | 为空时默认以 `Message.isFromMe==false` 判对方，`myIdentifiers` 细化；方向不可判定/多方会话时触发守卫降级 |
+| personSenderIds | `Set<String>` | 否 | 用户选择 | 为空时默认以 `Message.isFromMe==false` 判对方，`myIdentifiers` 细化；方向不可判定/多方会话时触发守卫降级（分支门控见功能1）|
 | existingPersona | `Persona?` | 否 | 上次生成 | 增量更新时提供 |
 | options | `PersonaBuildOptions` | 否 | 调用方 | 阈值/模板档位 |
 
