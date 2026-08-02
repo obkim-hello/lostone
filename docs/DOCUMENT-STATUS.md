@@ -44,10 +44,17 @@
 | 数据模型 | ✅ 已实现 | AppConfig、DependencyConfig、EnvironmentStatus |
 | 初始化服务 | ✅ 已实现 | AppInitializer、initializeApp、checkEnvironment |
 | 状态管理 | ✅ 已实现 | appConfigProvider、initializationProvider |
-| 单元/Widget 测试 | ✅ 已通过 | test/unit、test/widget，14/14 通过 |
-| flutter analyze / test 验证 | ✅ 已通过 | analyze 无 issue；test 14/14；dart format 已应用 |
+| 环境检查 | ✅ 已实现 | checkEnvironment 校验 Dart SDK 版本，不达标抛 EnvironmentError |
+| 单元/Widget 测试 | ✅ 已通过 | test/unit、test/widget，20/20 通过（含初始化 happy-path） |
+| flutter analyze / test 验证 | ✅ 已通过 | analyze 无 issue；test 20/20；dart format 已应用 |
 
 分支：`feature/PRD-001-flutter-setup`
+
+### ⚠️ 待处理：ERD-001 需修订
+- **SDK 版本约束**：本机安装 Flutter 3.44.8（Dart 3.11），已批准的依赖集解析后最低要求
+  Flutter `>=3.38.4` / Dart `>=3.11.0`，无法在 ERD-001 §2.1 声明的 Flutter 3.24 上 `pub get`。
+  `pubspec.yaml` 已按实际解析结果对齐，**ERD-001 的 3.24 目标需重新评审并修订**。
+- **原生 runner**：尚未执行 `flutter create`，缺少 `ios/`、`macos/` 目录；设备构建前需补充。
 
 ---
 

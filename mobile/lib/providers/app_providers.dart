@@ -4,8 +4,9 @@ import '../models/app_config.dart';
 import '../services/app_initializer.dart';
 
 /// 当前应用配置的全局状态。
-final StateProvider<AppConfig> appConfigProvider =
-    StateProvider<AppConfig>((Ref ref) {
+final StateProvider<AppConfig> appConfigProvider = StateProvider<AppConfig>((
+  Ref ref,
+) {
   return AppConfig.development;
 });
 
@@ -41,17 +42,6 @@ class InitializationState {
 
   /// 失败时的错误描述。
   final String? error;
-
-  /// 基于当前状态创建一个副本并覆盖给定字段。
-  InitializationState copyWith({
-    InitializationPhase? phase,
-    String? error,
-  }) {
-    return InitializationState(
-      phase: phase ?? this.phase,
-      error: error ?? this.error,
-    );
-  }
 }
 
 /// 驱动 [InitializationState] 的状态管理器。
@@ -64,7 +54,7 @@ class InitializationNotifier extends StateNotifier<InitializationState> {
   /// 参数：
   /// - [config]：可选的应用配置。
   Future<void> initialize({AppConfig? config}) async {
-    state = state.copyWith(phase: InitializationPhase.loading);
+    state = const InitializationState(phase: InitializationPhase.loading);
     try {
       await initializeApp(config: config);
       state = const InitializationState(phase: InitializationPhase.success);
@@ -79,9 +69,9 @@ class InitializationNotifier extends StateNotifier<InitializationState> {
 
 /// 初始化状态的全局 Provider。
 final StateNotifierProvider<InitializationNotifier, InitializationState>
-    initializationProvider =
-    StateNotifierProvider<InitializationNotifier, InitializationState>(
-  (Ref ref) {
-    return InitializationNotifier();
-  },
-);
+initializationProvider =
+    StateNotifierProvider<InitializationNotifier, InitializationState>((
+      Ref ref,
+    ) {
+      return InitializationNotifier();
+    });

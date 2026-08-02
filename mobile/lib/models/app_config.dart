@@ -24,11 +24,11 @@ class AppConfig {
 
   /// 从 JSON 反序列化生成 [AppConfig]。
   factory AppConfig.fromJson(Map<String, dynamic> json) => AppConfig(
-        appName: json['appName'] as String,
-        version: json['version'] as String,
-        environment: json['environment'] as String,
-        isDebug: json['isDebug'] as bool? ?? false,
-      );
+    appName: json['appName'] as String,
+    version: json['version'] as String,
+    environment: json['environment'] as String,
+    isDebug: json['isDebug'] as bool? ?? false,
+  );
 
   /// 应用名称。
   final String appName;
@@ -76,9 +76,9 @@ class AppConfig {
 
   /// 序列化为 JSON。
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'appName': appName,
-        'version': version,
-        'environment': environment,
-        'isDebug': isDebug,
-      };
+    'appName': appName,
+    'version': version,
+    'environment': environment,
+    'isDebug': isDebug,
+  };
 }

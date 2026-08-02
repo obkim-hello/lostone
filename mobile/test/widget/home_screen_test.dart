@@ -6,14 +6,13 @@ import 'package:lostone/providers/app_providers.dart';
 import 'package:lostone/screens/home_screen.dart';
 
 void main() {
-  testWidgets('HomeScreen should render the app name and environment',
-      (WidgetTester tester) async {
+  testWidgets('HomeScreen should render the app name and environment', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: <Override>[
-          appConfigProvider.overrideWith(
-            (Ref ref) => AppConfig.production,
-          ),
+          appConfigProvider.overrideWith((Ref ref) => AppConfig.production),
         ],
         child: const MaterialApp(home: HomeScreen()),
       ),
