@@ -2,7 +2,7 @@
 
 > 工程需求文档 - 数据解析器
 >
-> **版本**：v0.2
+> **版本**：v0.3
 > **状态**：📝 草稿
 > **作者**：Claude
 > **日期**：2026-08-01
@@ -90,7 +90,7 @@
 └───────────────────────────────────────────────┘
 ```
 
-> 关键原则：**解析全程流式**（`Stream<Message>`），峰值内存与输入文件大小解耦；媒体字节层与文本层解耦，由 `MediaStore` 按分级档位单独处理。
+> 关键原则：**解析全程流式**（`Stream<ParseEvent>`：MessageEvent / MediaIndexEvent / WarningEvent），峰值内存与输入文件大小解耦；媒体索引由解析器随消息产出（`storedPath` 恒空），媒体字节层与文本层解耦，由 `MediaStore` 按分级档位单独落地并回填 `storedPath`。
 
 ### 3.2 组件设计
 | 组件名称 | 职责 | 技术实现 |
@@ -100,7 +100,7 @@
 | `MediaStore` | 媒体三层落地：文本/索引恒存，字节按分级档拷贝/引用 | 流式拷贝 + `isExcludedFromBackup` |
 | `ParserRegistry` | 注册/查找/自动匹配解析器 | Map + `canParse` 探测 |
 | `DataParser` | 解析单一数据源的抽象接口 | `abstract interface class` |
-| `WeChatParser` | 微信 CSV/HTML 解析 | `csv` / `html` 包 |
+| `WeChatParser` | 微信 CSV/HTML 解析 | `csv` 包；HTML 大文件走自研分块 tokenizer（`html` 仅小文件回退，见 §8.1） |
 | `IMessageParser` | iMessage 导出 + `chat.db` | `sqlite3` 包 |
 | `PhotoExifParser` | 照片 EXIF 提取 | `exif` 包 |
 | `WeiboParser` / `InstagramParser` | 社媒 JSON 解析 | `dart:convert` |
@@ -333,6 +333,11 @@ class MediaIndexEntry {
 }
 ```
 
+> **Message 与 MediaIndexEntry 的关系（单一真相来源）**：每条媒体类 `Message`（`type ∈ {image,voice,video,location}`）恰好对应一条 `MediaIndexEntry`。二者以 `(source, senderId, timestamp, type)` 关联。字段归属明确、互不重复：
+> - `Message.mediaPath` **等于** `MediaIndexEntry.sourceRef`（解析器产出的源引用），是消息在对话语料中的媒体占位引用；
+> - 解析后落地的沙盒字节路径**只存在于** `MediaIndexEntry.storedPath`（由 `MediaStore` 填充），**不回写 `Message`**；
+> - `Message` 属文本语料层（对话上下文），`MediaIndexEntry` 属媒体索引层（字节解析/浏览）。实现不得在两处各自维护一份可变的路径状态。
+
 #### 模型 4：Conversation（会话）
 ```dart
 /// 一次导入产出的标准化会话。
@@ -412,7 +417,7 @@ class ImportStats {
 
 #### 模型 6：ParseResult / ParseOptions / ParseWarning
 ```dart
-/// 流式解析事件（消息或告警）。解析以事件流产出，峰值内存与文件大小解耦。
+/// 流式解析事件。解析以事件流产出，峰值内存与文件大小解耦。
 sealed class ParseEvent {
   const ParseEvent();
 }
@@ -424,6 +429,19 @@ class MessageEvent extends ParseEvent {
 
   /// 消息本体。
   final Message message;
+}
+
+/// 一条媒体索引（每个媒体消息随之产出一条）。
+///
+/// 解析器产出时 `storedPath` 恒为 null（解析器不落字节）；`available`
+/// 反映解析器在导出包中能否定位到具体文件引用。字节落地与 `storedPath`
+/// 的填充由下游 [MediaStore] 按 [ParseOptions.mediaTier] 完成。
+class MediaIndexEvent extends ParseEvent {
+  /// 创建媒体索引事件。
+  const MediaIndexEvent(this.entry);
+
+  /// 索引条目本体。
+  final MediaIndexEntry entry;
 }
 
 /// 一条非致命告警。
@@ -449,8 +467,9 @@ class ParseResult {
   /// 解析出的消息（未经全局预处理）。
   final List<Message> messages;
 
-  /// 媒体索引层（只存引用，不含字节）。是否落媒体字节由 [ParseOptions.mediaTier]
-  /// 决定；`textOnly` 档位下每条 `storedPath` 为 null。
+  /// 媒体索引层（只存引用，不含字节），由排空 [MediaIndexEvent] 聚合而来。
+  /// 解析器产出时每条 `storedPath` 恒为 null；字节落地与 `storedPath` 填充由
+  /// 下游 [MediaStore] 按 [ParseOptions.mediaTier] 完成，不在 [ParseResult] 内。
   final List<MediaIndexEntry> mediaIndex;
 
   /// 解析过程中的告警。
@@ -550,7 +569,7 @@ dependencies:
   file_picker: ^8.0.0     # 目录/文件选择
   archive: ^3.6.0         # zip 流式解压（iOS 导入）
   csv: ^6.0.0             # 微信 CSV
-  html: ^0.15.4           # 微信 HTML（仅小文件；大文件走流式，见 §6）
+  html: ^0.15.4           # 仅小文件/well-formed 片段回退；大文件走自研分块 tokenizer（见 §8.1）
   sqlite3: ^2.4.0         # iMessage chat.db
   exif: ^3.3.0            # 照片 EXIF
   path: ^1.9.0            # 路径处理
@@ -600,9 +619,12 @@ abstract interface class DataParser {
   /// 快速判断是否能解析给定文件（基于扩展名/魔数/结构探测）。
   Future<bool> canParse(String filePath);
 
-  /// **流式**解析文件，逐条产出 [ParseEvent]（消息/告警）。
+  /// **流式**解析文件，逐条产出 [ParseEvent]：
+  /// [MessageEvent]（消息）、[MediaIndexEvent]（媒体索引）、[WarningEvent]（告警）。
   ///
-  /// 峰值内存必须与文件大小解耦（不得全量载入 DOM/字节）。
+  /// 每条媒体类消息同时产出一个 [MediaIndexEvent]（`storedPath` 恒为 null）；
+  /// 字节落地由下游 [MediaStore] 负责。峰值内存必须与文件大小解耦
+  /// （不得全量载入 DOM/字节）。
   ///
   /// 抛出：
   /// - [ParseException]：当文件无法解析（致命，通常在首个事件前）。
@@ -819,9 +841,16 @@ test('parse memory stays bounded regardless of file size', () async {
 | 瓶颈 | 原因 | 优化方案 |
 |------|------|---------|
 | 大文件全量载入（OOM） | 一次性读入内存 | **强制流式/分块解析**（`Stream<List<int>>`），峰值内存与文件大小解耦 |
-| HTML DOM 全量构建（OOM） | `package:html` 构建整棵 DOM | **改用流式 SAX/事件解析**（如 `html.parser` 的分块/`XmlEventReader` 思路），弃用大文件 DOM；小文件才可回退 DOM |
+| HTML DOM 全量构建（OOM） | `package:html` 构建整棵 DOM | **自研分块 tokenizer**（见下方「HTML 流式方案（已定）」）；`package:html` 仅用于小文件/well-formed 片段回退 |
 | 去重哈希开销 | 字符串拼接 | 预分配、复用 StringBuffer |
 | 大批量排序阻塞 UI | 主 isolate 计算 | 大数据集移至 `compute`/isolate |
+
+#### HTML 流式方案（已定）
+> 评审指出：`package:html` 是 **DOM-only**，无 SAX/流式 API；`XmlEventReader` 属 `package:xml` 且微信导出的 HTML 往往并非 well-formed XML，Dart 生态没有等价于 Python `html.parser` 的流式解析器。因此**不能依赖 `package:html` 处理大文件**。
+>
+> **定案**：微信 HTML 导出为高度规整的重复块结构（每条消息一个块），大文件走**自研分块 tokenizer**——以 `Stream<List<int>>` 按字节/行读入，用块起止标记切分出单条消息块，逐块 emit，不构建 DOM。`package:html` 仅保留用于小文件或对单个已切出的 well-formed 片段做字段抽取（可选回退）。
+>
+> **实现前置**：编码期先做一个 spike 用真实微信 HTML 导出验证块边界正则/标记的稳定性，并据此在实现 PR 固定最终方案；`pubspec` 依赖表中的 `html` 仅标注为小文件/回退用途，不作为大文件流式解析的依据。
 
 ### 8.2 优化措施
 - const 构造 + 不可变模型，减少拷贝
@@ -888,6 +917,7 @@ test('parse memory stays bounded regardless of file size', () async {
 |------|------|---------|------|
 | 2026-08-01 | v0.1 | 初始草稿 | Claude |
 | 2026-08-01 | v0.2 | 第三轮评审（规模/存储）：`DataParser.parse` 改为 `Stream<ParseEvent>` + `parseAll` 便捷法；新增 ParseEvent/MediaTier/MediaIndexEntry 模型与三层解析产物；`ParseResult` 增加 `mediaIndex`；新增 §4.4 分平台存储模型（iOS 沙盒拷贝+isExcludedFromBackup / macOS security-scoped bookmark）；性能目标改为吞吐/内存解耦；补 archive/path_provider 依赖 | Claude |
+| 2026-08-01 | v0.3 | 第四轮评审（流式一致性）：HTML 流式定案为自研分块 tokenizer（`package:html` 仅小文件回退，因其 DOM-only 无 SAX）；新增 `MediaIndexEvent` 明确媒体索引由解析器产出、`storedPath` 由下游 `MediaStore` 回填；补 Message↔MediaIndexEntry 单一真相来源关系（`mediaPath == sourceRef`，`storedPath` 仅存于索引）；`missing_media` fixture 由 CSV 改为 HTML（CSV 仅占位符无文件引用） | Claude |
 
 ---
 

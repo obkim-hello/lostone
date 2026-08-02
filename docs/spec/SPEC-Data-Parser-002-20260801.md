@@ -2,7 +2,7 @@
 
 > 技术规格文档 - 数据解析器
 >
-> **版本**：v0.2
+> **版本**：v0.3
 > **状态**：📝 草稿
 > **作者**：Claude
 > **日期**：2026-08-01
@@ -140,6 +140,7 @@ Future<ParseResult> parseAll(
 | 事件 | 类型 | 说明 |
 |------|------|------|
 | MessageEvent | ParseEvent | 一条已解析消息 |
+| MediaIndexEvent | ParseEvent | 一条媒体索引（`storedPath` 恒为 null；由 MediaStore 下游回填） |
 | WarningEvent | ParseEvent | 一条非致命告警 |
 
 **前置条件**：
@@ -243,12 +244,21 @@ class MessageEvent extends ParseEvent {
   const MessageEvent(this.message);
 }
 
+/// 一条媒体索引（每个媒体消息随之产出）。解析器产出时 storedPath 恒为 null；
+/// 字节落地与 storedPath 由下游 MediaStore 按 mediaTier 回填（见 ERD §3.1/§4.4）。
+class MediaIndexEvent extends ParseEvent {
+  final MediaIndexEntry entry;
+  const MediaIndexEvent(this.entry);
+}
+
 /// 一条非致命告警（如 missing_media、malformed_row）。
 class WarningEvent extends ParseEvent {
   final ParseWarning warning;
   const WarningEvent(this.warning);
 }
 ```
+
+> **产出所有权（回应流式一致性评审）**：`parse` 仅产出上述三种事件。`ParseResult.mediaIndex` 由 `parseAll` 排空 `MediaIndexEvent` 聚合而成；`storedPath`/字节落地是 **MediaStore（下游）** 的职责，不由解析器填充。
 
 #### 模型：MediaIndexEntry（媒体索引层）
 ```dart
@@ -289,7 +299,12 @@ class Message {
 - `senderId` / `senderName`：非空
 - `timestamp`：合法 `DateTime`，本地时区
 - `content`：文本类型非空；非文本类型可为摘要/占位
-- `mediaPath`：仅媒体类型可非空
+- `mediaPath`：仅媒体类型可非空；其值**等于**对应 `MediaIndexEntry.sourceRef`（源引用）
+
+**Message 与 MediaIndexEntry 的关系（单一真相来源，权威定义见 ERD §3.6 注）**：
+- 每条媒体类 `Message` 恰对应一条 `MediaIndexEntry`，以 `(source, senderId, timestamp, type)` 关联。
+- `Message.mediaPath == MediaIndexEntry.sourceRef`；解析后落地的沙盒字节路径**只存在于** `MediaIndexEntry.storedPath`（由 MediaStore 回填），**不回写 Message**。
+- `Message` 属文本语料层，`MediaIndexEntry` 属媒体索引层；实现不得在两处各自维护可变路径状态。
 
 ---
 
@@ -375,7 +390,7 @@ emit(current)  // flush 末条
 | CSV 缺必需列 | 无发送者/内容/时间列 | 抛 `ParseException` |
 | 缺失 EXIF 的照片 | 无 `DateTimeOriginal` | 跳过该照片 + 告警 `missing_exif` |
 | 未授权却要求提取 GPS | extractLocation=true | 退化为不提取 + 告警 `location_not_authorized` |
-| 消息引用的媒体缺失 | 导出包缺对应文件 | 保留消息 + 媒体索引 `available=false` + 告警 `missing_media`，不中断 |
+| 消息引用的媒体缺失 | HTML 导出 `src` 指向的文件缺失 | 保留消息 + 媒体索引 `available=false` + 告警 `missing_media`，不中断（仅适用于带文件引用的导出，如 HTML；CSV 仅有 `[图片]` 占位符、无文件路径，不触发此场景） |
 | 媒体层级为 textOnly | `mediaTier=textOnly` | 产出文本语料 + 媒体索引（不落字节），媒体消息保留其 `type` |
 | 超大导出（数 GB） | 5 GB / 10 万条 | 流式解析，峰值内存与文件大小无关，不 OOM（见 §6） |
 
@@ -643,11 +658,17 @@ test('parse streams with throughput and bounded memory', () async {
 
 #### 测试用例 12：媒体缺失产生 missing_media 告警（§4.1）
 ```dart
+// 用 HTML 导出：其消息带真实文件引用（src="..."），文件缺失才可复现；
+// CSV 导出仅有 [图片] 占位符、无文件路径，不适用此场景（见 §4.1 注）。
 test('missing referenced media yields missing_media warning', () async {
   final ParseResult r =
-      await WeChatParser().parseAll('test/fixtures/wechat_missing_media.csv');
+      await WeChatParser().parseAll('test/fixtures/wechat_missing_media.html');
 
   expect(r.messages, isNotEmpty); // 消息保留
+  expect(
+    r.mediaIndex.any((MediaIndexEntry e) => !e.available),
+    isTrue,
+  );
   expect(
     r.warnings.any((ParseWarning w) => w.code == 'missing_media'),
     isTrue,
@@ -655,19 +676,27 @@ test('missing referenced media yields missing_media warning', () async {
 });
 ```
 
-#### 测试用例 13：textOnly 层级不落媒体字节（§3.1）
+#### 测试用例 13：解析器产出媒体索引，字节落地留给下游（§3.1、ERD §3.6）
 ```dart
-test('textOnly tier keeps media index but stores no bytes', () async {
-  final ParseResult r = await WeChatParser().parseAll(
-    'test/fixtures/wechat_media.csv',
-    options: const ParseOptions(mediaTier: MediaTier.textOnly),
-  );
+// 解析器只产出 MediaIndexEvent（storedPath 恒为 null）；mediaTier 驱动的字节落地
+// 是 MediaStore 的职责，不在解析器测试范围。
+test('parser emits media index with null storedPath, matching messages', () async {
+  final ParseResult r =
+      await WeChatParser().parseAll('test/fixtures/wechat_media.csv');
 
-  expect(r.messages.any((Message m) => m.type == MessageType.image), isTrue);
   expect(r.mediaIndex, isNotEmpty);
+  // 解析器从不落字节
   expect(r.mediaIndex.every((MediaIndexEntry e) => e.storedPath == null), isTrue);
+  // Message.mediaPath 与索引 sourceRef 一致（单一真相来源）
+  final Message img =
+      r.messages.firstWhere((Message m) => m.type == MessageType.image);
+  expect(
+    r.mediaIndex.any((MediaIndexEntry e) => e.sourceRef == img.mediaPath),
+    isTrue,
+  );
 });
 ```
+> `mediaTier`（textOnly/photoAndVoice/all）驱动的字节落地行为由 `MediaStore`/`DataImportService` 层测试覆盖，见 ERD §4.4；此处只验证解析器契约。
 
 ### 7.2 测试覆盖率
 
@@ -686,7 +715,7 @@ test/fixtures/
 ├── wechat_media.csv        # 含各类媒体占位符 + [红包] + [撤回了一条消息]（§3.4.2）
 ├── wechat_aliased_cols.csv # 表头用中文别名 发送人/内容/时间（§3.4.3）
 ├── wechat_missing_col.csv  # 缺必需列，触发 ParseException
-├── wechat_missing_media.csv# 引用的媒体文件缺失（missing_media 告警，§4.1）
+├── wechat_missing_media.html# HTML 导出，src 引用的媒体文件缺失（missing_media，§4.1）
 ├── wechat_huge.txt         # 大体量导出，流式吞吐/内存解耦压测（§6.3）；5 GB 压测样本按需生成
 ├── imessage_sample.db      # 脱敏 chat.db
 ├── weibo_sample.json
@@ -711,7 +740,7 @@ test/fixtures/
 |------|------|------|
 | file_picker | ^8.0.0 | 文件/目录选择（大文件仅取路径，**禁用字节读取模式**） |
 | csv | ^6.0.0 | 微信 CSV |
-| html | ^0.15.4 | 微信 HTML（大文件走流式 SAX，避免全量 DOM，见 ERD） |
+| html | ^0.15.4 | 仅小文件/well-formed 片段回退（DOM-only，无 SAX）；大文件走自研分块 tokenizer，见 ERD §8.1 |
 | sqlite3 | ^2.4.0 | iMessage chat.db |
 | exif | ^3.3.0 | 照片 EXIF |
 | archive | ^3.6.0 | zip 导入包解压（流式） |
@@ -796,6 +825,7 @@ print('时间跨度：${conversation.stats.earliest} ~ ${conversation.stats.late
 |------|------|---------|------|
 | 2026-08-01 | v0.1 | 初始草稿 | Claude |
 | 2026-08-01 | v0.2 | 第三轮评审（规模/存储）：`parse` 改流式 `Stream<ParseEvent>` + `parseAll` 便捷法；新增 MediaTier/ParseEvent/MediaIndexEntry 模型与 `mediaTier` 选项；三层产物与流式正常流程；性能指标改为吞吐/内存解耦（废弃 1000 条<60s）；新增 missing_media 边界与测试 11/12/13；补 archive/path_provider 依赖与 iOS 沙盒/macOS bookmark 存储约束 | Claude |
+| 2026-08-01 | v0.3 | 第四轮评审（流式一致性）：新增 `MediaIndexEvent`，明确媒体索引由解析器产出、`storedPath` 由下游 MediaStore 回填；补 Message↔MediaIndexEntry 单一真相来源关系（`mediaPath == sourceRef`）；重写测试 13 为解析器契约、测试 12 fixture 改 HTML（CSV 无文件引用）；`html` 依赖标注为小文件回退（大文件走自研分块 tokenizer） | Claude |
 
 ---
 
