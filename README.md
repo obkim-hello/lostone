@@ -9,8 +9,8 @@
 ---
 
 [![License](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc/4.0/)
-[![Flutter](https://img.shields.io/badge/Flutter-3.24%2B-02569B.svg)](https://flutter.dev)
-[![Dart](https://img.shields.io/badge/Dart-3.0%2B-0175C2.svg)](https://dart.dev)
+[![Flutter](https://img.shields.io/badge/Flutter-3.38%2B-02569B.svg)](https://flutter.dev)
+[![Dart](https://img.shields.io/badge/Dart-3.11%2B-0175C2.svg)](https://dart.dev)
 [![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20macOS-lightgrey.svg)](https://www.apple.com)
 
 ---
@@ -27,19 +27,20 @@
 
 ## 📚 项目状态
 
-**当前阶段**：Phase 0 - 项目初始化（进行中）
+**当前阶段**：Phase 1 - 数据导入（文档评审中）
 
 **已完成**：
 - ✅ 项目文档体系建立
 - ✅ 文档模板（PRD/ERD/Spec）
-- ✅ 模块 001 三文档（项目初始化）
+- ✅ 模块 001 三文档（项目初始化）——已批准
+- ✅ 模块 001 Flutter 骨架 + 单元/Widget 测试（20/20 通过）
 - ✅ Git 仓库和 GitHub 设置
 
 **进行中**：
-- 🚧 模块 001 文档评审
-- 🚧 Flutter 项目初始化
+- 🚧 模块 002 三文档（数据导入）——草稿评审中（PR #4）
+- 🚧 模块 001 原生 runner（`flutter create` 补 ios/macos）
 
-**查看详细进度**：[开发路线图](docs/overview/ROADMAP.md)
+**查看详细进度**：[开发路线图](docs/overview/ROADMAP.md) · [文档状态](docs/DOCUMENT-STATUS.md)
 
 ---
 
@@ -54,8 +55,8 @@
 ### 面向开发者
 
 **前置要求**：
-- Flutter SDK 3.24+
-- Dart SDK 3.0+
+- Flutter SDK 3.38+
+- Dart SDK 3.11+
 - Xcode 15+（iOS/macOS 开发）
 
 **克隆仓库**：
@@ -118,8 +119,8 @@ lostone/
 
 | 模块 | PRD | ERD | Spec | 状态 |
 |------|-----|-----|------|------|
-| 001 - 项目初始化 | [PRD](docs/prd/PRD-Project-Setup-001-20260801.md) | [ERD](docs/erd/ERD-Flutter-Setup-001-20260801.md) | [Spec](docs/spec/SPEC-Project-Config-001-20260801.md) | 📝 草稿 |
-| 002 - 数据导入 | 待创建 | 待创建 | 待创建 | ⚪ 未开始 |
+| 001 - 项目初始化 | [PRD](docs/prd/PRD-Project-Setup-001-20260801.md) | [ERD](docs/erd/ERD-Flutter-Setup-001-20260801.md) | [Spec](docs/spec/SPEC-Project-Config-001-20260801.md) | ✅ 已批准 · 🚧 开发中 |
+| 002 - 数据导入 | [PRD](docs/prd/PRD-Data-Import-002-20260801.md) | [ERD](docs/erd/ERD-Data-Parsers-002-20260801.md) | [Spec](docs/spec/SPEC-Data-Parser-002-20260801.md) | 📝 草稿 · 评审中 |
 | ... | ... | ... | ... | ... |
 
 **查看完整状态**：[DOCUMENT-STATUS.md](docs/DOCUMENT-STATUS.md)
@@ -130,8 +131,8 @@ lostone/
 
 | 类别 | 技术选型 |
 |------|---------|
-| **框架** | Flutter 3.24+ |
-| **语言** | Dart 3.0+ |
+| **框架** | Flutter 3.38+ |
+| **语言** | Dart 3.11+ |
 | **本地 AI** | Google AI Edge LiteRT |
 | **支持模型** | Gemma 4, Llama 3.2, Qwen 2.5, Phi-3 |
 | **云端 API** | OpenAI, Anthropic, Google Gemini |
