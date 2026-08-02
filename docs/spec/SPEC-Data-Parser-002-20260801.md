@@ -2,7 +2,7 @@
 
 > 技术规格文档 - 数据解析器
 >
-> **版本**：v0.1
+> **版本**：v0.2
 > **状态**：📝 草稿
 > **作者**：Claude
 > **日期**：2026-08-01
@@ -87,6 +87,8 @@ Future<Conversation> importFiles(
 **前置条件**（Preconditions）：
 - [ ] `filePaths` 非空且每个路径存在
 - [ ] 应用已完成初始化（模块 001）
+- [ ] 大文件/媒体导入前已按平台完成来源接入（iOS：拷入沙盒并设 `isExcludedFromBackup`；macOS：已取得 security-scoped bookmark），详见 ERD §4.4；**禁止**对大文件使用 `file_picker` 的字节读取模式
+- [ ] 媒体字节入库前已估算并向用户提示占用空间（`options.mediaTier` 决定入库范围）
 
 **后置条件**（Postconditions）：
 - [ ] 返回的 `messages` 已去重且按 `timestamp` 升序
@@ -98,23 +100,31 @@ Future<Conversation> importFiles(
 
 ---
 
-#### 接口 2：DataParser.parse
+#### 接口 2：DataParser.parse（🔴 流式契约）
 
-**功能**：将单个文件解析为标准消息
+**功能**：**流式**解析单个文件，逐条产出消息/告警事件
 
 **签名**：
 ```dart
-/// 解析文件为标准消息。
+/// 流式解析文件，逐条产出 [ParseEvent]（MessageEvent / WarningEvent）。
+///
+/// 峰值内存必须与文件大小解耦——不得全量载入文件字节或 HTML DOM。
 ///
 /// 参数：
 /// - [filePath]：文件路径。
 /// - [options]：解析选项。
 ///
-/// 返回：Future<ParseResult>（可能部分成功，附带告警）
+/// 返回：Stream<ParseEvent>
 ///
 /// 抛出：
-/// - [ParseException]：文件无法解析（致命）。
-Future<ParseResult> parse(
+/// - [ParseException]：文件无法解析（致命，通常在首个事件前）。
+Stream<ParseEvent> parse(
+  String filePath, {
+  ParseOptions options = const ParseOptions(),
+});
+
+/// 便捷方法：排空 [parse] 流为 [ParseResult]。仅供小文件/测试使用。
+Future<ParseResult> parseAll(
   String filePath, {
   ParseOptions options = const ParseOptions(),
 });
@@ -127,10 +137,10 @@ Future<ParseResult> parse(
 | options | ParseOptions | 否 | const ParseOptions() | - | 解析选项 |
 
 **输出规格**：
-| 字段名 | 类型 | 说明 |
-|--------|------|------|
-| messages | List<Message> | 解析出的消息（未全局预处理） |
-| warnings | List<ParseWarning> | 非致命告警 |
+| 事件 | 类型 | 说明 |
+|------|------|------|
+| MessageEvent | ParseEvent | 一条已解析消息 |
+| WarningEvent | ParseEvent | 一条非致命告警 |
 
 **前置条件**：
 - [ ] 文件存在且可读
@@ -138,7 +148,8 @@ Future<ParseResult> parse(
 
 **后置条件**：
 - [ ] 每条 `Message` 的 `source`/`timestamp`/`type` 均已填充
-- [ ] 无法解析的单行进入 `warnings`，不抛异常
+- [ ] 无法解析的单行产出 `WarningEvent`，不中断流
+- [ ] 峰值内存与文件大小无关（不得全量载入）
 
 ---
 
@@ -199,6 +210,7 @@ class ParseOptions {
   final String? targetContact;      // macOS chat.db 目标联系人
   final bool extractLocation;       // 是否提取 GPS，默认 false
   final List<String> myIdentifiers; // 判定 isFromMe 的标识集合
+  final MediaTier mediaTier;        // 媒体入库层级，默认 MediaTier.all
 }
 ```
 
@@ -206,6 +218,51 @@ class ParseOptions {
 - `targetContact`：iMessage `chat.db` 场景建议提供；为空时导出全部会话
 - `extractLocation`：为 true 时须已获得系统/用户授权，否则退化为 false 并告警
 - `myIdentifiers`：为空时解析器按数据源默认规则判定 `isFromMe`
+- `mediaTier`：控制媒体字节层的入库范围（详见 ERD §4.4）。默认 `MediaTier.all`（保留全部媒体）；文本语料层与媒体索引层不受此选项影响，始终产出
+
+#### 模型：MediaTier
+```dart
+/// 媒体字节入库层级（文本语料/媒体索引始终产出，见 ERD §3.1 三层解析产物）。
+enum MediaTier {
+  textOnly,        // 仅文本语料 + 媒体索引（不落媒体字节）
+  photoAndVoice,   // 文本 + 照片/语音字节
+  all,             // 全部媒体字节（默认）
+}
+```
+
+#### 模型：ParseEvent（🔴 流式产物）
+```dart
+/// 流式解析事件基类。
+sealed class ParseEvent {
+  const ParseEvent();
+}
+
+/// 一条已解析消息。
+class MessageEvent extends ParseEvent {
+  final Message message;
+  const MessageEvent(this.message);
+}
+
+/// 一条非致命告警（如 missing_media、malformed_row）。
+class WarningEvent extends ParseEvent {
+  final ParseWarning warning;
+  const WarningEvent(this.warning);
+}
+```
+
+#### 模型：MediaIndexEntry（媒体索引层）
+```dart
+/// 媒体索引条目：仅记录引用与元数据，不含字节（权威定义见 ERD §3.6）。
+class MediaIndexEntry {
+  final DataSource source;   // 来源
+  final String senderId;     // 发送者
+  final DateTime timestamp;  // 媒体时间
+  final MessageType type;    // image/voice/video/…
+  final String sourceRef;    // 源媒体引用（导出包内相对路径/标识/书签路径）
+  final String? storedPath;  // 已落库字节路径；未入库（textOnly）时为 null
+  final bool available;      // 源字节是否存在（false → missing_media 告警）
+}
+```
 
 ---
 
@@ -318,6 +375,9 @@ emit(current)  // flush 末条
 | CSV 缺必需列 | 无发送者/内容/时间列 | 抛 `ParseException` |
 | 缺失 EXIF 的照片 | 无 `DateTimeOriginal` | 跳过该照片 + 告警 `missing_exif` |
 | 未授权却要求提取 GPS | extractLocation=true | 退化为不提取 + 告警 `location_not_authorized` |
+| 消息引用的媒体缺失 | 导出包缺对应文件 | 保留消息 + 媒体索引 `available=false` + 告警 `missing_media`，不中断 |
+| 媒体层级为 textOnly | `mediaTier=textOnly` | 产出文本语料 + 媒体索引（不落字节），媒体消息保留其 `type` |
+| 超大导出（数 GB） | 5 GB / 10 万条 | 流式解析，峰值内存与文件大小无关，不 OOM（见 §6） |
 
 ---
 
@@ -362,12 +422,18 @@ throw ImportException('No importable data found in the selected files');
 ```
 1. importFiles(paths, source, options)
 2. 校验 paths 非空
-3. 逐文件：match → parse（隔离异常）
-4. 汇总 messages + warnings
+3. 逐文件：match → parse（Stream<ParseEvent>，隔离异常）
+4. 流式消费事件：
+   - MessageEvent → 追加文本语料层 + 媒体索引层
+   - 按 options.mediaTier 决定是否落媒体字节层
+   - WarningEvent → 累积告警
+   （不得全量缓存文件字节；峰值内存与文件大小解耦）
 5. preprocessor.process(messages)（清洗/去重/排序）
 6. 组装 Conversation + ImportStats
 7. 返回
 ```
+
+> **三层产物**：解析输出分为「文本语料 / 媒体索引（仅引用）/ 媒体字节」三层（见 ERD §3.1）。文本语料与媒体索引始终产出；媒体字节层受 `options.mediaTier` 控制。
 
 ### 5.2 异常流程
 
@@ -403,17 +469,21 @@ throw ImportException('No importable data found in the selected files');
 - 排序：O(n log n)
 
 ### 6.2 空间复杂度
-- O(n)（消息列表 + 去重集合）
-- 峰值内存：< 500 MB
+- 流式解析：峰值内存 O(1)——与文件大小/消息条数**无关**（不缓存全文件、不构建全量 DOM）
+- 预处理去重：O(n)（去重键集合 + 结果列表；n 为消息数）
+- 媒体字节按需落盘，不常驻内存
 
 ### 6.3 性能指标
 
 | 指标 | 要求 | 测试方法 |
 |------|------|---------|
-| 1000 条解析 | < 60 秒 | 单元测试计时 |
-| 10,000 条预处理 | < 5 秒 | 单元测试计时 |
+| 解析吞吐 | ≥ 5,000 条/分钟 | 流式计时（drain stream） |
+| 10 万条预处理 | < 30 秒 | 单元测试计时 |
+| 解析峰值内存 | < 300 MB，且**与文件大小解耦** | 内存分析 + 5 GB/10 万条压测 |
+| 5 GB / 10 万条导出 | 不 OOM，可完整解析 | 压测 fixture（流式） |
 | 文件选择响应 | < 1 秒 | 手动/集成测试 |
-| 峰值内存 | < 500 MB | 内存分析工具 |
+
+> 旧指标「1000 条 < 60 秒 / 峰值 < 500 MB」在 ~5 GB 真实导出压测中暴露与文件大小耦合的 OOM 风险，已废弃并以上表替代。
 
 ---
 
@@ -425,7 +495,8 @@ throw ImportException('No importable data found in the selected files');
 ```dart
 test('parses WeChat CSV into messages', () async {
   final WeChatParser parser = WeChatParser();
-  final ParseResult r = await parser.parse('test/fixtures/wechat_sample.csv');
+  final ParseResult r =
+      await parser.parseAll('test/fixtures/wechat_sample.csv');
 
   expect(r.messages, isNotEmpty);
   expect(r.messages.first.source, DataSource.wechat);
@@ -486,7 +557,7 @@ test('converts Apple second-format date to exact UTC datetime', () {
 ```dart
 test('warns when photo lacks EXIF datetime', () async {
   final PhotoExifParser parser = PhotoExifParser();
-  final ParseResult r = await parser.parse('test/fixtures/no_exif.jpg');
+  final ParseResult r = await parser.parseAll('test/fixtures/no_exif.jpg');
 
   expect(r.warnings.any((ParseWarning w) => w.code == 'missing_exif'), isTrue);
 });
@@ -504,7 +575,7 @@ test('Message survives JSON round-trip', () {
 ```dart
 test('WeChat multi-line message keeps continuation lines', () async {
   final ParseResult r =
-      await WeChatParser().parse('test/fixtures/wechat_multiline.txt');
+      await WeChatParser().parseAll('test/fixtures/wechat_multiline.txt');
   final Message m =
       r.messages.firstWhere((Message x) => x.content.contains('第一行'));
 
@@ -518,7 +589,7 @@ test('WeChat multi-line message keeps continuation lines', () async {
 ```dart
 test('WeChat media placeholders are typed, not dropped', () async {
   final ParseResult r =
-      await WeChatParser().parse('test/fixtures/wechat_media.csv');
+      await WeChatParser().parseAll('test/fixtures/wechat_media.csv');
 
   expect(r.messages.any((Message m) => m.type == MessageType.image), isTrue);
   expect(r.messages.any((Message m) => m.type == MessageType.voice), isTrue);
@@ -541,15 +612,60 @@ test('WeChat media placeholders are typed, not dropped', () async {
 test('WeChat CSV accepts column aliases', () async {
   // 表头使用 发送人/内容/时间
   final ParseResult r =
-      await WeChatParser().parse('test/fixtures/wechat_aliased_cols.csv');
+      await WeChatParser().parseAll('test/fixtures/wechat_aliased_cols.csv');
   expect(r.messages, isNotEmpty);
 });
 
 test('WeChat CSV throws when a required column is missing', () {
   expect(
-    () => WeChatParser().parse('test/fixtures/wechat_missing_col.csv'),
+    () => WeChatParser().parseAll('test/fixtures/wechat_missing_col.csv'),
     throwsA(isA<ParseException>()),
   );
+});
+```
+
+#### 测试用例 11：流式解析吞吐与内存解耦（§6）
+```dart
+test('parse streams with throughput and bounded memory', () async {
+  int count = 0;
+  final Stopwatch sw = Stopwatch()..start();
+  await for (final ParseEvent e
+      in WeChatParser().parse('test/fixtures/wechat_huge.txt')) {
+    if (e is MessageEvent) count++;
+  }
+  sw.stop();
+
+  final double perMin = count / sw.elapsed.inSeconds * 60;
+  expect(perMin, greaterThanOrEqualTo(5000));
+  // 峰值内存断言由压测工具在 5 GB fixture 上校验，见 §6.3
+});
+```
+
+#### 测试用例 12：媒体缺失产生 missing_media 告警（§4.1）
+```dart
+test('missing referenced media yields missing_media warning', () async {
+  final ParseResult r =
+      await WeChatParser().parseAll('test/fixtures/wechat_missing_media.csv');
+
+  expect(r.messages, isNotEmpty); // 消息保留
+  expect(
+    r.warnings.any((ParseWarning w) => w.code == 'missing_media'),
+    isTrue,
+  );
+});
+```
+
+#### 测试用例 13：textOnly 层级不落媒体字节（§3.1）
+```dart
+test('textOnly tier keeps media index but stores no bytes', () async {
+  final ParseResult r = await WeChatParser().parseAll(
+    'test/fixtures/wechat_media.csv',
+    options: const ParseOptions(mediaTier: MediaTier.textOnly),
+  );
+
+  expect(r.messages.any((Message m) => m.type == MessageType.image), isTrue);
+  expect(r.mediaIndex, isNotEmpty);
+  expect(r.mediaIndex.every((MediaIndexEntry e) => e.storedPath == null), isTrue);
 });
 ```
 
@@ -570,6 +686,8 @@ test/fixtures/
 ├── wechat_media.csv        # 含各类媒体占位符 + [红包] + [撤回了一条消息]（§3.4.2）
 ├── wechat_aliased_cols.csv # 表头用中文别名 发送人/内容/时间（§3.4.3）
 ├── wechat_missing_col.csv  # 缺必需列，触发 ParseException
+├── wechat_missing_media.csv# 引用的媒体文件缺失（missing_media 告警，§4.1）
+├── wechat_huge.txt         # 大体量导出，流式吞吐/内存解耦压测（§6.3）；5 GB 压测样本按需生成
 ├── imessage_sample.db      # 脱敏 chat.db
 ├── weibo_sample.json
 ├── instagram_sample.json
@@ -591,11 +709,13 @@ test/fixtures/
 ### 8.2 外部依赖
 | 库 | 版本（拟） | 用途 |
 |------|------|------|
-| file_picker | ^8.0.0 | 文件选择 |
+| file_picker | ^8.0.0 | 文件/目录选择（大文件仅取路径，**禁用字节读取模式**） |
 | csv | ^6.0.0 | 微信 CSV |
-| html | ^0.15.4 | 微信 HTML |
+| html | ^0.15.4 | 微信 HTML（大文件走流式 SAX，避免全量 DOM，见 ERD） |
 | sqlite3 | ^2.4.0 | iMessage chat.db |
 | exif | ^3.3.0 | 照片 EXIF |
+| archive | ^3.6.0 | zip 导入包解压（流式） |
+| path_provider | ^2.1.0 | 应用沙盒目录（媒体入库/中间产物） |
 
 ### 8.3 平台依赖
 - **最低版本**：iOS 17、macOS 14
@@ -603,6 +723,9 @@ test/fixtures/
   - iOS/macOS：文件访问（用户选择）
   - macOS：读取 `chat.db` 需完全磁盘访问或用户手动选取
   - 定位（仅在提取 GPS 时）
+- **存储/来源接入**（详见 ERD §4.4）：
+  - iOS：将选中文件/导入包拷入应用沙盒；媒体入库目录须设 `isExcludedFromBackup = true`（避免撑爆 iCloud 备份）；支持 `CFBundleDocumentTypes` + zip 导入
+  - macOS：优先 security-scoped bookmark 就地引用源文件，不整包拷贝；媒体字节按 `mediaTier` 落库
 
 ---
 
@@ -650,9 +773,10 @@ print('时间跨度：${conversation.stats.earliest} ~ ${conversation.stats.late
 - [ ] 输出 JSON 字段符合 §3.2
 
 ### 11.2 性能验收
-- [ ] 1000 条解析 < 60 秒
-- [ ] 10,000 条预处理 < 5 秒
-- [ ] 峰值内存 < 500 MB
+- [ ] 解析吞吐 ≥ 5,000 条/分钟
+- [ ] 10 万条预处理 < 30 秒
+- [ ] 解析峰值内存 < 300 MB 且与文件大小解耦
+- [ ] 5 GB / 10 万条导出可完整解析、不 OOM
 
 ### 11.3 测试验收
 - [ ] 单元测试覆盖率 > 80%
@@ -671,6 +795,7 @@ print('时间跨度：${conversation.stats.earliest} ~ ${conversation.stats.late
 | 日期 | 版本 | 变更内容 | 作者 |
 |------|------|---------|------|
 | 2026-08-01 | v0.1 | 初始草稿 | Claude |
+| 2026-08-01 | v0.2 | 第三轮评审（规模/存储）：`parse` 改流式 `Stream<ParseEvent>` + `parseAll` 便捷法；新增 MediaTier/ParseEvent/MediaIndexEntry 模型与 `mediaTier` 选项；三层产物与流式正常流程；性能指标改为吞吐/内存解耦（废弃 1000 条<60s）；新增 missing_media 边界与测试 11/12/13；补 archive/path_provider 依赖与 iOS 沙盒/macOS bookmark 存储约束 | Claude |
 
 ---
 

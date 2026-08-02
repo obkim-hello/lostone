@@ -2,7 +2,7 @@
 
 > 工程需求文档 - 数据解析器
 >
-> **版本**：v0.1
+> **版本**：v0.2
 > **状态**：📝 草稿
 > **作者**：Claude
 > **日期**：2026-08-01
@@ -34,9 +34,11 @@
 - 稳定的结构化 JSON 输出，供 Persona 引擎消费
 
 ### 1.2 性能目标
-- 1000 条消息解析 < 60 秒
-- 10,000 条消息预处理（去重 + 排序）< 5 秒
-- 解析峰值内存 < 500 MB
+按真实规模（数 GB / 10 万条以上）制定，**峰值内存与文件大小解耦**：
+- 文本吞吐 ≥ 5,000 条/分钟（10 万条 ≤ 20 分钟，可后台）
+- 解析峰值内存 < 300 MB，且与输入文件大小无关（5GB 文件同样成立）
+- 10 万条预处理（去重 + 排序）< 30 秒
+- 媒体流式拷贝，不计入解析内存预算
 
 ### 1.3 质量目标
 - 解析/预处理逻辑代码覆盖率 > 80%
@@ -69,23 +71,33 @@
 ### 3.1 模块架构图
 ```
 ┌───────────────────────────────────────────────┐
-│                DataImportService               │  编排：选择→解析→预处理→标准化→导出
+│                DataImportService               │  编排：导入源→解析→预处理→标准化→落库
+├───────────────────────────────────────────────┤
+│ ImportSource (平台抽象)  │     MediaStore        │
+│ iOS: zip 解压进沙盒      │ 文本层/索引层恒存      │
+│ macOS: security-scoped   │ 字节层按分级档拷贝/引用 │
+│        bookmark 就地引用 │ (iOS isExcludedFromBackup)│
 ├───────────────────────────────────────────────┤
 │  ParserRegistry     │      DataPreprocessor     │
 │  (解析器注册与调度)  │   (清洗 / 去重 / 排序)     │
 ├───────────────────────────────────────────────┤
-│                   DataParser (接口)             │
+│              DataParser (接口, 流式)            │
 │  WeChatParser │ IMessageParser │ WeiboParser    │
 │  InstagramParser │ PhotoExifParser              │
 ├───────────────────────────────────────────────┤
-│         Models: Message / Conversation          │
+│   Models: Message / MediaIndexEntry /           │
+│           Conversation                          │
 └───────────────────────────────────────────────┘
 ```
+
+> 关键原则：**解析全程流式**（`Stream<Message>`），峰值内存与输入文件大小解耦；媒体字节层与文本层解耦，由 `MediaStore` 按分级档位单独处理。
 
 ### 3.2 组件设计
 | 组件名称 | 职责 | 技术实现 |
 |----------|------|---------|
-| `DataImportService` | 编排整个导入流程 | 异步服务、单例 |
+| `DataImportService` | 编排整个导入流程 | 异步服务、单例、流式 |
+| `ImportSource` | 平台导入源抽象（iOS 沙盒解压 / macOS 书签就地引用） | 条件平台实现 |
+| `MediaStore` | 媒体三层落地：文本/索引恒存，字节按分级档拷贝/引用 | 流式拷贝 + `isExcludedFromBackup` |
 | `ParserRegistry` | 注册/查找/自动匹配解析器 | Map + `canParse` 探测 |
 | `DataParser` | 解析单一数据源的抽象接口 | `abstract interface class` |
 | `WeChatParser` | 微信 CSV/HTML 解析 | `csv` / `html` 包 |
@@ -268,6 +280,59 @@ class Message {
 }
 ```
 
+#### 模型 3.5：MediaTier（媒体分级档位）
+```dart
+/// 媒体字节层的导入档位（文本与索引层始终保存）。
+enum MediaTier {
+  /// 仅文本 + 媒体索引（路径），不拷贝任何媒体字节。
+  textOnly,
+
+  /// 仅拷贝照片与语音字节。
+  photoAndVoice,
+
+  /// 拷贝全部媒体字节（默认）。
+  all,
+}
+```
+
+#### 模型 3.6：MediaIndexEntry（媒体索引）
+```dart
+/// 媒体索引条目：每个图片/视频/语音一条，**只存引用不存字节**。
+class MediaIndexEntry {
+  /// 创建一条媒体索引。
+  const MediaIndexEntry({
+    required this.source,
+    required this.senderId,
+    required this.timestamp,
+    required this.type,
+    required this.sourceRef,
+    this.storedPath,
+    this.available = true,
+  });
+
+  /// 来源数据源。
+  final DataSource source;
+
+  /// 发送者标识。
+  final String senderId;
+
+  /// 媒体时间。
+  final DateTime timestamp;
+
+  /// 媒体类型（image/voice/video/…）。
+  final MessageType type;
+
+  /// 源媒体引用（导出包内相对路径/标识，或书签可解析路径）。
+  final String sourceRef;
+
+  /// 已落库字节路径（沙盒内）；未入库（如 `MediaTier.textOnly`）时为 null。
+  final String? storedPath;
+
+  /// 源字节是否存在（缺失/被移动时为 false → `missing_media` 告警）。
+  final bool available;
+}
+```
+
 #### 模型 4：Conversation（会话）
 ```dart
 /// 一次导入产出的标准化会话。
@@ -347,16 +412,46 @@ class ImportStats {
 
 #### 模型 6：ParseResult / ParseOptions / ParseWarning
 ```dart
-/// 解析器的返回结果（可能部分成功）。
+/// 流式解析事件（消息或告警）。解析以事件流产出，峰值内存与文件大小解耦。
+sealed class ParseEvent {
+  const ParseEvent();
+}
+
+/// 一条已解析消息。
+class MessageEvent extends ParseEvent {
+  /// 创建消息事件。
+  const MessageEvent(this.message);
+
+  /// 消息本体。
+  final Message message;
+}
+
+/// 一条非致命告警。
+class WarningEvent extends ParseEvent {
+  /// 创建告警事件。
+  const WarningEvent(this.warning);
+
+  /// 告警本体。
+  final ParseWarning warning;
+}
+
+/// 排空事件流后的聚合结果（供小文件/测试便捷使用）。
+///
+/// 注意：仅在数据量可控时使用；大文件应直接消费 [ParseEvent] 流。
 class ParseResult {
   /// 创建解析结果。
   const ParseResult({
     required this.messages,
+    this.mediaIndex = const <MediaIndexEntry>[],
     this.warnings = const <ParseWarning>[],
   });
 
   /// 解析出的消息（未经全局预处理）。
   final List<Message> messages;
+
+  /// 媒体索引层（只存引用，不含字节）。是否落媒体字节由 [ParseOptions.mediaTier]
+  /// 决定；`textOnly` 档位下每条 `storedPath` 为 null。
+  final List<MediaIndexEntry> mediaIndex;
 
   /// 解析过程中的告警。
   final List<ParseWarning> warnings;
@@ -369,6 +464,7 @@ class ParseOptions {
     this.targetContact,
     this.extractLocation = false,
     this.myIdentifiers = const <String>[],
+    this.mediaTier = MediaTier.all,
   });
 
   /// 目标联系人（macOS chat.db 等场景）。
@@ -379,6 +475,9 @@ class ParseOptions {
 
   /// 用于判定 isFromMe 的“我”的标识集合。
   final List<String> myIdentifiers;
+
+  /// 媒体字节层导入档位，默认 [MediaTier.all]（owner 决策）。
+  final MediaTier mediaTier;
 }
 
 /// 一条解析告警（非致命）。
@@ -448,14 +547,40 @@ class ParseWarning {
 #### 新增依赖（拟）
 ```yaml
 dependencies:
-  file_picker: ^8.0.0     # 文件选择
+  file_picker: ^8.0.0     # 目录/文件选择
+  archive: ^3.6.0         # zip 流式解压（iOS 导入）
   csv: ^6.0.0             # 微信 CSV
-  html: ^0.15.4           # 微信 HTML
+  html: ^0.15.4           # 微信 HTML（仅小文件；大文件走流式，见 §6）
   sqlite3: ^2.4.0         # iMessage chat.db
   exif: ^3.3.0            # 照片 EXIF
   path: ^1.9.0            # 路径处理
+  path_provider: ^2.1.0   # 沙盒目录
 ```
 > 具体版本在实现期以 `flutter pub get` 解析结果为准，并在实现 PR 中固定。
+
+---
+
+### 4.4 存储模型（分平台）
+
+真实导出可达数 GB，"落在哪、拷不拷、进不进备份"是核心问题。三层分别处理：
+
+| 层 | iOS | macOS |
+|----|-----|-------|
+| 文本语料 | 沙盒内 SQLite/JSON（恒存） | 应用支持目录 SQLite/JSON（恒存） |
+| 媒体索引 | 沙盒内（恒存，仅路径） | 应用支持目录（恒存，仅路径） |
+| 媒体字节 | **拷入沙盒**，目录标记 `isExcludedFromBackup` | **就地引用**（security-scoped bookmark），不拷贝 |
+
+**iOS 导入路径**：
+- 通过 `CFBundleDocumentTypes` 注册可打开的文件类型（zip 等），支持「用其他应用打开 / AirDrop」。
+- 收到 zip 后**流式解压**进沙盒（`archive` 流式 API），边解压边解析，不一次性载入。
+- 媒体字节按 `MediaTier` 拷入沙盒；媒体目录设置 `isExcludedFromBackup = true`，避免撑爆 iCloud 备份、规避 App Review。
+
+**macOS 导入路径**：
+- `file_picker` **选目录**（而非选文件），获取 security-scoped bookmark 持久化访问权限。
+- 媒体字节就地引用，`MediaIndexEntry.sourceRef` 保存书签可解析的相对/绝对路径（`storedPath` 保持 null，不拷贝）；访问时 `startAccessingSecurityScopedResource`。
+
+**通用**：
+- **禁止**用 `file_picker` 的文件选择模式导入大文件——iOS 会把选中文件整份拷进临时目录（等于拷 5GB）；一律走 zip（iOS）或目录（macOS）路径。
 
 ---
 
@@ -475,11 +600,19 @@ abstract interface class DataParser {
   /// 快速判断是否能解析给定文件（基于扩展名/魔数/结构探测）。
   Future<bool> canParse(String filePath);
 
-  /// 解析文件为标准消息。
+  /// **流式**解析文件，逐条产出 [ParseEvent]（消息/告警）。
+  ///
+  /// 峰值内存必须与文件大小解耦（不得全量载入 DOM/字节）。
   ///
   /// 抛出：
-  /// - [ParseException]：当文件无法解析（致命）。
-  Future<ParseResult> parse(
+  /// - [ParseException]：当文件无法解析（致命，通常在首个事件前）。
+  Stream<ParseEvent> parse(
+    String filePath, {
+    ParseOptions options = const ParseOptions(),
+  });
+
+  /// 便捷方法：排空 [parse] 流为 [ParseResult]。仅供小文件/测试使用。
+  Future<ParseResult> parseAll(
     String filePath, {
     ParseOptions options = const ParseOptions(),
   });
@@ -617,7 +750,8 @@ class ImportException implements Exception {
 | `ParseException`（单文件） | 隔离为告警，继续其他文件 | "某文件解析失败，已跳过" |
 | `ImportException`（全部文件失败） | 抛出并展示错误页 | "没有可导入的数据" |
 | `missing_exif`（告警） | 记录告警并跳过该条 | 结果页显示告警数 |
-| 权限不足（chat.db） | 明确提示授权步骤 | "需要访问权限" |
+| `missing_media`（告警） | 媒体字节缺失/被移动：保留索引条目 `available=false`，不报致命 | 结果页显示缺失媒体数 |
+| 权限不足（chat.db / 书签） | 明确提示授权步骤 | "需要访问权限" |
 
 ### 6.4 日志策略
 - 使用模块 001 的 `AppLogger`
@@ -663,13 +797,19 @@ group('DataPreprocessor', () {
 
 ### 7.3 性能测试
 ```dart
-test('parses 1000 messages under 60s', () async {
+test('parse memory stays bounded regardless of file size', () async {
+  // 消费 5GB 级 fixture 的事件流，断言不 OOM 且吞吐达标。
+  int count = 0;
   final Stopwatch sw = Stopwatch()..start();
-  await service.importFiles(<String>[fixture1000]);
+  await for (final ParseEvent e in WeChatParser().parse(fixtureHuge)) {
+    if (e is MessageEvent) count++;
+  }
   sw.stop();
-  expect(sw.elapsed.inSeconds, lessThan(60));
+  final double perMin = count / sw.elapsed.inSeconds * 60;
+  expect(perMin, greaterThanOrEqualTo(5000));
 });
 ```
+> 峰值内存以设备/CI 内存采样验证 < 300 MB，且对 100MB 与 5GB 输入无显著差异（内存与文件大小解耦）。
 
 ---
 
@@ -678,8 +818,8 @@ test('parses 1000 messages under 60s', () async {
 ### 8.1 性能瓶颈分析
 | 瓶颈 | 原因 | 优化方案 |
 |------|------|---------|
-| 大文件全量载入 | 一次性读入内存 | 流式/分块解析（`Stream<List<int>>`） |
-| HTML 解析慢 | DOM 构建开销 | 只选择必要节点、避免全树遍历 |
+| 大文件全量载入（OOM） | 一次性读入内存 | **强制流式/分块解析**（`Stream<List<int>>`），峰值内存与文件大小解耦 |
+| HTML DOM 全量构建（OOM） | `package:html` 构建整棵 DOM | **改用流式 SAX/事件解析**（如 `html.parser` 的分块/`XmlEventReader` 思路），弃用大文件 DOM；小文件才可回退 DOM |
 | 去重哈希开销 | 字符串拼接 | 预分配、复用 StringBuffer |
 | 大批量排序阻塞 UI | 主 isolate 计算 | 大数据集移至 `compute`/isolate |
 
@@ -747,6 +887,7 @@ test('parses 1000 messages under 60s', () async {
 | 日期 | 版本 | 变更内容 | 作者 |
 |------|------|---------|------|
 | 2026-08-01 | v0.1 | 初始草稿 | Claude |
+| 2026-08-01 | v0.2 | 第三轮评审（规模/存储）：`DataParser.parse` 改为 `Stream<ParseEvent>` + `parseAll` 便捷法；新增 ParseEvent/MediaTier/MediaIndexEntry 模型与三层解析产物；`ParseResult` 增加 `mediaIndex`；新增 §4.4 分平台存储模型（iOS 沙盒拷贝+isExcludedFromBackup / macOS security-scoped bookmark）；性能目标改为吞吐/内存解耦；补 archive/path_provider 依赖 | Claude |
 
 ---
 
