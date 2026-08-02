@@ -1,0 +1,4 @@
+id,MsgSvrID,type_name,is_sender,talker,msg,src,CreateTime
+1,2001,text,0,wxid_synth001,"第一行
+第二行",,2026-08-02T05:24:20.000Z
+2,2002,text,1,阿花,好的,,2026-08-02T05:24:22.000Z

@@ -4,6 +4,7 @@ import 'parsers/imessage_parser.dart';
 import 'parsers/instagram_parser.dart';
 import 'parsers/photo_exif_parser.dart';
 import 'parsers/wechat_parser.dart';
+import 'parsers/weflow_parser.dart';
 import 'parsers/weibo_parser.dart';
 
 /// 解析器注册与调度：按可选数据源 + `canParse` 探测选出解析器。
@@ -12,6 +13,7 @@ class ParserRegistry {
   ParserRegistry([List<DataParser>? parsers])
       : _parsers = parsers ??
             <DataParser>[
+              const WeFlowParser(),
               const WeChatParser(),
               const InstagramParser(),
               const WeiboParser(),
