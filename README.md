@@ -34,11 +34,11 @@
 - ✅ 文档模板（PRD/ERD/Spec）
 - ✅ 模块 001 三文档（项目初始化）——已批准
 - ✅ 模块 001 Flutter 骨架 + 单元/Widget 测试（20/20 通过）
+- ✅ 模块 001 原生 runner（`ios/`、`macos/`、`web/`），可 `flutter run`
 - ✅ Git 仓库和 GitHub 设置
 
 **进行中**：
 - 🚧 模块 002 三文档（数据导入）——草稿评审中（PR #4）
-- 🚧 模块 001 原生 runner（`flutter create` 补 ios/macos）
 
 **查看详细进度**：[开发路线图](docs/overview/ROADMAP.md) · [文档状态](docs/DOCUMENT-STATUS.md)
 
@@ -64,6 +64,29 @@
 git clone https://github.com/obkim-hello/lostone.git
 cd lostone
 ```
+
+**运行应用（开发模式）**：
+```bash
+cd mobile
+flutter pub get          # 安装依赖
+
+flutter devices          # 查看可用设备
+flutter run -d chrome    # 在 Chrome 中运行（无需 Xcode，最快验证）
+flutter run -d macos     # 在 macOS 桌面运行（需完整 Xcode，见下）
+```
+
+**验证工程健康**：
+```bash
+cd mobile
+flutter analyze          # 静态分析，应为 No issues found
+flutter test             # 单元 + Widget 测试，应 20/20 通过
+```
+
+> **macOS/iOS 构建前置**：设备构建需要完整 Xcode（非仅 Command Line Tools）。
+> 若报 `xcrun: error: unable to find utility "xcodebuild"`，执行：
+> ```bash
+> sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+> ```
 
 **查看文档**：
 ```bash
@@ -96,7 +119,11 @@ lostone/
 │   ├── release/              # 发布文档
 │   └── DOCUMENT-STATUS.md    # 文档状态追踪
 │
-└── mobile/                   # Flutter 应用（待创建）
+└── mobile/                   # Flutter 应用
+    ├── lib/                  # 应用源码（models/services/providers/screens/...）
+    ├── test/                 # 单元 + Widget 测试
+    ├── ios/ · macos/ · web/  # 各平台 runner
+    └── pubspec.yaml          # 依赖声明
 ```
 
 **详细说明**：查看 [docs/.claude.md](docs/.claude.md)
