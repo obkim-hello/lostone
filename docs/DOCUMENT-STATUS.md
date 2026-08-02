@@ -95,15 +95,16 @@
 | InstagramParser（Meta DYI JSON） | ✅ 已完成 | `message_1.json`（participants+messages）；文本 + photos/videos/gifs/audio_files 分条 + 媒体索引；timestamp_ms→UTC；jsonDecode 错误→ParseException；missing_media |
 | IMessageParser（chat.db 只读） | ✅ 已完成 | `sqlite3` 游标逐行流式；message⋈handle；`date`→appleDateToDateTime；is_from_me/targetContact；`text` 为空时回退解码 `attributedBody`（streamtyped，ERD §4.2）；确无正文→empty_message（设备端 sqlite3_flutter_libs 打包待推进） |
 | PhotoExifParser（照片 EXIF） | ✅ 已完成 | `exif` 包；`DateTimeOriginal`→时间戳（含 0 年/月/日/越界拒绝），缺失→missing_exif；`extractLocation` 时显式解析 GPS IFD 换算十进制经纬度写入 metadata（含 NaN 保护，ERD §6.2 line734）；损坏/截断图片兜底 corrupt_photo 告警（RangeError 不逃逸）；照片即媒体（mediaPath==sourceRef，available 恒真）；fixture 由 Dart 直构 EXIF/TIFF 字节（无需外部工具） |
+| MediaStore 分层落地（ERD §4.4） | ✅ 已完成 | `MediaTier` 门控字节拷贝（textOnly 不拷 / photoAndVoice 图+语音 / all 全部）+ `storedPath` 回填；`MediaStorageMode`（copyIntoSandbox / referenceInPlace）；源缺失→available=false 不中断；文件名冲突去重；`isExcludedFromBackup` 经注入钩子（宿主 no-op/iOS 原生），仅首次拷贝前触发一次；入参不可变。原生沙盒/bookmark 装配分阶段推进 |
 | 导入状态管理（Riverpod） | ✅ 已完成 | `ImportPhase`/`ImportState`/`ImportNotifier`/`importStateProvider`（ERD §5.2）；空列表转 failed |
 | Apple 时间转换 | ✅ 已完成 | `appleDateToDateTime`（1e12 阈值，秒/纳秒） |
-| 单元测试 + fixtures | ✅ 已完成 | 覆盖 SPEC §7 用例 1-6、7-13 + 评审补充用例 + 合成 chat.db（含 attributedBody 单字节/0x81 扩展长度回退 + 畸形 BLOB 降级）+ Dart 直构 EXIF/TIFF fixture（含 GPS IFD）；`flutter test` 76/76、`flutter analyze` 0 警告 |
+| 单元测试 + fixtures | ✅ 已完成 | 覆盖 SPEC §7 用例 1-6、7-13 + 评审补充用例 + 合成 chat.db（含 attributedBody 单字节/0x81 扩展长度回退 + 畸形 BLOB 降级）+ Dart 直构 EXIF/TIFF fixture（含 GPS IFD）+ MediaStore 分层/去重/缺失/钩子临时目录用例；`flutter test` 86/86、`flutter analyze` 0 警告 |
 
 ### 分阶段推进（需真机 / 大样本 / 待补文档，本切片不含）
 - [ ] WeiboParser（微博私信无标准导出 schema，SPEC/ERD 未定义输入格式，待补文档后实现）
 - [ ] IMessageParser 设备端打包（`sqlite3_flutter_libs` 原生库；解析逻辑已完成并在宿主验证）
 - [ ] IMessageParser 完整 `attributedBody` typedstream 解码器（保留富文本/内联附件占位；现为纯文本尽力回退，需真机导出样本验证）
-- [ ] MediaStore 原生落地（iOS 沙盒拷贝 + `isExcludedFromBackup` / macOS security-scoped bookmark）
+- [ ] MediaStore 原生装配（iOS 沙盒目录 path_provider + `isExcludedFromBackup` 原生实现 / macOS security-scoped bookmark 持久化；分层落地核心逻辑已完成并宿主验证）
 - [ ] file_picker 导入 UI（Phase 4 视觉稿统一；状态层 `import_providers` 已就绪）
 - [ ] 5GB / 10 万条 峰值内存与吞吐压测（需设备 + 大样本）
 
@@ -241,6 +242,7 @@ Spec：⚪ 待创建
 | 2026-08-02 | — | 第三轮代理评审修复：补充 attributedBody 0x81 扩展长度前缀（>127 字节正文）与畸形 BLOB 降级为 empty_message 的测试用例。`flutter test` 67/67、`flutter analyze` 0 警告 | Claude |
 | 2026-08-02 | — | 新增 PhotoExifParser（ERD §6.2 line734 / SPEC 用例6）：`exif` 包提取 DateTimeOriginal，缺失→missing_exif；extractLocation 时显式解析 GPS IFD 换算十进制经纬度入 metadata；fixture 以 Dart 直构 EXIF/TIFF 字节（含 GPS IFD），破除"需二进制样本"阻塞。`flutter test` 74/74、`flutter analyze` 0 警告 | Claude |
 | 2026-08-02 | — | 第四轮代理评审修复（Critical）：损坏/截断图片令底层 exif 抛 RangeError（Error 非 Exception）会逃逸 DataImportService 的 on Exception 捕获而中断整批导入——PhotoExifParser 兜底捕获降级为 corrupt_photo 告警；另加 0 月/日越界拒绝、GPS NaN 保护；新增崩溃隔离用例。`flutter test` 76/76、`flutter analyze` 0 警告 | Claude |
+| 2026-08-02 | — | 新增 MediaStore 分层落地（ERD §4.4）：`MediaTier` 门控字节拷贝 + `storedPath` 回填；copyIntoSandbox/referenceInPlace 双模式；源缺失→available=false 不中断整批；文件名冲突去重；`isExcludedFromBackup` 注入钩子（宿主 no-op/iOS 原生）仅首次拷贝前触发一次；入参不可变——将原"MediaStore 原生落地"阻塞项收窄至仅剩 path_provider/原生 bookmark 装配。`flutter test` 86/86、`flutter analyze` 0 警告 | Claude |
 
 ---
 
