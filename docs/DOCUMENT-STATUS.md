@@ -10,7 +10,7 @@
 |----------|---------|---------|---------|----------|-----------|----------|
 | 001 | 项目初始化 | ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | ✅ 已完成 |
 | 002 | 数据导入 | ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | 🚧 开发中 |
-| 003 | Persona 生成 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
+| 003 | Persona 生成 | 📝 草稿 | 📝 草稿 | 📝 草稿 | ⚠️ 草稿完成 | 🚫 阻塞 |
 | 004 | 本地模型集成 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
 | 005 | 云端 API 集成 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
 | 006 | 聊天界面 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
@@ -109,6 +109,39 @@
 - [ ] MediaStore 原生装配（iOS 沙盒目录 path_provider + `isExcludedFromBackup` 原生实现 / macOS security-scoped bookmark 持久化；分层落地核心逻辑已完成并宿主验证）
 - [ ] file_picker 导入 UI（Phase 4 视觉稿统一；状态层 `import_providers` 已就绪）
 - [ ] 5GB 峰值内存采样压测（< 300MB，需设备/CI 内存采样）；**10 万条吞吐 + 流式懒消费已在宿主验证**（`test/integration/wechat_streaming_perf_test.dart`，ERD §7.3 模板，≥5000 msg/min 达标）
+
+---
+
+## 📋 模块 003 详细状态
+
+### 文档信息
+| 文档类型 | 文件名 | 状态 | 完成时间 | 批准时间 | 文件路径 |
+|----------|--------|------|---------|---------|---------|
+| PRD | PRD-Persona-Generation-003-20260802.md | 📝 草稿 | 2026-08-02 | 待批准 | docs/prd/PRD-Persona-Generation-003-20260802.md |
+| ERD | ERD-Persona-Engine-003-20260802.md | 📝 草稿 | 2026-08-02 | 待批准 | docs/erd/ERD-Persona-Engine-003-20260802.md |
+| Spec | SPEC-Persona-Builder-003-20260802.md | 📝 草稿 | 2026-08-02 | 待批准 | docs/spec/SPEC-Persona-Builder-003-20260802.md |
+
+### 三文档齐全检查
+- ✅ PRD 已创建（草稿）
+- ✅ ERD 已创建（草稿）
+- ✅ Spec 已创建（草稿）
+- ✅ 编号一致（003）
+- ✅ 日期一致（20260802）
+- ✅ 头部关联字段互指正确（PRD↔ERD↔Spec）
+- ⚠️ 状态：草稿完成，**待评审批准**
+- 🚫 **开发状态：阻塞**（三文档未批准，禁止编码）
+
+### 范围摘要
+- 模块定位：从模块 002 的 `Conversation` **确定性地**蒸馏出五层 Persona（硬规则/身份/表达风格/情感逻辑/关系行为），产出可版本化的 `.persona`（JSON）与 system prompt 渲染。
+- 关键约束：纯 Dart、离线、**无 LLM/无网络**、可完全单元测试；LLM 增强留待 Phase 3 之后。
+- 核心组件：MemoriesAnalyzer / PersonaAnalyzer / PersonaBuilder（编排+版本+增量）/ PersonaCodec / PromptTemplate。
+- 增量更新：以**消息内容键的 SHA-256 哈希**（底层键 `source|senderId|timestamp.iso8601|content|type` 对齐模块 002 `DataPreprocessor` 去重键）去重保证幂等；`.persona` 存哈希不落原文；`revisions` 连续追加版本轨迹；硬规则永不被分析结果覆盖。
+- 目标人物切分：以 `Message.isFromMe` 为主判据（依赖模块 002 可靠填充）；守卫降级门控**按分支拆分**——方向不可判定分支（`isFromMe` 全为 `false`）需 `personSenderIds` 与 `myIdentifiers` 皆未传方触发，多方会话分支（目标发送者 >1）只要 `personSenderIds` 未传即触发（`myIdentifiers` 不抑制）；触发时低置信 + `segmentationResolved=false`、不臆断并入；v1 仅正式支持 1:1 会话。
+
+### 待办
+- [ ] 三文档评审
+- [ ] 三文档批准（批准后把日期改为批准日期并同步重命名文件、更新本表与 README）
+- [ ] 批准后：编写测试用例 → 实现 → 验证
 
 ---
 
@@ -251,6 +284,11 @@ Spec：⚪ 待创建
 | 2026-08-02 | — | 新增 WeFlowParser：支持真实微信第三方导出工具 WeFlow 的四种格式（JSON/CSV/TXT/HTML）。ERD §3.2/§3.4/§4.3/§6.2 固化输入契约（锚定 WeFlow 1.0.3 真实结构，测试用结构等价合成夹具，不含真实会话）；`source==wechat`，结构签名 canParse，注册先于通用 WeChatParser，非 WeFlow 文件回落。方向以导出标志为准；图片产媒体索引（单一 join key），文件/引用归 text；四格式时间语义分别处理；BOM/HTML 实体反转义。新增 16 用例（canParse/类型方向/媒体缺失/BOM/实体/registry 路由 + 代理评审修复：CSV 引号内嵌换行行缓冲、TXT `[文件]`/裸文件名不误判为图片、JSON canParse 结构化校验）。`flutter test` 112/112、`flutter analyze` 0 警告 | Claude |
 | 2026-08-02 | — | 提交 WeFlow 10 万条性能基准（`weflow_bench_test.dart`，四格式各 10 万条+5000 媒体，JSON ~2519k/HTML ~1982k/CSV ~1763k/TXT ~1147k msg/min，远超 ERD §7.3 基线）| Claude |
 | 2026-08-02 | — | PR #9 评审收口（ERD v1.1）：`WeChatParser`（通用非 WeFlow 兜底）修复三处真实缺陷——CSV 引号内嵌换行按 record 累积不丢数据、`createtime` epoch 兼容不再整表丢弃、产 0 条消息必告警杜绝静默失败；`WeFlowParser` JSON 探测改整份文档结构判定（键顺序无关）、HTML 探测只读头部、空媒体 src 记 `missing_media`、文件/引用归 text 保留 `metadata['weflow_kind']`；新增 10 用例（WeChat 内嵌换行/epoch/静默失败 + WeFlow JSON 尾部键探测/kind metadata/五类告警码覆盖）。`flutter test` 122/122、`flutter analyze` 0 警告 | Claude |
+| 2026-08-02 | — | 创建模块 003（Persona 生成）三文档草稿（PRD-Persona-Generation / ERD-Persona-Engine / SPEC-Persona-Builder，编号 003、日期 20260802、互相交叉引用）：定位为纯 Dart、离线、无 LLM 的确定性五层 Persona 生成引擎（记忆提取/性格分析/Builder 版本+增量/`.persona` 序列化/Prompt 渲染），输入契约锚定模块 002 `Conversation/Message`。矩阵行 003 → 📝草稿/📝草稿/📝草稿、⚠️草稿完成、🚫阻塞；同步 README 与 ROADMAP（Phase 2 文档就绪、待批准）。**未改任何源码/pubspec**，待评审批准后方可编码 | Claude |
+| 2026-08-02 | — | 模块 003 草稿代理评审 + 修订（三文档升 v1.0.1，仍草稿）：修复 3 处阻塞项——(B1) 增量去重/幂等/证据键从 `Message.id` 改为**消息内容键**（对齐模块 002 `DataPreprocessor` 去重键，`Message.id` 跨导入不唯一/不稳定）；(B2) 定义 `PersonaTag` 并纳入 `Persona.tags` 与 `.persona` JSON；(B3) 空会话下 `TimelineSpan.start/end` 可空、`displayName` 回退 `defaultDisplayName`；及 (M1) `Persona.id` 确定性派生、UTC 分桶、ratio ε 容差、阈值前后置统一、幂等单测夹具修正等 nit。评审确认交叉引用/状态/五层命名/模块 002 类型均一致 | Claude |
+| 2026-08-02 | — | 模块 003 PR #10 Owner 评审修订（三文档升 v1.0.2，仍草稿）：处理 3 🔴 + 1 🟡 + 3 minor——(🔴1 隐私) 证据/去重键持久化改存 **SHA-256 哈希**（`messageKeys`→`messageKeyHashes`、`mergedMessageKeys`→`mergedMessageKeyHashes`，加 `package:crypto`），`.persona` 不再落逐条原文、体积不膨胀，兑现文档自身隐私承诺；(🔴2 clock) 缺 `clock` 不再抛 `ArgumentError`，改取 epoch 0 哨兵、零配置 `build()` 可用（消解 Spec §3.2↔§6.1 自相矛盾）；(🔴3 切分) 目标人物切分以 `Message.isFromMe` 为主判据、`personSenderIds`/`myIdentifiers` 覆盖，默认路径不再污染人格；(🟡4 历史) 新增 `PersonaSource.revisions` 版本轨迹落实 PRD 用户故事 2；(minor) `Persona.id` 派生去首条消息/消息数消除边界敏感、`deriveTags` 增 `relation`/`memories` 覆盖关系/偏好标签、统一 `sourceSummary`↔`PersonaSource` 命名 | Claude |
+| 2026-08-02 | — | 模块 003 PR #10 Owner 复审修订（三文档升 v1.0.3，仍草稿）：处理复审 2 🟡 + 3 minor（不阻塞设计批准、编码前解决）——(🟡A) `revisions` 统一为**连续 `[v1..vN]`**（`build` 写 v1、每 `update` 追加、末条==顶层、不裁剪），消除示例↔"每次追加"↔校验矛盾；(🟡B) 显式声明默认切分依赖模块 002 可靠填充 `isFromMe`，`splitBySender` 新增**方向/组成不可判定守卫**（返回 `resolved`）+ `PersonaSource.segmentationResolved`——不可判定/多方且无显式指定时降 `low`、不臆断并入；(minor C) `sampleExcerpt` 加长度校验（encode 端字素簇截断 60、decode 端防御性截断，+`package:characters`）；(minor D) 明确 `id` 的 `sortedTargetSenderIds`=切分后观察到的目标发送者集（非原始入参），界定超集稳定性范围；(minor E) 声明 v1 仅正式支持 1:1、群聊多人格拆分不在范围（多方走守卫）| Claude |
+| 2026-08-02 | — | 模块 003 PR #10 Owner 复审修订（三文档升 v1.0.4，仍草稿）：处理 1 🟡——**守卫门控自相矛盾且多方分支存在漏洞**。拆分门控：方向不可判定分支（`isFromMe` 全为 `false`）门控 = `personSenderIds` **且** `myIdentifiers` 皆未传（`myIdentifiers` 确能解决方向、可抑制）；多方会话分支（目标发送者 >1）门控 = **仅** `personSenderIds` 未传——`myIdentifiers` 只判"谁是我"、无法在多个对方中指目标，**不得抑制**多方守卫。ERD §3.1/§4.2/§5.1/§5.2、SPEC §1.4/§3.1/§4.1/§6.1(+2 用例)/§6.2、PRD 功能1/§1.3 措辞统一 | Claude |
 
 ---
 
