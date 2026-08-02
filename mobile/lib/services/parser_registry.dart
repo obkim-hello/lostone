@@ -1,5 +1,6 @@
 import '../models/message.dart';
 import 'parsers/data_parser.dart';
+import 'parsers/imessage_parser.dart';
 import 'parsers/instagram_parser.dart';
 import 'parsers/wechat_parser.dart';
 
@@ -11,6 +12,7 @@ class ParserRegistry {
             <DataParser>[
               const WeChatParser(),
               const InstagramParser(),
+              const IMessageParser(),
             ];
 
   final List<DataParser> _parsers;
