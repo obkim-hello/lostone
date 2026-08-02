@@ -37,7 +37,7 @@
 - ✅ Git 仓库和 GitHub 设置
 
 **进行中**：
-- 🚧 模块 002 三文档（数据导入）——草稿评审中（PR #4）
+- 🚧 模块 002（数据导入）——三文档已批准（v1.0）；核心切片**已完成**（模型 + WeChatParser CSV/TXT/HTML 流式 + WeFlowParser（真实微信 WeFlow 导出 JSON/CSV/TXT/HTML 四格式）+ InstagramParser + WeiboParser（direct_messages API v2 JSON）+ IMessageParser（chat.db 只读，含 attributedBody 回退）+ PhotoExifParser（EXIF/GPS）+ MediaStore 分层字节落地（ERD §4.4）+ 预处理 + 导入编排 + Apple 时间转换 + Riverpod 导入状态层，测试 122/122、analyze 0 警告，四轮代理评审并修复 SPEC 合规缺口）；ERD §3.4 文件范围内的解析器全部落地，10 万条流式吞吐已宿主验证（ERD §7.3）；原生存储装配、导入 UI（Phase 4）、5GB 设备内存采样、微博/WeFlow 契约 Owner 终审分阶段推进
 
 **查看详细进度**：[开发路线图](docs/overview/ROADMAP.md) · [文档状态](docs/DOCUMENT-STATUS.md)
 
@@ -160,7 +160,7 @@ lostone/
 | 模块 | PRD | ERD | Spec | 状态 |
 |------|-----|-----|------|------|
 | 001 - 项目初始化 | [PRD](docs/prd/PRD-Project-Setup-001-20260801.md) | [ERD](docs/erd/ERD-Flutter-Setup-001-20260801.md) | [Spec](docs/spec/SPEC-Project-Config-001-20260801.md) | ✅ 已完成（v1.1） |
-| 002 - 数据导入 | [PRD](docs/prd/PRD-Data-Import-002-20260801.md) | [ERD](docs/erd/ERD-Data-Parsers-002-20260801.md) | [Spec](docs/spec/SPEC-Data-Parser-002-20260801.md) | 📝 草稿 · 评审中 |
+| 002 - 数据导入 | [PRD](docs/prd/PRD-Data-Import-002-20260801.md) | [ERD](docs/erd/ERD-Data-Parsers-002-20260801.md) | [Spec](docs/spec/SPEC-Data-Parser-002-20260801.md) | ✅ 已批准 · 🚧 开发中 |
 | ... | ... | ... | ... | ... |
 
 **查看完整状态**：[DOCUMENT-STATUS.md](docs/DOCUMENT-STATUS.md)

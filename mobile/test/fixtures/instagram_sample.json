@@ -1,0 +1,42 @@
+{
+  "participants": [
+    { "name": "妈妈" },
+    { "name": "我" }
+  ],
+  "messages": [
+    {
+      "sender_name": "妈妈",
+      "timestamp_ms": 1609459200000,
+      "content": "记得吃早饭"
+    },
+    {
+      "sender_name": "我",
+      "timestamp_ms": 1609459260000,
+      "content": "好的"
+    },
+    {
+      "sender_name": "妈妈",
+      "timestamp_ms": 1609459320000,
+      "photos": [
+        { "uri": "media/photo_present.jpg", "creation_timestamp": 1609459320 }
+      ]
+    },
+    {
+      "sender_name": "妈妈",
+      "timestamp_ms": 1609459380000,
+      "photos": [
+        { "uri": "media/photo_missing.jpg", "creation_timestamp": 1609459380 }
+      ]
+    },
+    {
+      "sender_name": "妈妈",
+      "timestamp_ms": 1609459440000,
+      "content": "配张图",
+      "photos": [
+        { "uri": "media/photo_present.jpg", "creation_timestamp": 1609459440 }
+      ]
+    }
+  ],
+  "title": "妈妈",
+  "thread_path": "inbox/mama_123"
+}

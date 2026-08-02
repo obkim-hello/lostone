@@ -2,12 +2,12 @@
 
 > 工程需求文档 - 数据解析器
 >
-> **版本**：v0.3
-> **状态**：📝 草稿
+> **版本**：v1.0
+> **状态**：✅ 已批准
 > **作者**：Claude
 > **日期**：2026-08-01
-> **批准日期**：待批准
-> **批准人**：待批准
+> **批准日期**：2026-08-02
+> **批准人**：Project Owner
 > **关联 PRD**：PRD-Data-Import-002-20260801.md
 
 ---
@@ -100,7 +100,8 @@
 | `MediaStore` | 媒体三层落地：文本/索引恒存，字节按分级档拷贝/引用 | 流式拷贝 + `isExcludedFromBackup` |
 | `ParserRegistry` | 注册/查找/自动匹配解析器 | Map + `canParse` 探测 |
 | `DataParser` | 解析单一数据源的抽象接口 | `abstract interface class` |
-| `WeChatParser` | 微信 CSV/HTML 解析 | `csv` 包；HTML 大文件走自研分块 tokenizer（`html` 仅小文件回退，见 §8.1） |
+| `WeChatParser` | 微信 CSV/HTML 解析（通用格式） | `csv` 包；HTML 大文件走自研分块 tokenizer（`html` 仅小文件回退，见 §8.1） |
+| `WeFlowParser` | 微信 WeFlow 导出解析（JSON/CSV/TXT/HTML，`source==wechat`） | `csv` + `dart:convert`；结构签名 `canParse`（见 §4.3「输入（微信 WeFlow 导出）」） |
 | `IMessageParser` | iMessage 导出 + `chat.db` | `sqlite3` 包 |
 | `PhotoExifParser` | 照片 EXIF 提取 | `exif` 包 |
 | `WeiboParser` / `InstagramParser` | 社媒 JSON 解析 | `dart:convert` |
@@ -134,6 +135,7 @@ mobile/lib/
 │   └── parsers/
 │       ├── data_parser.dart      # DataParser 接口
 │       ├── wechat_parser.dart
+│       ├── weflow_parser.dart     # 微信 WeFlow 导出（JSON/CSV/TXT/HTML）
 │       ├── imessage_parser.dart
 │       ├── photo_exif_parser.dart
 │       ├── weibo_parser.dart
@@ -338,6 +340,7 @@ class MediaIndexEntry {
 > - `(source, senderId, timestamp, type)` **仅为描述性字段，不得用作 join key**——突发连发（同一发送者、同秒、多张图）会使四元组冲突而文件引用不冲突。
 > - 解析后落地的沙盒字节路径**只存在于** `MediaIndexEntry.storedPath`（由 `MediaStore` 填充），**不回写 `Message`**；
 > - `Message` 属文本语料层（对话上下文），`MediaIndexEntry` 属媒体索引层（字节解析/浏览）。实现不得在两处各自维护一份可变的路径状态。
+> - **安全（路径穿越）**：`sourceRef` 来自不可信导出包（可能形如 `../../etc/...`）。解析器仅用它做只读 `existsSync`（无害），但 `MediaStore` 在据此**落地字节**前**必须**将解析后的绝对路径钳制在导出包根目录内（规范化后校验前缀），拒绝逃逸目标。此约束在 MediaStore 评审/实现中落实。
 
 #### 模型 4：Conversation（会话）
 ```dart
@@ -524,12 +527,14 @@ class ParseWarning {
 
 | 表 | 关键字段 | 用途 |
 |----|---------|------|
-| `message` | `ROWID`, `text`, `date`, `is_from_me`, `handle_id` | 消息正文/时间/方向 |
+| `message` | `ROWID`, `text`, `attributedBody`, `date`, `is_from_me`, `handle_id` | 消息正文/时间/方向 |
 | `handle` | `ROWID`, `id` | 联系人标识 |
 | `chat` | `ROWID`, `chat_identifier` | 会话标识 |
 | `chat_message_join` | `chat_id`, `message_id` | 会话-消息关联 |
 
 > `date` 为 Apple 绝对时间（自 2001-01-01 UTC 起的纳秒），需转换为标准 `DateTime`。
+
+> **正文来源（`text` vs `attributedBody`）**：iOS 14 / macOS 11 起，正文常不再写入 `message.text`（为 `NULL`），而是存入 `attributedBody` BLOB——Apple `streamtyped`（NSArchiver）序列化的 `NSAttributedString`。解析优先读 `text`；为空时**尽力回退**从 `attributedBody` 提取纯文本（定位 `NSString` 标记后按 typedstream 长度前缀读取 UTF-8）。该回退为启发式：仅在 `text` 为空时触发，解码失败则安全降级为 `empty_message` 告警，不影响 `text` 路径。完整 typedstream 解码器（保留富文本/内联附件占位）需真机导出样本验证，列入分阶段推进。
 
 ---
 
@@ -564,6 +569,77 @@ class ParseWarning {
 }
 ```
 
+#### 输入 JSON（微博私信导出）
+微博私信无「一键打包」用户导出，实践中以微博开放平台 `direct_messages` API v2 的 JSON 落盘为准（第三方备份工具亦沿用此结构）。解析器以此为输入契约：
+
+```json
+{
+  "direct_messages": [
+    {
+      "id": 12345,
+      "created_at": "Wed Jun 12 08:47:29 +0800 2013",
+      "text": "在吗",
+      "sender_id": 66666,
+      "sender_screen_name": "妈妈",
+      "recipient_id": 77777,
+      "recipient_screen_name": "我"
+    }
+  ]
+}
+```
+
+- `created_at`：微博/Twitter 风格 `EEE MMM dd HH:mm:ss ±ZZZZ yyyy`（含时区偏移，归一为 UTC）；亦容错接受 Unix 秒/毫秒整数。
+- 方向：`sender_screen_name`（回退 `sender_id`）命中 `ParseOptions.myIdentifiers` 即 `isFromMe`。
+- 正文为纯文本；媒体在微博私信中以内联 URL 形式出现在 `text` 内，故不单列媒体索引（与 §3.2「社媒 JSON 解析」一致）。
+- `created_at` 缺失/不可解析 → `malformed_row` 告警并跳过该条；`text` 为空 → `empty_message` 告警并跳过。
+
+> 该输入契约锚定真实微博 API v2 结构（非臆造），待项目 Owner 确认后固化；若官方导出格式变化，按本节增补版本说明。
+
+#### 输入（微信 WeFlow 导出）
+WeChat 无官方「导出聊天记录」功能，实践中用户以第三方工具 **WeFlow**（`generator: "WeFlow"`）导出，同一会话可产出 **JSON / CSV / TXT / HTML** 四种格式。`WeFlowParser`（`source == DataSource.wechat`）以这四种为输入契约，`canParse` 按结构签名探测（非仅扩展名），与 `WeChatParser`（通用格式）、`InstagramParser`、`WeiboParser` 互斥；注册顺序上 `WeFlowParser` 先于 `WeChatParser`，非 WeFlow 的 `.csv/.txt/.html` 回落至 `WeChatParser`。
+
+**方向判定**：WeFlow 各格式均自带发送方向标志（`isSend`/`is_sender`/HTML `s` 字段=1 表示「我」发出；TXT 以 `'我'` 标记本人），故 `isFromMe` 以导出标志为准，不依赖 `ParseOptions.myIdentifiers`（TXT 额外兼容 `myIdentifiers` 命中）。
+
+**类型映射**（`type`/`localType` → `MessageType`）：`文本消息`(1)→`text`；`图片消息`(3)→`image`（产出媒体索引，`mediaPath`/`sourceRef` 为导出内相对路径如 `../images/xxx.png`，`content` 归一为占位 `[图片]`）；`文件消息`→`text`（`MessageType` 无 `file` 值，保留 `[文件] 名` 文本，不产媒体索引）；`引用消息`→`text`（保留含 `[引用 …：…]` 的完整正文）。
+
+**时间**：JSON 用 `createTime`（Unix 秒，UTC 权威）；CSV 用 `CreateTime`（ISO8601 UTC，带 `Z`）；HTML 用 `t`（Unix 秒，UTC 权威）；TXT 仅有本地墙钟 `YYYY-MM-DD HH:MM:SS`（无时区，按设备本地解析，格式固有有损）。
+
+**单一 join key 不变式**：图片消息的 `Message.mediaPath == MediaIndexEntry.sourceRef`（均为导出内原始相对路径）；`storedPath` 恒为 null，字节落地由 `MediaStore` 负责；媒体可用性以相对文本文件目录解析（`texts/../images/`）后 `existsSync` 判定，缺失 → `missing_media` 告警。
+
+四种格式结构签名与要点：
+
+- **JSON**（整文档读入，非流式）：顶层 `{weflow:{version,exportedAt,generator}, session:{wxid,nickname,displayName,type,…}, messages:[…], avatars}`。`canParse`：`.json` 且 `weflow` 为 Map 且 `messages` 为 List。逐条字段：`localId, createTime(Unix 秒), formattedTime, type, localType, content, isSend(0/1), senderUsername, senderDisplayName, source, platformMessageId`；引用消息额外含 `replyToMessageId, appMsgType, appMsgKind, quotedContent, quotedSender, quotedType`。图片消息 `content` 即相对路径。
+  ```json
+  {"weflow":{"version":"1.0.3","exportedAt":1785682894,"generator":"WeFlow"},
+   "session":{"wxid":"wxid_x","nickname":"小明","displayName":"小明","type":"私聊"},
+   "messages":[
+     {"localId":1,"createTime":1785648260,"formattedTime":"2026-08-02 01:24:20",
+      "type":"文本消息","localType":1,"content":"在吗","isSend":0,
+      "senderUsername":"wxid_x","senderDisplayName":"小明","platformMessageId":"6152…"}]}
+  ```
+- **CSV**（逐行流式，UTF-8 带 BOM）：表头 `id,MsgSvrID,type_name,is_sender,talker,msg,src,CreateTime`。`canParse`：`.csv` 且首行含 `is_sender` 与 `type_name` 列。`type_name`∈{text,image,file,quote}；`is_sender`∈{0,1}；`talker`=发送方标识（本人为 displayName，对方为 wxid）；`msg`=正文（图片为 `[图片]`、文件为 `[文件] 名`）；`src`=媒体相对路径（文本为空）；`CreateTime`=ISO8601 UTC。
+  ```csv
+  id,MsgSvrID,type_name,is_sender,talker,msg,src,CreateTime
+  1,6152…,text,0,wxid_x,在吗,,2026-08-02T05:24:20.000Z
+  2,3361…,image,1,小明,[图片],../images/14069_ab.png,2026-08-02T05:30:46.000Z
+  ```
+- **TXT**（逐行流式，块结构）：`时间戳 '发送方'` 一行 + 后续正文行 + 空行分隔。`canParse`：`.txt` 且首个非空行匹配 `^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} '.+'$`。本人标记为 `'我'`；图片正文为裸相对路径（按图片扩展名启发式识别）；文件正文为 `[文件]名`；引用正文含内联 `[引用 …：…]`。时间为本地墙钟。
+  ```text
+  2026-08-02 01:24:20 'wxid_x'
+  在吗
+
+  2026-08-02 01:30:46 '我'
+  ../images/14069_ab.png
+  ```
+- **HTML**（逐行流式，末尾 `<script>window.WEFLOW_DATA = [ … ]`）：`canParse`：`.htm(l)` 且文件含 `window.WEFLOW_DATA`。数据数组每行一个对象 `{"i":localId,"t":Unix秒,"s":isSend,"a":头像HTML,"b":正文HTML,"p":platformMessageId}`；`b` 内 `<div class="message-text">` 为文本，`<img … src>` 为图片；`a` 内 `src="avatars/<wxid>.jpg"`、`alt` 为展示名，用于回填 senderId/senderName；正文 HTML 实体（`&lt;` 等）需反转义。
+  ```text
+  <script>window.WEFLOW_DATA = [
+  {"i":1,"t":1785648260,"s":0,"a":"<img src=\"avatars/wxid_x.jpg\" alt=\"小明\" />","b":"<div class=\"message-time\">2026-08-02 01:24:20</div><div class=\"message-content\"><div class=\"message-text\">在吗</div></div>","p":"6152…"}
+  ]</script>
+  ```
+
+> 上述四格式结构锚定真实 WeFlow 1.0.3 导出（`generator: "WeFlow"`），测试仅使用**结构等价的合成夹具**，不含任何真实会话内容。若 WeFlow 导出格式升级，按本节增补版本说明。
+
 #### 新增依赖（拟）
 ```yaml
 dependencies:
@@ -571,7 +647,8 @@ dependencies:
   archive: ^3.6.0         # zip 流式解压（iOS 导入）
   csv: ^6.0.0             # 微信 CSV
   html: ^0.15.4           # 仅小文件/well-formed 片段回退；大文件走自研分块 tokenizer（见 §8.1）
-  sqlite3: ^2.4.0         # iMessage chat.db
+  sqlite3: ^2.4.0         # iMessage chat.db（FFI 绑定）
+  sqlite3_flutter_libs: ^0.5.24  # 设备端打包原生 SQLite 库（iOS/macOS）
   exif: ^3.3.0            # 照片 EXIF
   path: ^1.9.0            # 路径处理
   path_provider: ^2.1.0   # 沙盒目录
@@ -728,8 +805,10 @@ importFiles(paths)
 ```
 
 **解析器特定要求（规范细节见 SPEC §3.4）**：
-- **WeChatParser**：必须支持多行正文续行（消息头之后的非头行追加到上一条），媒体占位符按类型保留（`[图片]→image`、`[语音]→voice` 等，`[撤回了一条消息]→system`），CSV 列名按别名集容错。
+- **WeChatParser**（通用非 WeFlow `.csv/.txt/.html` 兜底，注册在 `WeFlowParser` 之后）：必须支持多行正文续行（消息头之后的非头行追加到上一条），媒体占位符按类型保留（`[图片]→image`、`[语音]→voice` 等，`[撤回了一条消息]→system`），CSV 列名按别名集容错。作为兜底解析器，须满足以下健壮性约束：(a) CSV 按 RFC4180 引号配对累积为完整 record 再解析，引号内嵌换行不得拆行丢数据；(b) `createtime` 别名列可能是 Unix 秒/毫秒 epoch，时间解析须兼容 epoch 与 ISO 字符串，不得因 epoch 无法 `DateTime.parse` 而整表丢弃；(c) 任何格式**产出 0 条消息时必须告警**（`empty_file`），杜绝「导入成功但实际为空」的静默失败（尤其真实非 WeFlow HTML 落到此路径）。
 - **PhotoExifParser**：`exif` 包默认只取 `DateTimeOriginal`；`extractLocation=true` 时须**显式解析 GPS IFD**（`GPSLatitude`/`GPSLongitude` + 参考方向）并换算十进制经纬度写入 `metadata`。此处无参考实现可抄，实现者须自行接线并测试。
+- **WeiboParser**：读取 §4.3「输入 JSON（微博私信导出）」的 `direct_messages` 数组；`created_at` 支持微博/Twitter 风格带时区字符串（归一 UTC）与 Unix 秒/毫秒；`sender_screen_name`/`sender_id` 命中 `myIdentifiers` 判 `isFromMe`；纯文本，无媒体索引。JSON 非法/结构缺 `direct_messages` → `ParseException`，单条缺时间/空文本 → 告警跳过。
+- **WeFlowParser**：读取 §4.3「输入（微信 WeFlow 导出）」四格式（JSON/CSV/TXT/HTML），`source==DataSource.wechat`，注册先于 `WeChatParser`。`canParse` 按结构签名探测（JSON:`weflow`+`messages`；CSV:表头含 `is_sender`+`type_name`；TXT:首行 `时间戳 '发送方'`；HTML:含 `window.WEFLOW_DATA`）。方向以导出标志（`isSend`/`is_sender`/HTML `s`/TXT `'我'`）为准；`图片消息`→`image` 并产媒体索引（`mediaPath==sourceRef`=导出相对路径），`文件/引用消息`→`text`。时间：JSON/HTML 用 Unix 秒、CSV 用 ISO8601 UTC、TXT 用本地墙钟。JSON/HTML 整文档/整行解析，CSV/TXT 逐行流式。`canParse` 的 JSON 探测须对**整份文档**做结构判定（`weflow`+`messages` 键顺序不定，不得只扫前 N KB 头部，否则大消息数组在前时会漏判）；HTML 探测可只读头部（`window.WEFLOW_DATA` 恒在文件前部）。图片 `src` 为空/缺失时不得判为 available，须记 `missing_media`；`文件/引用` 归 text 时在 `metadata['weflow_kind']` 保留 `file`/`quote` 信号以免丢失类型。文件不可解析（JSON 非法、CSV 缺关键列、空文件）→ `ParseException`/`empty_file`；单条缺时间 → `malformed_row`、空文本 → `empty_message`、媒体缺失 → `missing_media`，均告警跳过。
 
 ### 6.3 错误处理
 
@@ -920,6 +999,8 @@ test('parse memory stays bounded regardless of file size', () async {
 | 2026-08-01 | v0.2 | 第三轮评审（规模/存储）：`DataParser.parse` 改为 `Stream<ParseEvent>` + `parseAll` 便捷法；新增 ParseEvent/MediaTier/MediaIndexEntry 模型与三层解析产物；`ParseResult` 增加 `mediaIndex`；新增 §4.4 分平台存储模型（iOS 沙盒拷贝+isExcludedFromBackup / macOS security-scoped bookmark）；性能目标改为吞吐/内存解耦；补 archive/path_provider 依赖 | Claude |
 | 2026-08-01 | v0.3 | 第四轮评审（流式一致性）：HTML 流式定案为自研分块 tokenizer（`package:html` 仅小文件回退，因其 DOM-only 无 SAX）；新增 `MediaIndexEvent` 明确媒体索引由解析器产出、`storedPath` 由下游 `MediaStore` 回填；补 Message↔MediaIndexEntry 单一真相来源关系（`mediaPath == sourceRef`，`storedPath` 仅存于索引）；`missing_media` fixture 由 CSV 改为 HTML（CSV 仅占位符无文件引用） | Claude |
 | 2026-08-02 | v0.3 | 评审 nit：明确 Message↔MediaIndexEntry 唯一 join key 为 `mediaPath == sourceRef`；将 `(source,senderId,timestamp,type)` 降级为描述性字段、禁止用作 join key（突发连发会令四元组冲突） | Claude |
+| 2026-08-02 | v1.0 | 四轮评审后批准，进入实现阶段 | Project Owner |
+| 2026-08-02 | v1.1 | PR #9 评审收口：明确 `WeChatParser` 为通用非 WeFlow 兜底并固化其健壮性约束（CSV RFC4180 引号内嵌换行不丢数据、`createtime` epoch 兼容、产 0 条须告警杜绝静默失败）；`WeFlowParser` JSON 探测改为整份文档结构判定（键顺序无关）、HTML 探测只读头部、空媒体 `src` 记 `missing_media`、`文件/引用` 归 text 时保留 `metadata['weflow_kind']`；新增 §3.2 join key 路径穿越安全约束（MediaStore 落地前须钳制在导出根内） | Claude |
 
 ---
 

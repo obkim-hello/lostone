@@ -9,7 +9,7 @@
 | 模块编号 | 模块名称 | PRD 状态 | ERD 状态 | Spec 状态 | 三文档齐全 | 开发状态 |
 |----------|---------|---------|---------|----------|-----------|----------|
 | 001 | 项目初始化 | ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | ✅ 已完成 |
-| 002 | 数据导入 | 📝 草稿 | 📝 草稿 | 📝 草稿 | ⚠️ 草稿完成 | 🚫 阻塞 |
+| 002 | 数据导入 | ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | 🚧 开发中 |
 | 003 | Persona 生成 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
 | 004 | 本地模型集成 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
 | 005 | 云端 API 集成 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
@@ -69,24 +69,46 @@
 ### 文档信息
 | 文档类型 | 文件名 | 状态 | 完成时间 | 批准时间 | 文件路径 |
 |----------|--------|------|---------|---------|---------|
-| PRD | PRD-Data-Import-002-20260801.md | 📝 草稿 | 2026-08-01 | 待批准 | docs/prd/PRD-Data-Import-002-20260801.md |
-| ERD | ERD-Data-Parsers-002-20260801.md | 📝 草稿 | 2026-08-01 | 待批准 | docs/erd/ERD-Data-Parsers-002-20260801.md |
-| Spec | SPEC-Data-Parser-002-20260801.md | 📝 草稿 | 2026-08-01 | 待批准 | docs/spec/SPEC-Data-Parser-002-20260801.md |
+| PRD | PRD-Data-Import-002-20260801.md | ✅ 已批准 | 2026-08-01 | 2026-08-02 | docs/prd/PRD-Data-Import-002-20260801.md |
+| ERD | ERD-Data-Parsers-002-20260801.md | ✅ 已批准 | 2026-08-01 | 2026-08-02 | docs/erd/ERD-Data-Parsers-002-20260801.md |
+| Spec | SPEC-Data-Parser-002-20260801.md | ✅ 已批准 | 2026-08-01 | 2026-08-02 | docs/spec/SPEC-Data-Parser-002-20260801.md |
 
 ### 三文档齐全检查
-- ✅ PRD 已创建（草稿）
-- ✅ ERD 已创建（草稿）
-- ✅ Spec 已创建（草稿）
+- ✅ PRD 已创建并批准
+- ✅ ERD 已创建并批准
+- ✅ Spec 已创建并批准
 - ✅ 编号一致（002）
 - ✅ 日期一致（20260801）
-- ⚠️ 状态：草稿（**尚未评审批准**）
-- 🚫 **三文档未批准，禁止开始开发**
+- ✅ 状态：已批准（2026-08-02，四轮评审后）
+- ✅ **三文档齐全，可以开始开发**
 
-### 待办
-- [ ] 三文档评审
-- [ ] 三文档批准（批准后将文件日期更新为批准日期）
-- [ ] 批准后添加第 4.3 节新增依赖并提交 pubspec.lock
-- [ ] 准备脱敏 fixtures（见 SPEC §7.3）
+### 开发进度
+> 模块 002 体量大（五类解析器 + 流式至 5GB + iOS/macOS 原生存储 + 导入 UI）。首个实现切片聚焦**纯 Dart、可单元测试的核心**；原生/设备相关部分分阶段推进。
+
+| 项目 | 状态 | 说明 |
+|------|------|------|
+| 核心数据模型 | ✅ 已完成 | Message/MessageType/DataSource、Conversation/ImportStats、ParseEvent/MediaIndexEntry/MediaTier/ParseOptions/ParseResult/ParseWarning |
+| DataParser 契约 + parseAll | ✅ 已完成 | 抽象接口 + 排空流便捷法 |
+| WeChatParser（CSV/TXT/HTML 流式） | ✅ 已完成 | 多行续行、媒体占位符 type-and-keep、列名别名、missing_media、自研 HTML 分块 tokenizer |
+| WeFlowParser（微信 WeFlow 导出 JSON/CSV/TXT/HTML） | ✅ 已完成 | ERD §4.3「输入（微信 WeFlow 导出）」四格式；`source==wechat`，结构签名 `canParse`，注册先于 WeChatParser；方向以 `isSend`/`is_sender`/HTML `s`/TXT `'我'` 为准；`图片消息`→image 产媒体索引（mediaPath==sourceRef）、`文件/引用消息`→text；JSON/HTML Unix 秒、CSV ISO8601 UTC、TXT 本地墙钟；BOM/HTML 实体处理；missing_media/malformed_row/empty_message/empty_file 告警、JSON 非法/CSV 缺列→ParseException。合成夹具非真实会话 |
+| DataPreprocessor | ✅ 已完成 | 清洗/去重（内容复合键）/稳定升序 |
+| ParserRegistry / DataImportService | ✅ 已完成 | 调度 + 单文件失败隔离（所有 Exception）+ 组装 Conversation；告警/媒体索引跨文件累积并透出；file_too_large（>200MB）拒绝 |
+| InstagramParser（Meta DYI JSON） | ✅ 已完成 | `message_1.json`（participants+messages）；文本 + photos/videos/gifs/audio_files 分条 + 媒体索引；timestamp_ms→UTC；jsonDecode 错误→ParseException；missing_media |
+| WeiboParser（direct_messages API v2 JSON） | ✅ 已完成 | ERD §4.3 输入契约；`created_at` 微博/Twitter 风格带时区归一 UTC + Unix 秒/毫秒；`sender_screen_name`/`sender_id` 命中 myIdentifiers 判 isFromMe；纯文本无媒体；缺时间→malformed_row、空文本→empty_message、JSON 非法/缺数组→ParseException |
+| IMessageParser（chat.db 只读） | ✅ 已完成 | `sqlite3` 游标逐行流式；message⋈handle；`date`→appleDateToDateTime；is_from_me/targetContact；`text` 为空时回退解码 `attributedBody`（streamtyped，ERD §4.2）；确无正文→empty_message（设备端原生库 `sqlite3_flutter_libs` 已声明于 pubspec，`flutter pub get` 解析通过；真机绑定验证待设备） |
+| PhotoExifParser（照片 EXIF） | ✅ 已完成 | `exif` 包；`DateTimeOriginal`→时间戳（含 0 年/月/日/越界拒绝），缺失→missing_exif；`extractLocation` 时显式解析 GPS IFD 换算十进制经纬度写入 metadata（含 NaN 保护，ERD §6.2 line734）；损坏/截断图片兜底 corrupt_photo 告警（RangeError 不逃逸）；照片即媒体（mediaPath==sourceRef，available 恒真）；fixture 由 Dart 直构 EXIF/TIFF 字节（无需外部工具） |
+| MediaStore 分层落地（ERD §4.4） | ✅ 已完成 | `MediaTier` 门控字节拷贝（textOnly 不拷 / photoAndVoice 图+语音 / all 全部）+ `storedPath` 回填；`MediaStorageMode`（copyIntoSandbox / referenceInPlace）；源缺失→available=false 不中断；文件名冲突去重；`isExcludedFromBackup` 经注入钩子（宿主 no-op/iOS 原生），仅首次拷贝前触发一次；入参不可变。原生沙盒/bookmark 装配分阶段推进 |
+| 导入状态管理（Riverpod） | ✅ 已完成 | `ImportPhase`/`ImportState`/`ImportNotifier`/`importStateProvider`（ERD §5.2）；空列表转 failed |
+| Apple 时间转换 | ✅ 已完成 | `appleDateToDateTime`（1e12 阈值，秒/纳秒） |
+| 单元测试 + fixtures | ✅ 已完成 | 覆盖 SPEC §7 用例 1-6、7-13 + 评审补充用例 + 合成 chat.db（含 attributedBody 单字节/0x81 扩展长度回退 + 畸形 BLOB 降级）+ Dart 直构 EXIF/TIFF fixture（含 GPS IFD）+ MediaStore 分层/去重/缺失/钩子临时目录用例 + WeiboParser 时区/Unix/isFromMe/告警用例 + WeChat 10 万条流式吞吐集成测试（ERD §7.3）+ WeFlow 四格式（JSON/CSV/TXT/HTML）结构等价合成夹具（canParse 探测/类型方向/媒体 join key/missing_media/BOM/HTML 实体/registry 路由）；`flutter test` 122/122、`flutter analyze` 0 警告 |
+
+### 分阶段推进（需真机 / 大样本 / 待补文档，本切片不含）
+- [ ] WeiboParser 输入契约 Owner 终审（已按微博 API v2 `direct_messages` 结构在 ERD §4.3 固化并实现，待 Owner 确认真实导出格式；若官方格式变更再增补版本说明）
+- [ ] IMessageParser 真机绑定验证（`sqlite3_flutter_libs` 已加入 pubspec 并解析通过；解析逻辑宿主已验证，剩真机 chat.db 读取端到端验证）
+- [ ] IMessageParser 完整 `attributedBody` typedstream 解码器（保留富文本/内联附件占位；现为纯文本尽力回退，需真机导出样本验证）
+- [ ] MediaStore 原生装配（iOS 沙盒目录 path_provider + `isExcludedFromBackup` 原生实现 / macOS security-scoped bookmark 持久化；分层落地核心逻辑已完成并宿主验证）
+- [ ] file_picker 导入 UI（Phase 4 视觉稿统一；状态层 `import_providers` 已就绪）
+- [ ] 5GB 峰值内存采样压测（< 300MB，需设备/CI 内存采样）；**10 万条吞吐 + 流式懒消费已在宿主验证**（`test/integration/wechat_streaming_perf_test.dart`，ERD §7.3 模板，≥5000 msg/min 达标）
 
 ---
 
@@ -214,6 +236,21 @@ Spec：⚪ 待创建
 | 2026-08-02 | 04:10 | 模块 002 第四轮评审（流式一致性）：ERD/Spec 同步——HTML 流式定案自研分块 tokenizer（package:html 无 SAX）、新增 MediaIndexEvent 明确媒体索引产出所有权与 storedPath 下游回填、补 Message↔MediaIndexEntry 单一真相来源关系、missing_media fixture 改 HTML。ERD/Spec 升至 v0.3，仍为草稿，待批准 | Claude |
 | 2026-08-02 | 04:30 | 模块 002 评审 nit：明确唯一 join key 为 mediaPath==sourceRef，四元组降级为描述性字段、禁止用作关联键（突发连发冲突）。仍为草稿，待批准 | Claude |
 | 2026-08-02 | — | 模块 001 收尾：PRD/ERD/Spec v1.1 对齐工具链版本（Flutter 3.38+/Dart 3.11+，Spec 环境检查阈值 >= 3.24 → >= 3.38）、iOS §8.4 验收通过、macOS 桌面明确延后；模块 001 开发状态更新为"已完成" | Claude |
+| 2026-08-02 | — | ✅ 批准模块 002 三文档（v1.0，四轮评审后），开发状态转"开发中"；首个实现切片聚焦纯 Dart 核心（模型/WeChat 解析/预处理/导入编排/Apple 时间），原生解析器与存储/UI 分阶段推进 | Project Owner |
+| 2026-08-02 | — | 模块 002 纯 Dart 核心切片实现完成：models（Message/Conversation/parse_result）+ WeChatParser（CSV/TXT/HTML 流式）+ DataPreprocessor + ParserRegistry + DataImportService + appleDateToDateTime；单测覆盖 SPEC §7 用例 1-5/7-13，`flutter test` 42/42、`flutter analyze` 0 警告、核心切片行覆盖 ≈94%。原生解析器/存储/UI 仍分阶段推进 | Claude |
+| 2026-08-02 | — | 模块 002 切片扩展：新增导入状态层 `import_providers`（Riverpod，ERD §5.2）+ InstagramParser（Meta DYI JSON）；代理评审对照 SPEC §edge-cases/§5.1-5.2 修复 4 项合规缺口（乱码行 allowMalformed+malformed_row、单文件隔离扩至所有 Exception、告警/媒体索引透出 Conversation、空列表转 failed），并补 file_too_large。`flutter test` 58/58、`flutter analyze` 0 警告。Weibo 待补输入格式文档 | Claude |
+| 2026-08-02 | — | 模块 002 新增 IMessageParser（ERD §4.2/§6.2）：只读 chat.db（`sqlite3` 游标流式）、message⋈handle、Apple 时间归一、is_from_me/targetContact、附件空文本告警；合成 chat.db fixture 纯宿主 TDD。`flutter test` 64/64、`flutter analyze` 0 警告。剩余分阶段项：PhotoExif（需二进制 jpg）、Weibo（待文档）、MediaStore/UI/大样本压测（需真机）、iMessage 设备端 sqlite3_flutter_libs 打包 | Claude |
+| 2026-08-02 | — | 第二轮代理评审修复：IMessageParser 增 `attributedBody` 尽力回退（iOS14+/macOS11+ 正文常存该 BLOB，否则真机导出多被误判 empty_message；同步扩写 ERD §4.2）；InstagramParser jsonDecode 错误→ParseException、并支持 videos/gifs/audio_files。`flutter test` 65/65、`flutter analyze` 0 警告 | Claude |
+| 2026-08-02 | — | 第三轮代理评审修复：补充 attributedBody 0x81 扩展长度前缀（>127 字节正文）与畸形 BLOB 降级为 empty_message 的测试用例。`flutter test` 67/67、`flutter analyze` 0 警告 | Claude |
+| 2026-08-02 | — | 新增 PhotoExifParser（ERD §6.2 line734 / SPEC 用例6）：`exif` 包提取 DateTimeOriginal，缺失→missing_exif；extractLocation 时显式解析 GPS IFD 换算十进制经纬度入 metadata；fixture 以 Dart 直构 EXIF/TIFF 字节（含 GPS IFD），破除"需二进制样本"阻塞。`flutter test` 74/74、`flutter analyze` 0 警告 | Claude |
+| 2026-08-02 | — | 第四轮代理评审修复（Critical）：损坏/截断图片令底层 exif 抛 RangeError（Error 非 Exception）会逃逸 DataImportService 的 on Exception 捕获而中断整批导入——PhotoExifParser 兜底捕获降级为 corrupt_photo 告警；另加 0 月/日越界拒绝、GPS NaN 保护；新增崩溃隔离用例。`flutter test` 76/76、`flutter analyze` 0 警告 | Claude |
+| 2026-08-02 | — | 新增 MediaStore 分层落地（ERD §4.4）：`MediaTier` 门控字节拷贝 + `storedPath` 回填；copyIntoSandbox/referenceInPlace 双模式；源缺失→available=false 不中断整批；文件名冲突去重；`isExcludedFromBackup` 注入钩子（宿主 no-op/iOS 原生）仅首次拷贝前触发一次；入参不可变——将原"MediaStore 原生落地"阻塞项收窄至仅剩 path_provider/原生 bookmark 装配。`flutter test` 86/86、`flutter analyze` 0 警告 | Claude |
+| 2026-08-02 | — | 新增 WeiboParser（ERD §3.4 file scope 最后一项）：ERD §4.3 固化微博 API v2 `direct_messages` 输入契约（非臆造，锚定真实结构）；实现 created_at 时区归一 UTC + Unix 秒/毫秒、sender→isFromMe、告警降级；注册进 registry（与 Instagram 结构互斥）。原"WeiboParser 待补文档"阻塞项转为 Owner 终审。`flutter test` 95/95、`flutter analyze` 0 警告 | Claude |
+| 2026-08-02 | — | 落地 ERD §7.3 吞吐压测宿主版（WeChat 流式）：生成 10 万条 CSV，经事件流懒消费断言全解析、0 告警、≥5000 msg/min（实测 ~6s）。验证 openRead+LineSplitter 流式路径不全量载入。5GB 峰值内存采样仍需设备/CI。`flutter test` 96/96、`flutter analyze` 0 警告 | Claude |
+| 2026-08-02 | — | iMessage 设备端打包推进：pubspec 加入 `sqlite3_flutter_libs ^0.5.24`（解析为 0.5.42），`flutter pub get` 通过；ERD §4.3 依赖表同步。原生 SQLite 库随 iOS/macOS 打包，剩真机 chat.db 端到端验证。`flutter test` 96/96、`flutter analyze` 0 警告 | Claude |
+| 2026-08-02 | — | 新增 WeFlowParser：支持真实微信第三方导出工具 WeFlow 的四种格式（JSON/CSV/TXT/HTML）。ERD §3.2/§3.4/§4.3/§6.2 固化输入契约（锚定 WeFlow 1.0.3 真实结构，测试用结构等价合成夹具，不含真实会话）；`source==wechat`，结构签名 canParse，注册先于通用 WeChatParser，非 WeFlow 文件回落。方向以导出标志为准；图片产媒体索引（单一 join key），文件/引用归 text；四格式时间语义分别处理；BOM/HTML 实体反转义。新增 16 用例（canParse/类型方向/媒体缺失/BOM/实体/registry 路由 + 代理评审修复：CSV 引号内嵌换行行缓冲、TXT `[文件]`/裸文件名不误判为图片、JSON canParse 结构化校验）。`flutter test` 112/112、`flutter analyze` 0 警告 | Claude |
+| 2026-08-02 | — | 提交 WeFlow 10 万条性能基准（`weflow_bench_test.dart`，四格式各 10 万条+5000 媒体，JSON ~2519k/HTML ~1982k/CSV ~1763k/TXT ~1147k msg/min，远超 ERD §7.3 基线）| Claude |
+| 2026-08-02 | — | PR #9 评审收口（ERD v1.1）：`WeChatParser`（通用非 WeFlow 兜底）修复三处真实缺陷——CSV 引号内嵌换行按 record 累积不丢数据、`createtime` epoch 兼容不再整表丢弃、产 0 条消息必告警杜绝静默失败；`WeFlowParser` JSON 探测改整份文档结构判定（键顺序无关）、HTML 探测只读头部、空媒体 src 记 `missing_media`、文件/引用归 text 保留 `metadata['weflow_kind']`；新增 10 用例（WeChat 内嵌换行/epoch/静默失败 + WeFlow JSON 尾部键探测/kind metadata/五类告警码覆盖）。`flutter test` 122/122、`flutter analyze` 0 警告 | Claude |
 
 ---
 

@@ -1,0 +1,99 @@
+{
+  "weflow": { "version": "1.0.3", "exportedAt": 1785682894, "generator": "WeFlow" },
+  "session": {
+    "wxid": "wxid_synth001",
+    "nickname": "小明",
+    "remark": "",
+    "displayName": "小明",
+    "type": "私聊",
+    "lastTimestamp": 1785648270,
+    "messageCount": 6
+  },
+  "messages": [
+    {
+      "localId": 1,
+      "createTime": 1785648260,
+      "formattedTime": "2026-08-02 01:24:20",
+      "type": "文本消息",
+      "localType": 1,
+      "content": "在吗<3",
+      "isSend": 0,
+      "senderUsername": "wxid_synth001",
+      "senderDisplayName": "小明",
+      "source": "",
+      "platformMessageId": "9000000000000000001"
+    },
+    {
+      "localId": 2,
+      "createTime": 1785648262,
+      "formattedTime": "2026-08-02 01:24:22",
+      "type": "文本消息",
+      "localType": 1,
+      "content": "在的",
+      "isSend": 1,
+      "senderUsername": "wxid_selfme",
+      "senderDisplayName": "阿花",
+      "source": "",
+      "platformMessageId": "9000000000000000002"
+    },
+    {
+      "localId": 3,
+      "createTime": 1785648264,
+      "formattedTime": "2026-08-02 01:24:24",
+      "type": "图片消息",
+      "localType": 3,
+      "content": "../images/img_ab.png",
+      "isSend": 1,
+      "senderUsername": "wxid_selfme",
+      "senderDisplayName": "阿花",
+      "source": "",
+      "platformMessageId": "9000000000000000003"
+    },
+    {
+      "localId": 4,
+      "createTime": 1785648266,
+      "formattedTime": "2026-08-02 01:24:26",
+      "type": "文件消息",
+      "localType": 25769803825,
+      "content": "[文件] notes.txt",
+      "isSend": 0,
+      "senderUsername": "wxid_synth001",
+      "senderDisplayName": "小明",
+      "source": "",
+      "platformMessageId": "9000000000000000004"
+    },
+    {
+      "localId": 5,
+      "createTime": 1785648268,
+      "formattedTime": "2026-08-02 01:24:28",
+      "type": "引用消息",
+      "localType": 244813135921,
+      "content": "记得带伞[引用 阿花：在的]",
+      "isSend": 0,
+      "senderUsername": "wxid_synth001",
+      "senderDisplayName": "小明",
+      "source": "",
+      "platformMessageId": "9000000000000000005",
+      "replyToMessageId": "9000000000000000002",
+      "appMsgType": "57",
+      "appMsgKind": "quote",
+      "quotedContent": "在的",
+      "quotedSender": "阿花",
+      "quotedType": "1"
+    },
+    {
+      "localId": 6,
+      "createTime": 1785648270,
+      "formattedTime": "2026-08-02 01:24:30",
+      "type": "图片消息",
+      "localType": 3,
+      "content": "../images/missing_zz.png",
+      "isSend": 1,
+      "senderUsername": "wxid_selfme",
+      "senderDisplayName": "阿花",
+      "source": "",
+      "platformMessageId": "9000000000000000006"
+    }
+  ],
+  "avatars": {}
+}

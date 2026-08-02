@@ -24,6 +24,13 @@ dependencies:
   # UI
   cupertino_icons: ^1.0.6
 
+  # Data Import (模块 002)
+  csv: ^6.0.0
+  path: ^1.9.0
+  sqlite3: ^2.4.0
+  sqlite3_flutter_libs: ^0.5.24
+  exif: ^3.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
