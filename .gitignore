@@ -79,6 +79,3 @@ memories/
 *.task
 *.tflite
 *.onnx
-
-# Local-only performance benchmarks (not committed)
-mobile/test/integration/weflow_bench_test.dart
