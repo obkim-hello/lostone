@@ -36,7 +36,7 @@
 - **技术栈**：Flutter 3.38+ / Dart 3.11+（与仓库 `pubspec.yaml` `sdk: '>=3.11.0 <4.0.0'` 一致）。
 - **确定性**：相同输入（含消息顺序归一化后）→ 相同输出（含 prompt 渲染）。禁用 `DateTime.now()`/随机数进入分析结论（生成时间戳仅作元信息，由调用方注入或单独字段隔离）。
 - **隔离**：本模块**不**落盘、**不**加密——只产出 `Persona` 对象与 JSON 字节；持久化/加密由存储层（模块 008）负责。
-- **隐私**：日志脱敏；`.persona` 与 prompt **绝不持久化整段原文**——证据引用只存**消息键的 SHA-256 哈希**（`messageKeyHash`，见 §3.1）、计数与一条可选的截断短示例（≤ 60 字符）。哈希跨导入稳定、可支撑去重/幂等/回溯，但不可逆还原原文，`.persona` 体积不随原文线性膨胀。
+- **隐私**：日志脱敏；`.persona` 与 prompt **绝不持久化整段原文**——证据引用只存**消息键的 SHA-256 哈希**（`messageKeyHash`，见 §3.1）、计数与一条可选的截断短示例（≤ 60 字素簇）。哈希跨导入稳定、可支撑去重/幂等/回溯，但不可逆还原原文，`.persona` 体积不随原文线性膨胀。
 - **性能**：≤ 60s / 1000 条（PRD §4.1）；单遍/受影响重算，避免多份全量拷贝。
 - **中文优先**：初版语言分析以中文 + 通用 Unicode 为主，基于规则 + n-gram 统计，不引入重型 NLP 依赖；预留分词/停用词注入点。
 
@@ -149,7 +149,7 @@ class Persona {
   /// 仍得到相同 id（消除边界敏感）；1:1 会话下该组成天然稳定。若超集引入
   /// 全新发送者，则参与者与目标集合本就改变，属不同人格、id 变化符合预期。
   /// 增量更新时从 [existing] 原样沿用，跨版本不变。因其确定性，它不违反
-  /// §确定性不变式。
+  /// §1.2「确定性」约束（对应 SPEC §1.5 不变性）。
   final String id;
 
   /// 语义 schema 版本，见 [kPersonaSchemaVersion]。
@@ -440,7 +440,7 @@ class Evidence {
   /// 支撑该结论的消息键哈希列表（SHA-256 十六进制，可截断）。
   final List<String> messageKeyHashes;
 
-  /// 一条短示例（脱敏/截断，≤ 60 字符）。用于 UI 可读性，
+  /// 一条短示例（脱敏/截断，≤ 60 字素簇）。用于 UI 可读性，
   /// 是唯一允许出现的原文片段，长度受限。**encode 端强制按字符截断至
   /// 60**（`characters` 包按字素簇计，避免截断多字节/emoji）；decode 端
   /// 对超长值同样截断（防御性，见 SPEC §2.2），保证 `.persona` 不因该字段
@@ -522,11 +522,15 @@ class PersonaSource {
   ///
   /// `true`（默认）：切分依据充分（显式 `personSenderIds`，或 `isFromMe`
   /// 能区分双方）。`false`：**方向/组成不可判定**——未传
-  /// `personSenderIds`/`myIdentifiers`，且 `isFromMe` 全同（某些 parser
-  /// 无法判定方向时默认全 `false`）或会话为多方（>1 目标发送者，v1 仅正式
-  /// 支持 1:1）。此时引擎**不臆断把全体并入人格**，各层与 identity 的
-  /// `confidence` 强制 `low`，并以本字段向下游/UI 显式暴露该降级，供提示用户
-  /// 手动指定 `personSenderIds`。
+  /// `personSenderIds`/`myIdentifiers`，且会话**非空**并满足：`isFromMe`
+  /// **全为 `false`**（无我方消息作对照，可能是某些 parser 未判方向时默认全
+  /// `false`），或会话为多方（>1 目标发送者，v1 仅正式支持 1:1）。此时引擎
+  /// **不臆断把全体并入人格**，各层与 identity 的 `confidence` 强制 `low`，
+  /// 并以本字段向下游/UI 显式暴露该降级，供提示用户手动指定 `personSenderIds`。
+  ///
+  /// 注意：空会话、以及"全 `isFromMe==true`（无目标人物消息）"**不**触发降级
+  /// ——属正常空/无目标场景（`personMessages==0`、无方向歧义），
+  /// `segmentationResolved` 保持 `true`。
   final bool segmentationResolved;
 }
 
@@ -689,11 +693,11 @@ class PersonaSchemaException implements Exception {
 
   **⚠️ 对模块 002 的依赖**：默认路径（无 `personIds`/`myIdentifiers`）的正确性**依赖模块 002 可靠填充 `Message.isFromMe`**。ERD-Data-Parsers-002 须保证各 parser 尽力判定消息方向；无法判定时不得静默全部置 `false`（否则会把用户消息误并入人格）。此契约在此显式声明，并由下述守卫兜底。
 
-  **方向/组成不可判定守卫（返回 `resolved` 标志）**：当**未传** `personIds` 与 `myIdentifiers`，且满足以下任一时，判定 `resolved=false`：
-  - **方向不可判定**：会话内 `isFromMe` 全同（通常全 `false`，即 parser 未能判定方向）；
+  **方向/组成不可判定守卫（返回 `resolved` 标志）**：当**未传** `personIds` 与 `myIdentifiers`，且会话**非空**并满足以下任一时，判定 `resolved=false`：
+  - **方向不可判定**：会话内消息 `isFromMe` **全为 `false`**（无我方消息作对照，可能是 parser 未能判定方向而默认全 `false`），无法区分双方；
   - **多方会话**：解析出的目标发送者 >1 个（v1 仅正式支持 1:1，群聊不做多人格拆分）。
 
-  `resolved=false` 时仍返回结构完整的 Persona（沿零配置、不抛异常原则），但由 `build` 把各层与 identity 的 `confidence` 强制 `low`、置 `PersonaSource.segmentationResolved=false`，**不臆断把全体并入人格**，供 UI 提示用户显式指定 `personSenderIds` 后重建。`resolved=true` 时按上述优先级正常切分。
+  空会话、以及"全 `isFromMe==true`（无目标人物消息）"**不**属于此守卫（无方向歧义，`personMessages==0`、`resolved=true`），按 §5.2 空/无目标场景处理。`resolved=false` 时仍返回结构完整的 Persona（沿零配置、不抛异常原则），但由 `build` 把各层与 identity 的 `confidence` 强制 `low`、置 `PersonaSource.segmentationResolved=false`，**不臆断把全体并入人格**，供 UI 提示用户显式指定 `personSenderIds` 后重建。`resolved=true` 时按上述优先级正常切分。
 
 ---
 
@@ -713,7 +717,7 @@ class PersonaSchemaException implements Exception {
 
 **目标人物切分（splitBySender）**
 - 主判据 `Message.isFromMe`；`personSenderIds`/`myIdentifiers` 覆盖/细化（优先级见 §4.2）。默认（三者除 isFromMe 外皆空）以 `isFromMe==false` 为对方，杜绝把用户消息计入人格。
-- 依赖模块 002 可靠填充 `isFromMe`；不可判定（`isFromMe` 全同）或多方会话（>1 目标发送者）且无显式指定时，触发守卫：`resolved=false`、各层置信度降 `low`、`segmentationResolved=false`（见 §4.2）。
+- 依赖模块 002 可靠填充 `isFromMe`；非空会话中 `isFromMe` 全为 `false`（不可判定）或多方会话（>1 目标发送者）且无显式指定时，触发守卫：`resolved=false`、各层置信度降 `low`、`segmentationResolved=false`（见 §4.2）。空/无目标场景不触发。
 - `sortedTargetSenderIds`（用于 `id` 派生，见 §3.1）取**切分后实际观察到的目标发送者 senderId** 去重升序集合，非调用方原始入参。
 
 **增量更新（PersonaBuilder.update）**
@@ -727,7 +731,7 @@ class PersonaSchemaException implements Exception {
 
 ### 5.2 边界与错误
 - 空会话 / 无目标人物消息：返回结构完整但各层 `Confidence.low` 的 Persona，`personMessages == 0`；不抛异常、不编造。
-- 方向/组成不可判定（`isFromMe` 全同且无显式指定，或多方会话）：不抛异常；各层 `Confidence.low`、`segmentationResolved=false`，不臆断并入（见 §4.2 守卫）。
+- 方向/组成不可判定（非空会话中 `isFromMe` 全为 `false` 且无显式指定，或多方会话）：不抛异常；各层 `Confidence.low`、`segmentationResolved=false`，不臆断并入（见 §4.2 守卫）。空/无目标场景不触发（`segmentationResolved=true`）。
 - schema 版本高于当前：`decode` 抛 `PersonaSchemaException`。
 - JSON 非法：抛 `FormatException`（不静默返回半成品）。
 
@@ -781,7 +785,7 @@ class PersonaSchemaException implements Exception {
 ### 8.1 安全要求
 - 无网络、无外传（可在无网络环境验证）。
 - 日志脱敏：不打印消息原文、称呼、地址等；仅打印计数/类别。
-- `.persona` 与 prompt 仅含 Persona 字段；`Evidence` 只存**消息键哈希**/计数/短示例，**不落逐条原文**，`sampleExcerpt` 是唯一原文片段且须截断（≤ 60 字符）。`.persona` 体积因此保持在数十~数百 KB 量级，不随聊天量线性膨胀。
+- `.persona` 与 prompt 仅含 Persona 字段；`Evidence` 只存**消息键哈希**/计数/短示例，**不落逐条原文**，`sampleExcerpt` 是唯一原文片段且须截断（≤ 60 字素簇）。`.persona` 体积因此保持在数十~数百 KB 量级，不随聊天量线性膨胀。
 - 落盘与加密由存储层（模块 008）负责；本模块产物为明文，调用方须交由加密存储。
 - **绝不使用真实导出数据做测试/示例**——仅合成 fixture。
 
@@ -815,8 +819,8 @@ class PersonaSchemaException implements Exception {
 |------|------|---------|------|
 | 2026-08-02 | v1.0（草稿）| 初始草稿 | Claude |
 | 2026-08-02 | v1.0.1（草稿）| 代理评审修订：(B1) 去重/合并键改为消息内容键（`source\|senderId\|timestamp\|content\|type`，对齐模块 002，非 `Message.id`），`PersonaSource.mergedMessageIds`→`mergedMessageKeys`、`Evidence.messageIds`→`messageKeys`；(B2) 定义 `PersonaTag` 并加入 `Persona.tags`；(B3) 空会话下 `TimelineSpan.start/end` 改可空、`displayName` 回退 `defaultDisplayName`；(M1) `Persona.id` 明确确定性派生；补 `PromptOptions`/`PromptTone`/`PersonaSchemaException` 定义；活跃时段按 UTC 分桶 | Claude |
-| 2026-08-02 | v1.0.2（草稿）| PR #10 Owner 评审修订：(🔴1 隐私) 证据/去重键**持久化改存 SHA-256 哈希**（`Evidence.messageKeys`→`messageKeyHashes`、`PersonaSource.mergedMessageKeys`→`mergedMessageKeyHashes`，新增 `package:crypto` + `messageKeyHash()`），`.persona` 不再落逐条原文、体积不膨胀，兑现 §1.2/§8.1 承诺；(🔴3 切分) `splitBySender` 以 `Message.isFromMe` 为主判据、`personSenderIds`/`myIdentifiers` 覆盖，默认路径不再污染人格；(🟡4 历史) 新增 `SourceRevision` + `PersonaSource.revisions` 版本轨迹（有界、无原文），落实 PRD 用户故事 2；(minor) `Persona.id` 派生签名去除首条消息键/消息数（消除边界敏感）、`generatedAt` clock 缺省取 epoch 0 哨兵（不抛错、零配置可用）、`deriveTags` 增 `relation`/`memories` 入参覆盖关系/偏好标签、`PersonaSource` 标注即 PRD `sourceSummary` | Claude |
-| 2026-08-02 | v1.0.3（草稿）| PR #10 Owner 复审修订：(🟡A) `revisions` 定义为**连续 `[v1..vN]`**（`build` 写 v1、每 `update` 追加，末条==`personaVersion`、不裁剪），消除示例↔"每次追加"↔校验矛盾；(🟡B) 显式声明对模块 002 可靠填充 `isFromMe` 的依赖，`splitBySender` 新增**方向/组成不可判定守卫**（返回 `resolved`）——不可判定/多方且无显式指定时降 `low` 置信、`segmentationResolved=false`、不臆断并入；(minor C) `sampleExcerpt` encode 端强制按字素簇截断至 60、decode 端防御性截断；(minor D) 明确 `id` 的 `sortedTargetSenderIds`=切分后**观察到的目标发送者集合**（非原始入参），界定超集稳定性范围；(minor E) 声明 v1 仅正式支持 1:1，多方会话并入守卫 | Claude |
+| 2026-08-02 | v1.0.2（草稿）| PR #10 Owner 评审修订：(🔴1 隐私) 证据/去重键**持久化改存 SHA-256 哈希**（`Evidence.messageKeys`→`messageKeyHashes`、`PersonaSource.mergedMessageKeys`→`mergedMessageKeyHashes`，新增 `package:crypto` + `messageKeyHash()`），`.persona` 不再落逐条原文、体积不膨胀，兑现 §1.2/§8.1 承诺；(🔴3 切分) `splitBySender` 以 `Message.isFromMe` 为主判据、`personSenderIds`/`myIdentifiers` 覆盖，默认路径不再污染人格；(🟡4 历史) 新增 `SourceRevision` + `PersonaSource.revisions` 版本轨迹（无原文、随更新次数增长；连续性于 v1.0.3 明确），落实 PRD 用户故事 2；(minor) `Persona.id` 派生签名去除首条消息键/消息数（消除边界敏感）、`generatedAt` clock 缺省取 epoch 0 哨兵（不抛错、零配置可用）、`deriveTags` 增 `relation`/`memories` 入参覆盖关系/偏好标签、`PersonaSource` 标注即 PRD `sourceSummary` | Claude |
+| 2026-08-02 | v1.0.3（草稿）| PR #10 Owner 复审修订：(🟡A) `revisions` 定义为**连续 `[v1..vN]`**（`build` 写 v1、每 `update` 追加，末条==`personaVersion`、不裁剪），消除示例↔"每次追加"↔校验矛盾；(🟡B) 显式声明对模块 002 可靠填充 `isFromMe` 的依赖，`splitBySender` 新增**方向/组成不可判定守卫**（返回 `resolved`）——不可判定/多方且无显式指定时降 `low` 置信、`segmentationResolved=false`、不臆断并入；(minor C) `sampleExcerpt` encode 端强制按字素簇截断至 60、decode 端防御性截断；(minor D) 明确 `id` 的 `sortedTargetSenderIds`=切分后**观察到的目标发送者集合**（非原始入参），界定超集稳定性范围；(minor E) 声明 v1 仅正式支持 1:1，多方会话并入守卫；(自评复核) 收紧守卫条件为「**非空会话且 `isFromMe` 全为 `false`**」（原"全同"会与空/无目标场景重叠）、明确空/无目标不降级、清理残留"有界"措辞、修正 `id` 文档 §ref | Claude |
 
 ---
 
