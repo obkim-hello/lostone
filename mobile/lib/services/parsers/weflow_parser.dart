@@ -156,10 +156,6 @@ Future<String> _readHead(String filePath, int maxBytes) async {
 }
 
 Future<bool> _looksLikeWeflowJson(String filePath) async {
-  final String head = await _readHead(filePath, 4096);
-  if (!head.contains('"weflow"')) {
-    return false;
-  }
   try {
     final dynamic decoded = jsonDecode(await File(filePath).readAsString());
     return decoded is Map &&
@@ -192,12 +188,8 @@ Future<bool> _looksLikeWeflowTxt(String filePath) async {
 }
 
 Future<bool> _looksLikeWeflowHtml(String filePath) async {
-  await for (final String line in _lines(filePath)) {
-    if (line.contains('window.WEFLOW_DATA')) {
-      return true;
-    }
-  }
-  return false;
+  final String head = await _readHead(filePath, 65536);
+  return head.contains('window.WEFLOW_DATA');
 }
 
 Stream<ParseEvent> _jsonEvents(String filePath, ParseOptions options) async* {
@@ -477,13 +469,16 @@ Stream<ParseEvent> _emit({
       timestamp: timestamp,
       type: MessageType.text,
       content: content,
+      metadata: _kindMetadata(kind),
     ));
     return;
   }
-  final String sourceRef = mediaRef ?? 'weflow-media-$index';
-  final bool available = mediaRef == null ||
-      mediaDir == null ||
-      File(p.normalize(p.join(mediaDir, mediaRef))).existsSync();
+  final String? ref =
+      (mediaRef != null && mediaRef.trim().isNotEmpty) ? mediaRef : null;
+  final String sourceRef = ref ?? 'weflow-media-$index';
+  final bool available = ref != null &&
+      (mediaDir == null ||
+          File(p.normalize(p.join(mediaDir, ref))).existsSync());
   yield MessageEvent(Message(
     id: 'weflow-$index',
     source: DataSource.wechat,
@@ -505,8 +500,20 @@ Stream<ParseEvent> _emit({
   ));
   if (!available) {
     yield WarningEvent(
-      ParseWarning('missing_media', 'referenced media not found: $mediaRef'),
+      ParseWarning('missing_media', 'referenced media not found: $sourceRef'),
     );
+  }
+}
+
+Map<String, dynamic> _kindMetadata(_Kind kind) {
+  switch (kind) {
+    case _Kind.file:
+      return const <String, dynamic>{'weflow_kind': 'file'};
+    case _Kind.quote:
+      return const <String, dynamic>{'weflow_kind': 'quote'};
+    case _Kind.text:
+    case _Kind.image:
+      return const <String, dynamic>{};
   }
 }
 

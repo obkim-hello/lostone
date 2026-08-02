@@ -97,25 +97,49 @@ Stream<String> _lines(String filePath) => File(filePath)
     .transform(const Utf8Decoder(allowMalformed: true))
     .transform(const LineSplitter());
 
+Stream<_CsvRecord> _csvRecords(Stream<String> lines) async* {
+  final StringBuffer buffer = StringBuffer();
+  int quotes = 0;
+  int lineNo = 0;
+  int startLine = 0;
+  await for (final String line in lines) {
+    lineNo++;
+    if (buffer.isEmpty) {
+      startLine = lineNo;
+    } else {
+      buffer.write('\n');
+    }
+    buffer.write(line);
+    quotes += '"'.allMatches(line).length;
+    if (quotes.isEven) {
+      yield _CsvRecord(buffer.toString(), startLine);
+      buffer.clear();
+      quotes = 0;
+    }
+  }
+  if (buffer.isNotEmpty) {
+    yield _CsvRecord(buffer.toString(), startLine);
+  }
+}
+
 Stream<ParseEvent> _csvEvents(String filePath, ParseOptions options) async* {
   const CsvToListConverter converter =
       CsvToListConverter(shouldParseNumbers: false, eol: '\n');
   _Columns? columns;
   int index = 0;
-  int lineNo = 0;
-  bool sawData = false;
-  await for (final String line in _lines(filePath)) {
-    lineNo++;
-    if (line.trim().isEmpty) {
+  int emitted = 0;
+  await for (final _CsvRecord record in _csvRecords(_lines(filePath))) {
+    final int lineNo = record.line;
+    if (record.text.trim().isEmpty) {
       continue;
     }
-    if (line.contains(_replacementChar)) {
+    if (record.text.contains(_replacementChar)) {
       yield WarningEvent(
         ParseWarning('malformed_row', 'invalid encoding', line: lineNo),
       );
       continue;
     }
-    final List<dynamic> row = converter.convert(line).first;
+    final List<dynamic> row = converter.convert(record.text).first;
     if (columns == null) {
       columns = _resolveColumns(row);
       continue;
@@ -127,7 +151,6 @@ Stream<ParseEvent> _csvEvents(String filePath, ParseOptions options) async* {
       );
       continue;
     }
-    sawData = true;
     yield* _buildEvents(
       sender: _cell(row, columns.sender),
       timestamp: ts,
@@ -135,9 +158,12 @@ Stream<ParseEvent> _csvEvents(String filePath, ParseOptions options) async* {
       index: index++,
       options: options,
     );
+    emitted++;
   }
-  if (!sawData && columns == null) {
-    yield const WarningEvent(ParseWarning('empty_file', 'file has no content'));
+  if (emitted == 0) {
+    yield const WarningEvent(
+      ParseWarning('empty_file', 'no recognized messages'),
+    );
   }
 }
 
@@ -210,6 +236,7 @@ Stream<ParseEvent> _htmlEvents(String filePath, ParseOptions options) async* {
   final String dir = p.dirname(filePath);
   int index = 0;
   int lineNo = 0;
+  int emitted = 0;
   bool sawLine = false;
   await for (final String line in _lines(filePath)) {
     lineNo++;
@@ -242,9 +269,15 @@ Stream<ParseEvent> _htmlEvents(String filePath, ParseOptions options) async* {
       fileRef: _attr(line, 'data-src'),
       mediaDir: dir,
     );
+    emitted++;
   }
-  if (!sawLine) {
-    yield const WarningEvent(ParseWarning('empty_file', 'file has no content'));
+  if (emitted == 0) {
+    yield WarningEvent(
+      ParseWarning(
+        'empty_file',
+        sawLine ? 'no recognized messages' : 'file has no content',
+      ),
+    );
   }
 }
 
@@ -413,11 +446,26 @@ DateTime? _parseTime(String raw) {
   if (s.isEmpty) {
     return null;
   }
+  final int? epoch = int.tryParse(s);
+  if (epoch != null) {
+    if (epoch <= 0) {
+      return null;
+    }
+    final int ms = s.length >= 13 ? epoch : epoch * 1000;
+    return DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true);
+  }
   return DateTime.tryParse(s);
 }
 
 String? _attr(String line, String name) =>
     RegExp('$name="([^"]*)"').firstMatch(line)?.group(1);
+
+class _CsvRecord {
+  const _CsvRecord(this.text, this.line);
+
+  final String text;
+  final int line;
+}
 
 class _Columns {
   const _Columns({

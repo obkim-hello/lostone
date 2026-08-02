@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lostone/models/message.dart';
 import 'package:lostone/models/parse_result.dart';
@@ -228,6 +230,139 @@ void main() {
       expect(
         r.warnings.where((ParseWarning w) => w.code == 'missing_media').length,
         1,
+      );
+    });
+  });
+
+  group('WeFlowParser JSON detection', () {
+    test('detects weflow key even when it follows a large messages array',
+        () async {
+      final Directory tmp =
+          await Directory.systemTemp.createTemp('lostone_wfj');
+      final File f = File('${tmp.path}/tail.json');
+      final StringBuffer buf = StringBuffer('{"messages":[');
+      for (int i = 0; i < 500; i++) {
+        if (i > 0) {
+          buf.write(',');
+        }
+        buf.write('{"createTime":1785648260,"type":"文本消息","localType":1,'
+            '"content":"msg $i","isSend":0,"senderUsername":"user$i"}');
+      }
+      buf.write('],"weflow":{"version":"1.0.3","generator":"WeFlow"}}');
+      await f.writeAsString(buf.toString());
+
+      expect(await const WeFlowParser().canParse(f.path), isTrue);
+      await tmp.delete(recursive: true);
+    });
+  });
+
+  group('WeFlowParser kind metadata', () {
+    test('file and quote messages retain a weflow_kind signal', () async {
+      final ParseResult r = await const WeFlowParser().parseAll(_json);
+
+      final Message file = _texts(r)
+          .firstWhere((Message m) => m.content == '[文件] notes.txt');
+      expect(file.metadata['weflow_kind'], 'file');
+
+      final Message quote = _texts(r)
+          .firstWhere((Message m) => m.content == '记得带伞[引用 阿花：在的]');
+      expect(quote.metadata['weflow_kind'], 'quote');
+
+      expect(r.messages.first.metadata.containsKey('weflow_kind'), isFalse);
+    });
+  });
+
+  group('WeFlowParser warning codes', () {
+    test('image row with empty src is flagged missing, not available',
+        () async {
+      final Directory tmp =
+          await Directory.systemTemp.createTemp('lostone_wfm');
+      final File f = File('${tmp.path}/nosrc.csv');
+      await f.writeAsString(
+        'type_name,is_sender,talker,msg,src,CreateTime\n'
+        'image,0,阿花,[图片],,2026-08-02T05:24:24Z\n',
+      );
+
+      final ParseResult r = await const WeFlowParser().parseAll(f.path);
+      await tmp.delete(recursive: true);
+
+      expect(r.mediaIndex.length, 1);
+      expect(r.mediaIndex.first.available, isFalse);
+      expect(
+        r.warnings.where((ParseWarning w) => w.code == 'missing_media').length,
+        1,
+      );
+    });
+
+    test('empty file emits empty_file', () async {
+      final Directory tmp =
+          await Directory.systemTemp.createTemp('lostone_wfe');
+      final File f = File('${tmp.path}/empty.csv');
+      await f.writeAsString('');
+
+      final ParseResult r = await const WeFlowParser().parseAll(f.path);
+      await tmp.delete(recursive: true);
+
+      expect(
+        r.warnings.any((ParseWarning w) => w.code == 'empty_file'),
+        isTrue,
+      );
+    });
+
+    test('TXT text before first header emits orphan_line', () async {
+      final Directory tmp =
+          await Directory.systemTemp.createTemp('lostone_wfo');
+      final File f = File('${tmp.path}/orphan.txt');
+      await f.writeAsString(
+        "掉队的一行\n"
+        "2026-08-02 13:24:20 '阿花'\n"
+        "在的\n",
+      );
+
+      final ParseResult r = await const WeFlowParser().parseAll(f.path);
+      await tmp.delete(recursive: true);
+
+      expect(
+        r.warnings.any((ParseWarning w) => w.code == 'orphan_line'),
+        isTrue,
+      );
+      expect(r.messages.length, 1);
+    });
+
+    test('empty message body emits empty_message', () async {
+      final Directory tmp =
+          await Directory.systemTemp.createTemp('lostone_wfem');
+      final File f = File('${tmp.path}/blank.csv');
+      await f.writeAsString(
+        'type_name,is_sender,talker,msg,src,CreateTime\n'
+        'text,0,阿花,   ,,2026-08-02T05:24:24Z\n',
+      );
+
+      final ParseResult r = await const WeFlowParser().parseAll(f.path);
+      await tmp.delete(recursive: true);
+
+      expect(r.messages, isEmpty);
+      expect(
+        r.warnings.any((ParseWarning w) => w.code == 'empty_message'),
+        isTrue,
+      );
+    });
+
+    test('unparseable time emits malformed_row', () async {
+      final Directory tmp =
+          await Directory.systemTemp.createTemp('lostone_wfr');
+      final File f = File('${tmp.path}/badtime.csv');
+      await f.writeAsString(
+        'type_name,is_sender,talker,msg,src,CreateTime\n'
+        'text,0,阿花,在的,,not-a-time\n',
+      );
+
+      final ParseResult r = await const WeFlowParser().parseAll(f.path);
+      await tmp.delete(recursive: true);
+
+      expect(
+        r.warnings.any((ParseWarning w) => w.code == 'malformed_row'),
+        isTrue,
       );
     });
   });

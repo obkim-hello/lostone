@@ -122,6 +122,68 @@ void main() {
     });
   });
 
+  group('WeChatParser CSV robustness', () {
+    test('preserves embedded newlines in a quoted field', () async {
+      final Directory tmp = await Directory.systemTemp.createTemp('lostone_nl');
+      final File f = File('${tmp.path}/nl.csv');
+      await f.writeAsString(
+        'sender,content,timestamp\n'
+        '张三,"第一行\n第二行",2024-01-01 12:00:00\n'
+        '李四,收到,2024-01-01 12:01:00\n',
+      );
+
+      final ParseResult r = await const WeChatParser().parseAll(f.path);
+      await tmp.delete(recursive: true);
+
+      expect(r.messages.length, 2);
+      expect(r.messages.first.content, '第一行\n第二行');
+      expect(r.messages[1].content, '收到');
+    });
+
+    test('parses Unix-epoch createtime column instead of dropping rows',
+        () async {
+      final Directory tmp =
+          await Directory.systemTemp.createTemp('lostone_epoch');
+      final File f = File('${tmp.path}/epoch.csv');
+      await f.writeAsString(
+        'talker,strcontent,createtime\n'
+        '张三,你好,1785648260\n'
+        '李四,在的,1785648320\n',
+      );
+
+      final ParseResult r = await const WeChatParser().parseAll(f.path);
+      await tmp.delete(recursive: true);
+
+      expect(r.messages.length, 2);
+      expect(
+        r.warnings.where((ParseWarning w) => w.code == 'malformed_row'),
+        isEmpty,
+      );
+      expect(r.messages.first.timestamp,
+          DateTime.fromMillisecondsSinceEpoch(1785648260000, isUtc: true));
+    });
+  });
+
+  group('WeChatParser HTML robustness', () {
+    test('unrecognized HTML warns instead of silently producing zero',
+        () async {
+      final Directory tmp = await Directory.systemTemp.createTemp('lostone_h');
+      final File f = File('${tmp.path}/other.html');
+      await f.writeAsString(
+        '<html><body><p>hello</p><span>world</span></body></html>\n',
+      );
+
+      final ParseResult r = await const WeChatParser().parseAll(f.path);
+      await tmp.delete(recursive: true);
+
+      expect(r.messages, isEmpty);
+      expect(
+        r.warnings.any((ParseWarning w) => w.code == 'empty_file'),
+        isTrue,
+      );
+    });
+  });
+
   group('WeChatParser TXT', () {
     test('multi-line message keeps continuation lines (case 8)', () async {
       final ParseResult r = await const WeChatParser()
