@@ -96,7 +96,7 @@
 | IMessageParser（chat.db 只读） | ✅ 已完成 | `sqlite3` 游标逐行流式；message⋈handle；`date`→appleDateToDateTime；is_from_me/targetContact；`text` 为空时回退解码 `attributedBody`（streamtyped，ERD §4.2）；确无正文→empty_message（设备端 sqlite3_flutter_libs 打包待推进） |
 | 导入状态管理（Riverpod） | ✅ 已完成 | `ImportPhase`/`ImportState`/`ImportNotifier`/`importStateProvider`（ERD §5.2）；空列表转 failed |
 | Apple 时间转换 | ✅ 已完成 | `appleDateToDateTime`（1e12 阈值，秒/纳秒） |
-| 单元测试 + fixtures | ✅ 已完成 | 覆盖 SPEC §7 用例 1-5、7-13 + 评审补充用例 + 合成 chat.db（含 attributedBody 回退）；`flutter test` 65/65、`flutter analyze` 0 警告 |
+| 单元测试 + fixtures | ✅ 已完成 | 覆盖 SPEC §7 用例 1-5、7-13 + 评审补充用例 + 合成 chat.db（含 attributedBody 单字节/0x81 扩展长度回退 + 畸形 BLOB 降级）；`flutter test` 67/67、`flutter analyze` 0 警告 |
 
 ### 分阶段推进（需真机 / 原生 fixtures / 大样本 / 待补文档，本切片不含）
 - [ ] PhotoExifParser（`exif` + 二进制 jpg fixtures，含 GPS IFD；无法在无二进制样本下 TDD）
@@ -238,6 +238,7 @@ Spec：⚪ 待创建
 | 2026-08-02 | — | 模块 002 切片扩展：新增导入状态层 `import_providers`（Riverpod，ERD §5.2）+ InstagramParser（Meta DYI JSON）；代理评审对照 SPEC §edge-cases/§5.1-5.2 修复 4 项合规缺口（乱码行 allowMalformed+malformed_row、单文件隔离扩至所有 Exception、告警/媒体索引透出 Conversation、空列表转 failed），并补 file_too_large。`flutter test` 58/58、`flutter analyze` 0 警告。Weibo 待补输入格式文档 | Claude |
 | 2026-08-02 | — | 模块 002 新增 IMessageParser（ERD §4.2/§6.2）：只读 chat.db（`sqlite3` 游标流式）、message⋈handle、Apple 时间归一、is_from_me/targetContact、附件空文本告警；合成 chat.db fixture 纯宿主 TDD。`flutter test` 64/64、`flutter analyze` 0 警告。剩余分阶段项：PhotoExif（需二进制 jpg）、Weibo（待文档）、MediaStore/UI/大样本压测（需真机）、iMessage 设备端 sqlite3_flutter_libs 打包 | Claude |
 | 2026-08-02 | — | 第二轮代理评审修复：IMessageParser 增 `attributedBody` 尽力回退（iOS14+/macOS11+ 正文常存该 BLOB，否则真机导出多被误判 empty_message；同步扩写 ERD §4.2）；InstagramParser jsonDecode 错误→ParseException、并支持 videos/gifs/audio_files。`flutter test` 65/65、`flutter analyze` 0 警告 | Claude |
+| 2026-08-02 | — | 第三轮代理评审修复：补充 attributedBody 0x81 扩展长度前缀（>127 字节正文）与畸形 BLOB 降级为 empty_message 的测试用例。`flutter test` 67/67、`flutter analyze` 0 警告 | Claude |
 
 ---
 
