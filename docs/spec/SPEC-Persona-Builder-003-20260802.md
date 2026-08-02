@@ -2,7 +2,7 @@
 
 > 技术规格 - Persona 构建器（Persona Builder）
 >
-> **版本**：v1.0
+> **版本**：v1.0.2
 > **状态**：📝 草稿
 > **作者**：Claude
 > **日期**：2026-08-02
@@ -80,7 +80,10 @@ class PersonaBuildOptions {
   /// 各 Top-N 列表的截断长度。
   final int topN;
 
-  /// 注入式时钟（仅用于 generatedAt 元信息）。为空时调用方须提供。
+  /// 注入式时钟（仅用于 generatedAt 元信息，不入任何分析结论）。
+  /// **为空时不抛错**：`generatedAt` 取确定性哨兵
+  /// `DateTime.fromMillisecondsSinceEpoch(0, isUtc: true)`，保证零配置
+  /// `build()` 可用且确定性；绝不回退到 `DateTime.now()`。
   final DateTime Function()? clock;
 }
 ```
@@ -91,8 +94,8 @@ class PersonaBuildOptions {
 | 参数 | 类型 | 必填 | 约束 |
 |------|------|------|------|
 | conversation | `Conversation` | 是 | 消息列表可空但对象非空 |
-| personSenderIds | `Set<String>` | 否 | 为空时用 `myIdentifiers` 补集推断 |
-| options | `PersonaBuildOptions` | 否 | `topN` ≥ 1；`minMessagesForHigh ≥ minMessagesForMedium ≥ 0` |
+| personSenderIds | `Set<String>` | 否 | 覆盖切分；为空时以 `Message.isFromMe==false` 为对方，`myIdentifiers` 细化（见 §4.1 步骤 1） |
+| options | `PersonaBuildOptions` | 否 | `topN` ≥ 1；`minMessagesForHigh ≥ minMessagesForMedium ≥ 0`；`clock` 可空 |
 
 **build 输出**：`Persona`，`personaVersion == 1`，五层齐全（无 null 层），`schemaVersion == kPersonaSchemaVersion`。
 
@@ -106,13 +109,14 @@ class PersonaBuildOptions {
 
 ### 1.4 后置条件（Postconditions）
 - 输出 Persona 各层非 null；`memories.timeline.messageCount == source.personMessages`。
-- `source.mergedMessageKeys` 含所有已并入消息的**消息键**，且无重复。
+- `source.mergedMessageKeyHashes` 含所有已并入消息的**消息键 SHA-256 哈希**，且无重复。
+- `source.revisions` 末条 `personaVersion == persona.personaVersion`（每次生成追加一条）。
 - `decode(encode(p))` 与 `p` 值相等。
 - `render` 对同一 `(persona, options)` 恒等输出。
 
 ### 1.5 不变性（Invariants）
-- **确定性**：相同输入（排序归一化后）→ 相同 Persona（`generatedAt` 除外）与相同 prompt。`Persona.id` 由来源签名确定性派生，故同样满足此不变式。
-- **幂等**：`update(p, c)` 后再 `update(_, c')`（`c'` 与 `c` 消息**内容键**相同，即便 `Message.id` 不同）不改变统计（version 语义除外）。去重以消息键为准，`Message.id` 不参与。
+- **确定性**：相同输入（排序归一化后）→ 相同 Persona（`generatedAt` 除外）与相同 prompt。`Persona.id` 由来源签名（参与者+目标 sender+数据源，**不含首条消息/消息数**）确定性派生，故对同一对话的子集/超集重建 id 不变，满足此不变式。缺 `clock` 时 `generatedAt` 为固定哨兵，亦确定。
+- **幂等**：`update(p, c)` 后再 `update(_, c')`（`c'` 与 `c` 消息**内容键**相同，即便 `Message.id` 不同）不改变统计（version 语义除外）。去重以消息键**哈希**为准，`Message.id` 不参与。
 - **硬规则不变**：任何分析路径都不写 `hardRules`；仅用户显式编辑可改。
 - **无副作用**：不写文件、不发网络、不改输入对象。
 
@@ -160,7 +164,7 @@ class PersonaBuildOptions {
     "confidence": "medium"
   },
   "tags": [
-    {"label": "报喜不报忧", "confidence": "medium", "evidence": {"messageKeys": ["wechat|mom|2023-05-20T09:00:00.000Z|没事的|text"], "occurrences": 8}}
+    {"label": "报喜不报忧", "confidence": "medium", "evidence": {"messageKeyHashes": ["a3f5c1e9d2b47..."], "occurrences": 8}}
   ],
   "memories": {
     "timeline": {
@@ -170,20 +174,26 @@ class PersonaBuildOptions {
       "activeHours": {"20": 210, "21": 305}
     },
     "keyEvents": [
-      {"at": "2023-05-20T00:00:00.000Z", "summary": "称呼变化", "evidence": {"messageKeys": ["wechat|mom|2023-05-20T00:00:00.000Z|宝贝你长大了|text"], "occurrences": 1}}
+      {"at": "2023-05-20T00:00:00.000Z", "summary": "称呼变化", "evidence": {"messageKeyHashes": ["7b9e0a4c8f13d..."], "occurrences": 1}}
     ],
     "preferences": [
-      {"term": "喝汤", "count": 23, "evidence": {"messageKeys": ["wechat|mom|2023-03-01T12:00:00.000Z|记得喝汤|text"], "occurrences": 23}}
+      {"term": "喝汤", "count": 23, "evidence": {"messageKeyHashes": ["c04d2f8a6e57b..."], "occurrences": 23}}
     ]
   },
   "source": {
     "sources": ["wechat"],
     "totalMessages": 2600,
     "personMessages": 1240,
-    "mergedMessageKeys": ["wechat|mom|2023-01-01T08:00:00.000Z|早上好|text"]
+    "mergedMessageKeyHashes": ["e18b3d90a2c4f..."],
+    "revisions": [
+      {"personaVersion": 1, "personMessages": 900, "totalMessages": 1800},
+      {"personaVersion": 3, "personMessages": 1240, "totalMessages": 2600}
+    ]
   }
 }
 ```
+
+> `messageKeyHashes` / `mergedMessageKeyHashes` 存的是消息键 `source|senderId|timestamp.iso8601|content|type` 的 **SHA-256 十六进制**（此处省略为示意）。**不存原文**——哈希不可逆，跨导入稳定，仅用于去重/幂等/回溯。
 
 ### 2.2 数据验证规则
 | 字段 | 规则 | 失败处理 |
@@ -195,11 +205,14 @@ class PersonaBuildOptions {
 | timeline.start/end | ISO-8601 UTC 或 null（空会话）| 非 null 且不可解析 → `FormatException` |
 | 时间字段（其余）| ISO-8601 UTC | 不可解析 → `FormatException` |
 | tags[].label | 非空字符串 | 空 → `FormatException` |
+| *MessageKeyHashes | SHA-256 十六进制字符串 | 非字符串/含原文分隔符 `\|` → `FormatException` |
+| source.revisions | 数组，`personaVersion` 单调递增 | 非法 → `FormatException` |
 
 ### 2.3 数据约束
 - Top-N 列表长度 ≤ `options.topN`。
-- `mergedMessageKeys` 唯一（消息键去重，见 §1.5）。
-- `Evidence.sampleExcerpt` 若存在须截断（≤ 60 字符，脱敏）。
+- `mergedMessageKeyHashes` 唯一（消息键哈希去重，见 §1.5）；元素为 SHA-256 十六进制，**不含原文**。
+- `Evidence.messageKeyHashes` 亦为哈希；`sampleExcerpt` 是唯一允许的原文片段，若存在须截断（≤ 60 字符，脱敏）。
+- `source.revisions` 每次生成追加一条，大小随更新次数而非消息量增长。
 - 空会话时 `timeline.start == null && timeline.end == null && timeline.messageCount == 0`。
 
 ---
@@ -210,9 +223,10 @@ class PersonaBuildOptions {
 | 场景 | 输入 | 期望行为 |
 |------|------|---------|
 | 空会话 | `messages == []` | 返回五层齐全、`tags==[]`、全 `low`、`personMessages==0`、`timeline.start/end==null` 的 Persona；`displayName == options.defaultDisplayName`；不抛异常 |
-| 无目标人物消息 | 全是 `myIdentifiers` | 同上；`RelationalBehavior` 仅有用户侧对照，风格层为空 |
+| 无目标人物消息 | 全是 `myIdentifiers` 或全 `isFromMe==true` | 同上；`RelationalBehavior` 仅有用户侧对照，风格层为空 |
+| 默认切分 | 未传 `personSenderIds`/`myIdentifiers` | 以 `Message.isFromMe==false` 判对方，用户自身消息**不**计入人格 |
 | 单条消息 | 1 条目标消息 | `low` 置信度；统计不崩溃 |
-| 内容重复 | 消息键相同、`Message.id` 不同 | 按消息键去重后按唯一集统计（幂等）；`Message.id` 不影响结果 |
+| 内容重复 | 消息键相同、`Message.id` 不同 | 按消息键**哈希**去重后按唯一集统计（幂等）；`Message.id` 不影响结果 |
 | 超长消息 | 单条极长文本 | 参与统计但不 OOM（分块）|
 | 纯 emoji/标点 | 无文字 | emoji/标点层有值，catchphrases 空 |
 | 中英混合 | 混合语言 | 分别按字/空白切分统计 |
@@ -225,7 +239,7 @@ class PersonaBuildOptions {
 | JSON 结构非法 | 抛出，不返回半成品 | `FormatException` |
 | schema 版本过高 | 抛出 | `PersonaSchemaException` |
 | options 阈值非法 | 抛出 | `ArgumentError` |
-| clock 缺失且需时间戳 | 抛出 | `ArgumentError` |
+| clock 缺失 | **不抛错**：`generatedAt` 取确定性哨兵 `epoch 0 (UTC)`，正常返回 | —（零配置可用）|
 
 ---
 
@@ -235,13 +249,20 @@ class PersonaBuildOptions {
 ```
 build(conversation):
   1. splitBySender → (personMessages, userMessages)
+     主判据 Message.isFromMe（==false 为对方）；personSenderIds 覆盖、
+     myIdentifiers 细化（优先级见 ERD §4.2）——默认路径不把用户消息计入人格
   2. timestamp 统一归一到 UTC；按 timestamp 升序稳定排序 personMessages
-  3. 计算各消息键 → source.mergedMessageKeys（去重）
+  3. 计算各 messageKeyHash = sha256Hex(消息键) → source.mergedMessageKeyHashes（去重）
   4. MemoriesAnalyzer.analyze(personMessages) → memories（空集时 timeline.start/end=null）
   5. PersonaAnalyzer: expression / emotion / relation
-  6. deriveTags → tags；identity/风格置信度按阈值判定；
+  6. deriveTags(expression, emotion, relation, memories) → tags（覆盖风格/情感/关系/偏好）；
+     identity/风格置信度按阈值判定；
      displayName 取自消息推断，缺失回退 options.defaultDisplayName
-  7. id = 确定性哈希(来源签名)；组装 Persona(version=1, hardRules=默认空, tags, source)
+  7. id = sha256Hex(sortedParticipants|sortedTargetSenderIds|sortedDataSources)
+     （不含首条消息/消息数 → 子集/超集重建 id 稳定）；
+     generatedAt = options.clock?.call() ?? epoch0UTC；
+     source.revisions = [SourceRevision(1, personMessages, totalMessages)]；
+     组装 Persona(version=1, hardRules=默认空, tags, source)
   8. 返回
 ```
 
@@ -301,6 +322,17 @@ group('PersonaBuilder.build', () {
     expect(p.identity.confidence, Confidence.low);
   });
 
+  test('未注入 clock 时零配置可用，generatedAt 为 epoch 哨兵', () async {
+    final Persona p = await builder.build(_synthConversation());
+    expect(p.generatedAt, DateTime.fromMillisecondsSinceEpoch(0, isUtc: true));
+  });
+
+  test('默认切分以 isFromMe 判对方，用户消息不计入人格', () async {
+    final Persona p = await builder.build(_mixedFromMeConversation());
+    expect(p.source.personMessages, _mixedFromMeConversation().messages
+        .where((Message m) => !m.isFromMe).length);
+  });
+
   test('口头禅按出现次数统计并截断到 topN', () async {
     final Persona p = await builder.build(_repeatedPhraseConversation());
     expect(p.expressionStyle.catchphrases.length, lessThanOrEqualTo(20));
@@ -314,7 +346,7 @@ group('PersonaBuilder.update', () {
     final Persona v2 = await builder.update(v1, _sameContentDifferentIds());
     expect(v2.personaVersion, 2);
     expect(v2.source.personMessages, v1.source.personMessages);
-    expect(v2.source.mergedMessageKeys, v1.source.mergedMessageKeys);
+    expect(v2.source.mergedMessageKeyHashes, v1.source.mergedMessageKeyHashes);
     expect(v2.id, v1.id);
   });
 
@@ -323,10 +355,23 @@ group('PersonaBuilder.update', () {
     final Persona v2 = await builder.update(v1, _moreMessages());
     expect(v2.hardRules.mustNeverClaim, v1.hardRules.mustNeverClaim);
   });
+
+  test('每次更新追加一条 revision 快照', () async {
+    final Persona v1 = await builder.build(_conv());
+    final Persona v2 = await builder.update(v1, _moreMessages());
+    expect(v2.source.revisions.length, 2);
+    expect(v2.source.revisions.last.personaVersion, 2);
+  });
+
+  test('超集重建 id 稳定（不含首条消息/消息数）', () async {
+    final Persona a = await builder.build(_conv());
+    final Persona b = await builder.build(_convSuperset());
+    expect(b.id, a.id);
+  });
 });
 
 group('PersonaCodec', () {
-  test('encode/decode 往返值相等（含 tags 与消息键证据）', () {
+  test('encode/decode 往返值相等（含 tags、消息键哈希证据与 revisions）', () {
     final Persona p = _samplePersona();
     expect(codec.decode(codec.encode(p)), p);
   });
@@ -362,9 +407,11 @@ group('PromptTemplate', () {
 |------|------|
 | `_synthConversation()` | 含目标人物+用户消息、中英 emoji 混合 |
 | `_emptyConversation()` | 空消息列表 |
+| `_mixedFromMeConversation()` | 含 `isFromMe` true/false 混合，验证默认切分 |
 | `_repeatedPhraseConversation()` | 高频口头禅，验证计数/截断 |
-| `_sameContentDifferentIds()` | 与 `_conv()` 内容键相同但 `Message.id` 不同，验证键去重幂等 |
-| `_samplePersona()` | 往返序列化基准（含 tags 与消息键证据）|
+| `_sameContentDifferentIds()` | 与 `_conv()` 内容键相同但 `Message.id` 不同，验证键哈希去重幂等 |
+| `_convSuperset()` | `_conv()` 的超集（更多消息、参与者不变），验证 id 稳定 |
+| `_samplePersona()` | 往返序列化基准（含 tags、消息键哈希证据、revisions）|
 | `_emptyPersona()` | 空会话 Persona（timeline.start/end 为 null）|
 | `_futureSchemaBytes()` | `schemaVersion` 大于当前 |
 
@@ -381,8 +428,9 @@ group('PromptTemplate', () {
 |------|------|------|
 | Dart SDK | >=3.11.0 <4.0.0 | 语言与 `dart:convert` |
 | Flutter | 3.38+ | 宿主运行时（引擎层无 UI 依赖）|
+| `package:crypto` | ^3.0.0 | SHA-256（`messageKeyHash`，Dart 官方维护、纯本地无网络）|
 
-> 不引入第三方 NLP/网络依赖。情感/停用词表内置于 `text_stats`。
+> 不引入第三方 NLP/网络依赖。情感/停用词表内置于 `text_stats`；`crypto` 仅用于本地哈希。
 
 ### 7.2 内部依赖
 | 模块 | 接口 | 用途 |
@@ -415,6 +463,9 @@ group('PromptTemplate', () {
 ### 9.1 示例代码
 ```dart
 final PersonaBuilder builder = DefaultPersonaBuilder();
+
+final Persona zeroConfig = await builder.build(conversation);
+
 final Persona persona = await builder.build(
   conversation,
   options: PersonaBuildOptions(
@@ -437,6 +488,7 @@ final String systemPrompt = DefaultPromptTemplate().render(persona);
 |------|------|---------|------|
 | 2026-08-02 | v1.0（草稿）| 初始草稿 | Claude |
 | 2026-08-02 | v1.0.1（草稿）| 代理评审修订：去重/幂等/证据全改用消息键（非 `Message.id`），`.persona` JSON 补 `tags`、`mergedMessageKeys`、`messageKeys`；空会话 `timeline.start/end` 可空、`displayName` 回退 `defaultDisplayName`、`tags==[]`；`PersonaBuildOptions` 加 `defaultDisplayName`；ratio 越界改 ε 容差 clamp/损坏判定；阈值前后置条件统一（`topN≥1`、`min*≥0`）；幂等单测改用"内容键相同/id 不同"夹具、新增空会话往返用例 | Claude |
+| 2026-08-02 | v1.0.2（草稿）| PR #10 Owner 评审修订：(🔴1) 证据/去重键持久化改存 **SHA-256 哈希**（`messageKeys`→`messageKeyHashes`、`mergedMessageKeys`→`mergedMessageKeyHashes`，JSON 示例与验证/约束同步，加 `package:crypto` 依赖），不落原文；(🔴2) `clock` 缺失**不再抛 `ArgumentError`**，改取 epoch 0 哨兵、零配置 `build()` 可用（§1.1/§3.2/§4.1/示例 + 新用例）；(🔴3) 切分以 `Message.isFromMe` 为主判据（§1.2/§3.1/§4.1 + 新用例）；(🟡4) `.persona` `source` 增 `revisions` 版本轨迹（后置/约束/往返/新用例）；(minor) `Persona.id` 派生去首条消息/消息数、`deriveTags` 增 `relation`/`memories`、新增 `_mixedFromMeConversation`/`_convSuperset` 夹具 | Claude |
 
 ---
 

@@ -135,7 +135,7 @@
 - 模块定位：从模块 002 的 `Conversation` **确定性地**蒸馏出五层 Persona（硬规则/身份/表达风格/情感逻辑/关系行为），产出可版本化的 `.persona`（JSON）与 system prompt 渲染。
 - 关键约束：纯 Dart、离线、**无 LLM/无网络**、可完全单元测试；LLM 增强留待 Phase 3 之后。
 - 核心组件：MemoriesAnalyzer / PersonaAnalyzer / PersonaBuilder（编排+版本+增量）/ PersonaCodec / PromptTemplate。
-- 增量更新：以**消息内容键**（`source|senderId|timestamp.iso8601|content|type`，对齐模块 002 `DataPreprocessor` 去重键）去重保证幂等；硬规则永不被分析结果覆盖。
+- 增量更新：以**消息内容键的 SHA-256 哈希**（底层键 `source|senderId|timestamp.iso8601|content|type` 对齐模块 002 `DataPreprocessor` 去重键）去重保证幂等；`.persona` 存哈希不落原文；目标人物切分以 `Message.isFromMe` 为主判据；硬规则永不被分析结果覆盖。
 
 ### 待办
 - [ ] 三文档评审
@@ -285,6 +285,7 @@ Spec：⚪ 待创建
 | 2026-08-02 | — | PR #9 评审收口（ERD v1.1）：`WeChatParser`（通用非 WeFlow 兜底）修复三处真实缺陷——CSV 引号内嵌换行按 record 累积不丢数据、`createtime` epoch 兼容不再整表丢弃、产 0 条消息必告警杜绝静默失败；`WeFlowParser` JSON 探测改整份文档结构判定（键顺序无关）、HTML 探测只读头部、空媒体 src 记 `missing_media`、文件/引用归 text 保留 `metadata['weflow_kind']`；新增 10 用例（WeChat 内嵌换行/epoch/静默失败 + WeFlow JSON 尾部键探测/kind metadata/五类告警码覆盖）。`flutter test` 122/122、`flutter analyze` 0 警告 | Claude |
 | 2026-08-02 | — | 创建模块 003（Persona 生成）三文档草稿（PRD-Persona-Generation / ERD-Persona-Engine / SPEC-Persona-Builder，编号 003、日期 20260802、互相交叉引用）：定位为纯 Dart、离线、无 LLM 的确定性五层 Persona 生成引擎（记忆提取/性格分析/Builder 版本+增量/`.persona` 序列化/Prompt 渲染），输入契约锚定模块 002 `Conversation/Message`。矩阵行 003 → 📝草稿/📝草稿/📝草稿、⚠️草稿完成、🚫阻塞；同步 README 与 ROADMAP（Phase 2 文档就绪、待批准）。**未改任何源码/pubspec**，待评审批准后方可编码 | Claude |
 | 2026-08-02 | — | 模块 003 草稿代理评审 + 修订（三文档升 v1.0.1，仍草稿）：修复 3 处阻塞项——(B1) 增量去重/幂等/证据键从 `Message.id` 改为**消息内容键**（对齐模块 002 `DataPreprocessor` 去重键，`Message.id` 跨导入不唯一/不稳定）；(B2) 定义 `PersonaTag` 并纳入 `Persona.tags` 与 `.persona` JSON；(B3) 空会话下 `TimelineSpan.start/end` 可空、`displayName` 回退 `defaultDisplayName`；及 (M1) `Persona.id` 确定性派生、UTC 分桶、ratio ε 容差、阈值前后置统一、幂等单测夹具修正等 nit。评审确认交叉引用/状态/五层命名/模块 002 类型均一致 | Claude |
+| 2026-08-02 | — | 模块 003 PR #10 Owner 评审修订（三文档升 v1.0.2，仍草稿）：处理 3 🔴 + 1 🟡 + 3 minor——(🔴1 隐私) 证据/去重键持久化改存 **SHA-256 哈希**（`messageKeys`→`messageKeyHashes`、`mergedMessageKeys`→`mergedMessageKeyHashes`，加 `package:crypto`），`.persona` 不再落逐条原文、体积不膨胀，兑现文档自身隐私承诺；(🔴2 clock) 缺 `clock` 不再抛 `ArgumentError`，改取 epoch 0 哨兵、零配置 `build()` 可用（消解 Spec §3.2↔§6.1 自相矛盾）；(🔴3 切分) 目标人物切分以 `Message.isFromMe` 为主判据、`personSenderIds`/`myIdentifiers` 覆盖，默认路径不再污染人格；(🟡4 历史) 新增 `PersonaSource.revisions` 版本轨迹落实 PRD 用户故事 2；(minor) `Persona.id` 派生去首条消息/消息数消除边界敏感、`deriveTags` 增 `relation`/`memories` 覆盖关系/偏好标签、统一 `sourceSummary`↔`PersonaSource` 命名 | Claude |
 
 ---
 

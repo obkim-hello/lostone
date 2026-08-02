@@ -2,7 +2,7 @@
 
 > 产品需求文档 - Persona 生成（Persona Generation）
 >
-> **版本**：v1.0
+> **版本**：v1.0.2
 > **状态**：📝 草稿
 > **作者**：Claude
 > **日期**：2026-08-02
@@ -126,15 +126,15 @@
 #### 功能 1：记忆提取（MemoriesAnalyzer）
 **描述**：从 `Conversation` 中提取结构化"记忆"——时间线、关键事件、偏好/习惯。
 
-**输入**：`Conversation`（预处理后的消息，已去重、按时间升序）+ 目标人物标识（`myIdentifiers` 的补集 / 指定 `personSenderIds`）。
+**输入**：`Conversation`（预处理后的消息，已去重、按时间升序）+ 目标人物标识（默认以 `Message.isFromMe==false` 判对方，`personSenderIds`/`myIdentifiers` 覆盖细化，见 ERD §4.2）。
 
 **输出**：`Memories`（时间线区间、关键事件列表、偏好/习惯统计）。
 
 **业务规则**：
 - 时间线：起止时间、活跃时段（小时分布）、消息频次趋势。
-- 关键事件：基于频次骤变、长文本、纪念性关键词（生日/节日/称呼变化等）的启发式标记，附证据消息 id。
+- 关键事件：基于频次骤变、长文本、纪念性关键词（生日/节日/称呼变化等）的启发式标记，附证据（消息键哈希）。
 - 偏好/习惯：高频名词短语、常提及的人/地点/活动（基于统计，不做深度 NLP）。
-- 仅统计目标人物的消息用于"人格"，用户自己的消息仅用于关系行为对照。
+- 仅统计目标人物的消息用于"人格"，用户自己的消息（`isFromMe==true` 或命中 `myIdentifiers`）仅用于关系行为对照，绝不计入逝者人格。
 
 **优先级**：P0
 
@@ -166,7 +166,8 @@
 
 **业务规则**：
 - 层次：`hardRules` / `identity` / `expressionStyle` / `emotionalLogic` / `relationalBehavior`，缺失层用空但存在的结构占位（不产 null 层）。
-- 文件含 `schemaVersion`、`personaVersion`、`generatedAt`、`sourceSummary`（数据源/消息数/时间跨度）。
+- 文件含 `schemaVersion`、`personaVersion`、`generatedAt`、`source`（即 `PersonaSource`，PRD 内也称"来源摘要 / sourceSummary"，含数据源/消息数/时间跨度/版本修订轨迹 `revisions`）。
+- 证据只存**消息键哈希**（SHA-256）+ 计数 + 可选短示例，不落逐条原文（隐私约束，见 ERD §1.2/§8.1）。
 - `fromJson(toJson(p)) == p`（值相等）。
 
 **优先级**：P0
@@ -182,7 +183,7 @@
 
 **业务规则**：
 - 首次生成：全量分析 → 组装五层 → `personaVersion = 1`。
-- 增量更新：合并消息集（按**消息内容键**去重，与模块 002 `DataPreprocessor` 去重键一致，非 `Message.id`）→ 重算受影响统计 → merge 记忆/风格 → `personaVersion += 1`，保留 `history` 摘要。
+- 增量更新：合并消息集（按**消息内容键的 SHA-256 哈希**去重，底层键与模块 002 `DataPreprocessor` 去重键一致，非 `Message.id`）→ 重算受影响统计 → merge 记忆/风格 → `personaVersion += 1`，并向 `PersonaSource.revisions` 追加一条版本快照（可追溯历史，兑现用户故事 2「不静默丢弃」）。
 - 硬规则层为**用户可编辑的显式禁忌**，增量更新**永不覆盖**用户已设置的硬规则。
 - 幂等：对同一批消息重复更新不改变结果（除 version 语义外）。
 
@@ -209,7 +210,7 @@
 ### 3.2 辅助功能
 
 #### 功能 A：置信度与可解释性元数据
-**描述**：为每层/关键结论附 `confidence` 与证据引用（**消息键**或计数/示例，消息键与模块 002 去重键一致、跨导入稳定），支撑故事 3。
+**描述**：为每层/关键结论附 `confidence` 与证据引用（**消息键哈希**、计数、可选短示例；哈希底层键与模块 002 去重键一致、跨导入稳定且不可逆还原原文），支撑故事 3。
 
 **优先级**：P1
 
@@ -230,7 +231,7 @@
 ### 4.2 安全与隐私要求
 - 全程本地、离线、无网络、无第三方上传。
 - `.persona` 由本模块产出明文 JSON，**加密由存储层（模块 008）负责**；本模块不得把敏感原文写入日志。
-- 可解释性引用只存消息 id / 计数 / 短示例，不额外冗余存储整段原文。
+- 可解释性引用只存**消息键哈希（SHA-256）** / 计数 / 一条截断短示例（≤ 60 字符），**绝不持久化逐条原文**；`.persona` 体积因此不随聊天量线性膨胀。
 
 ### 4.3 可用性要求
 - 素材不足、无目标人物消息、空会话等情况必须给出明确结果或错误，不得崩溃、不得编造。
@@ -247,7 +248,7 @@
 | 数据项 | 类型 | 必填 | 来源 | 验证规则 |
 |--------|------|------|------|----------|
 | conversation | `Conversation` | 是 | 模块 002 | 非空消息列表 |
-| personSenderIds | `Set<String>` | 否 | 用户选择 | 为空时用 `myIdentifiers` 的补集推断 |
+| personSenderIds | `Set<String>` | 否 | 用户选择 | 为空时默认以 `Message.isFromMe==false` 判对方，`myIdentifiers` 细化 |
 | existingPersona | `Persona?` | 否 | 上次生成 | 增量更新时提供 |
 | options | `PersonaBuildOptions` | 否 | 调用方 | 阈值/模板档位 |
 
@@ -296,7 +297,7 @@
 - [ ] 五层结构全部实现，每层结构完整（无 null 层）。
 - [ ] `.persona` 序列化往返无损。
 - [ ] 增量更新幂等、version 递增、硬规则不被覆盖。
-- [ ] 所有结论可回溯证据（消息 id/计数/示例）。
+- [ ] 所有结论可回溯证据（消息键哈希/计数/短示例）。
 - [ ] 素材不足场景标注低置信度而非编造。
 
 ### 8.2 性能验收
@@ -366,6 +367,7 @@
 |------|------|---------|------|
 | 2026-08-02 | v1.0（草稿）| 初始草稿 | Claude |
 | 2026-08-02 | v1.0.1（草稿）| 代理评审修订：增量去重/幂等改以**消息内容键**（对齐模块 002 `DataPreprocessor`，非 `Message.id`）为基石；证据引用改用消息键 | Claude |
+| 2026-08-02 | v1.0.2（草稿）| PR #10 Owner 评审修订：(🔴1 隐私) 证据/去重键持久化改存 **SHA-256 哈希**、绝不落逐条原文，`.persona` 体积不膨胀（功能3/功能A/§4.2/§8.1）；(🔴3 切分) 目标人物切分以 `Message.isFromMe` 为主判据、`personSenderIds`/`myIdentifiers` 覆盖，用户消息不再污染人格（功能1/§5.1）；(🟡4 历史) "history 摘要"落地为 `PersonaSource.revisions` 版本轨迹，兑现用户故事 2；(minor) 统一命名 `sourceSummary` 即 `PersonaSource`（JSON key `source`）| Claude |
 
 ---
 

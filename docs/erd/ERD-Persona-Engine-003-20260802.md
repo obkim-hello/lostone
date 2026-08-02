@@ -2,7 +2,7 @@
 
 > 工程需求文档 - Persona 生成引擎（Persona Engine）
 >
-> **版本**：v1.0
+> **版本**：v1.0.2
 > **状态**：📝 草稿
 > **作者**：Claude
 > **日期**：2026-08-02
@@ -36,7 +36,7 @@
 - **技术栈**：Flutter 3.38+ / Dart 3.11+（与仓库 `pubspec.yaml` `sdk: '>=3.11.0 <4.0.0'` 一致）。
 - **确定性**：相同输入（含消息顺序归一化后）→ 相同输出（含 prompt 渲染）。禁用 `DateTime.now()`/随机数进入分析结论（生成时间戳仅作元信息，由调用方注入或单独字段隔离）。
 - **隔离**：本模块**不**落盘、**不**加密——只产出 `Persona` 对象与 JSON 字节；持久化/加密由存储层（模块 008）负责。
-- **隐私**：日志脱敏；`.persona` 与 prompt 不冗余存整段原文，只存计数/短示例/消息 id 引用。
+- **隐私**：日志脱敏；`.persona` 与 prompt **绝不持久化整段原文**——证据引用只存**消息键的 SHA-256 哈希**（`messageKeyHash`，见 §3.1）、计数与一条可选的截断短示例（≤ 60 字符）。哈希跨导入稳定、可支撑去重/幂等/回溯，但不可逆还原原文，`.persona` 体积不随原文线性膨胀。
 - **性能**：≤ 60s / 1000 条（PRD §4.1）；单遍/受影响重算，避免多份全量拷贝。
 - **中文优先**：初版语言分析以中文 + 通用 Unicode 为主，基于规则 + n-gram 统计，不引入重型 NLP 依赖；预留分词/停用词注入点。
 
@@ -89,7 +89,8 @@ test/
 ### 2.2 数据流
 ```
 Conversation
-  │  (筛选目标人物消息 personSenderIds / myIdentifiers 补集)
+  │  (筛选目标人物消息：默认 Message.isFromMe==false 为对方；
+  │   personSenderIds / myIdentifiers 覆盖/细化，见 §4.2 splitBySender)
   ▼
 MemoriesAnalyzer ── Memories(timeline, keyEvents, preferences)
   │
@@ -137,9 +138,11 @@ class Persona {
     required this.source,
   });
 
-  /// 稳定标识。**确定性派生**：由来源签名（参与者集合 + 目标人物 id
-  /// + 首条消息键）哈希得到——相同输入得到相同 id；增量更新时从
-  /// [existing] 原样沿用，跨版本不变。因其确定性，它不违反 §确定性不变式。
+  /// 稳定标识。**确定性派生**：对来源签名
+  /// `sortedParticipants | sortedTargetSenderIds | sortedDataSources`
+  /// 取 SHA-256 得到。**刻意不含首条消息键或消息数**，故对同一对话的
+  /// 子集/超集重建仍得到相同 id（消除边界敏感）；增量更新时从 [existing]
+  /// 原样沿用，跨版本不变。因其确定性，它不违反 §确定性不变式。
   final String id;
 
   /// 语义 schema 版本，见 [kPersonaSchemaVersion]。
@@ -149,6 +152,9 @@ class Persona {
   final int personaVersion;
 
   /// 生成时间（UTC）。仅元信息，不参与任何分析结论。
+  /// 由 [PersonaBuildOptions.clock] 注入；未注入时取确定性哨兵
+  /// `DateTime.fromMillisecondsSinceEpoch(0, isUtc: true)`（表示"未打时间戳"），
+  /// **绝不调用 `DateTime.now()`**——保证零配置 `build()` 可用且确定性。
   final DateTime generatedAt;
 
   /// 第 2 层：身份。
@@ -408,25 +414,27 @@ class TermStat {
   final int count;
 }
 
-/// 可解释性证据：把结论回溯到真实消息。
+/// 可解释性证据：把结论回溯到真实消息，**不持久化原文**。
 ///
-/// 只存**消息键**、计数与短示例，不冗余存整段原文（隐私约束）。
+/// 只存**消息键哈希**、计数与一条可选短示例（隐私约束，见 §1.2/§8.1）。
 ///
-/// 消息键 = `source|senderId|timestamp.iso8601|content|type`，
-/// 与模块 002 `DataPreprocessor` 的去重键一致，跨导入稳定；
+/// 消息键哈希 = `sha256Hex(source|senderId|timestamp.iso8601|content|type)`，
+/// 底层消息键与模块 002 `DataPreprocessor` 去重键逐字段一致，故哈希跨导入
+/// 稳定且可用于去重/幂等/回溯；但不可逆，`.persona` 不再写入逐条原文。
 /// 不使用 `Message.id`（后者仅单次导入内可引用、跨导入不稳定）。
 class Evidence {
   /// 创建证据。
   const Evidence({
-    this.messageKeys = const <String>[],
+    this.messageKeyHashes = const <String>[],
     this.sampleExcerpt,
     this.occurrences = 0,
   });
 
-  /// 支撑该结论的消息键列表（可截断）。
-  final List<String> messageKeys;
+  /// 支撑该结论的消息键哈希列表（SHA-256 十六进制，可截断）。
+  final List<String> messageKeyHashes;
 
-  /// 一条短示例（脱敏/截断，≤ 60 字符）。
+  /// 一条短示例（脱敏/截断，≤ 60 字符）。用于 UI 可读性，
+  /// 是唯一允许出现的原文片段，长度受限。
   final String? sampleExcerpt;
 
   /// 命中总次数。
@@ -464,14 +472,15 @@ enum Confidence {
   high,
 }
 
-/// 数据来源摘要。
+/// 数据来源摘要（PRD 中称 `sourceSummary`，即本类；JSON key 为 `source`）。
 class PersonaSource {
   /// 创建来源摘要。
   const PersonaSource({
     required this.sources,
     required this.totalMessages,
     required this.personMessages,
-    required this.mergedMessageKeys,
+    required this.mergedMessageKeyHashes,
+    this.revisions = const <SourceRevision>[],
   });
 
   /// 涉及的数据源集合。
@@ -483,19 +492,44 @@ class PersonaSource {
   /// 目标人物消息数。
   final int personMessages;
 
-  /// 已并入的**消息键**集合（增量去重基石，键定义见 [Evidence]）。
+  /// 已并入的**消息键哈希**集合（增量去重基石，定义见 [Evidence]）。
   ///
-  /// 与模块 002 `DataPreprocessor` 去重键一致；用 `Message.id` 会因其
-  /// 跨导入不稳定/不唯一而导致漏并或重复计数。
-  final Set<String> mergedMessageKeys;
+  /// 底层键与模块 002 `DataPreprocessor` 去重键一致；用 `Message.id` 会因其
+  /// 跨导入不稳定/不唯一而导致漏并或重复计数。存哈希而非原键——不落原文。
+  final Set<String> mergedMessageKeyHashes;
+
+  /// 版本修订轨迹（可追溯历史，满足 PRD 用户故事 2「不静默丢弃」）。
+  ///
+  /// 每次成功 `build`/`update` 追加一条快照；**大小随更新次数增长，
+  /// 与消息量无关**，不含原文，故不引入体积/隐私风险。
+  final List<SourceRevision> revisions;
+}
+
+/// 一次生成/合并的版本快照（审计用，无原文）。
+class SourceRevision {
+  /// 创建修订快照。
+  const SourceRevision({
+    required this.personaVersion,
+    required this.personMessages,
+    required this.totalMessages,
+  });
+
+  /// 该修订对应的 [Persona.personaVersion]。
+  final int personaVersion;
+
+  /// 该修订时目标人物累计消息数。
+  final int personMessages;
+
+  /// 该修订时会话累计总消息数。
+  final int totalMessages;
 }
 ```
 
 ### 3.2 数据关系
-- `Persona` 1—1 各层；1—* `PersonaTag`；1—1 `Memories`；1—1 `PersonaSource`。
-- `KeyEvent`/`Preference`/`PersonaTag`/各证据 → `Evidence`（引用**消息键**，非 `Message.id`）。
-- **消息键（唯一去重依据）**：`source|senderId|timestamp.iso8601|content|type`，与模块 002 `DataPreprocessor._dedupKey`（`data_preprocessor.dart`）逐字段一致。`Message.id` 不参与去重/合并——它仅在单次导入内可引用、跨导入既不唯一也不稳定（见 `message.dart` 对 `id` 的定义）。
-- 增量更新的幂等由 `PersonaSource.mergedMessageKeys` 保证（按消息键去重）。
+- `Persona` 1—1 各层；1—* `PersonaTag`；1—1 `Memories`；1—1 `PersonaSource`；`PersonaSource` 1—* `SourceRevision`。
+- `KeyEvent`/`Preference`/`PersonaTag`/各证据 → `Evidence`（引用**消息键哈希**，非 `Message.id`、非原键）。
+- **消息键（唯一去重依据）**：`source|senderId|timestamp.iso8601|content|type`，与模块 002 `DataPreprocessor._dedupKey`（`data_preprocessor.dart`）逐字段一致。持久化时对其取 **SHA-256**（`messageKeyHash`），既保跨导入稳定去重，又不落原文。`Message.id` 不参与去重/合并——它仅在单次导入内可引用、跨导入既不唯一也不稳定（见 `message.dart` 对 `id` 的定义）。
+- 增量更新的幂等由 `PersonaSource.mergedMessageKeyHashes` 保证（按消息键哈希去重）。
 - `.persona` JSON 顶层含 `schemaVersion` + `personaVersion`；读取时先校验 `schemaVersion`。
 
 ---
@@ -528,9 +562,15 @@ abstract class PersonaAnalyzer {
   );
 
   /// 由统计特征映射出标签集合。
+  ///
+  /// 同时消费四路信号，以覆盖风格类 + 情感类 + **关系类**（来自
+  /// [relation]，如"黏人""报备型"）+ **偏好类**（来自 [memories] 的
+  /// preferences，如"爱做饭"）标签，避免与关系行为层脱节。
   List<PersonaTag> deriveTags(
     ExpressionStyle style,
     EmotionalLogic emotion,
+    RelationalBehavior relation,
+    Memories memories,
   );
 }
 
@@ -538,8 +578,9 @@ abstract class PersonaAnalyzer {
 abstract class PersonaBuilder {
   /// 首次全量生成。
   ///
-  /// [personSenderIds] 为空时用 [PersonaBuildOptions.myIdentifiers]
-  /// 的补集推断目标人物。
+  /// 目标人物切分优先级见 [splitBySender]：默认以 `Message.isFromMe==false`
+  /// 判定对方；[personSenderIds] / [PersonaBuildOptions.myIdentifiers]
+  /// 提供覆盖/细化。三者皆空时退化为纯 `isFromMe` 判定。
   Future<Persona> build(
     Conversation conversation, {
     Set<String> personSenderIds,
@@ -614,7 +655,12 @@ class PersonaSchemaException implements Exception {
 
 ### 4.2 内部接口
 - `text_stats.dart`：`List<TermStat> topNgrams(...)`、`List<TermStat> punctuationStats(...)`、`List<TermStat> emojiStats(...)`、`double sentimentRatio(...)`（基于内置词表，可注入）。
+- `String messageKeyHash(Message m)`：先拼装消息键 `source|senderId|timestamp.iso8601|content|type`（对齐模块 002 去重键），再取 SHA-256 十六进制（`package:crypto`）。
 - 目标人物筛选：`(List<Message> person, List<Message> user) splitBySender(Conversation, Set<String> personIds, Set<String> myIdentifiers)`。
+  **切分优先级（逐条消息，确定性）**：
+  1. `isUser = m.isFromMe || myIdentifiers.contains(m.senderId)`——`Message.isFromMe` 为**主判据**；
+  2. 若 `personIds` 非空：`isTarget = personIds.contains(m.senderId)`（显式覆盖，与 `isUser` 冲突时以 `personIds` 为准）；否则 `isTarget = !isUser`（`isFromMe==false` 即对方）。
+  这样默认路径不再把"补集=全体发送者"误并入人格，避免用户自己的消息污染逝者人格。
 
 ---
 
@@ -624,21 +670,25 @@ class PersonaSchemaException implements Exception {
 
 **记忆提取（MemoriesAnalyzer）**
 - 时间线：一遍扫描求 min/max 时间、按 `hour` 累加活跃度直方图、计数。
-- 关键事件启发式：滑窗频次骤变（较基线 ×N）、超长消息、纪念性关键词命中；每个事件保留证据消息 id。
+- 关键事件启发式：滑窗频次骤变（较基线 ×N）、超长消息、纪念性关键词命中；每个事件保留证据消息键**哈希**。
 - 偏好：对目标人物文本做 n-gram（默认 bigram/trigram，中文按字/词，英文按空白）统计 Top-K，去停用词。
 
 **性格分析（PersonaAnalyzer）**
 - 口头禅：句首 token 与高频短语统计；标点：正则统计 `…`/`!`/`?`/重复标点密度；emoji：Unicode emoji + 常见颜文字表。
 - 情感：正/负情感词表命中密度 → 比率；安慰/关心模式：关键词/句式规则。
-- 标签：阈值规则映射（如 `avgMessageLength > X → 话痨`），每标签附触发依据（`PersonaTag.evidence`）。
+- 标签：阈值规则映射，四路信号联合（表达风格 + 情感逻辑 + 关系行为 + 偏好），如 `avgMessageLength > X → 话痨`、`initiationRatio 高 → 黏人`、`concernPatterns 密集 → 报备型`；每标签附触发依据（`PersonaTag.evidence`，存哈希）。
+
+**目标人物切分（splitBySender）**
+- 主判据 `Message.isFromMe`；`personSenderIds`/`myIdentifiers` 覆盖/细化（优先级见 §4.2）。默认（三者除 isFromMe 外皆空）以 `isFromMe==false` 为对方，杜绝把用户消息计入人格。
 
 **增量更新（PersonaBuilder.update）**
-- 计算 `new` 每条消息的**消息键**（与模块 002 去重键一致）；键已在 `existing.source.mergedMessageKeys` 中则跳过（幂等），否则纳入。
-- 仅当有真正新增消息时重算受影响统计并 merge（计数累加、时间线并集、Top-N 重排）；`mergedMessageKeys = existing ∪ new_keys`。
+- 计算 `new` 每条消息的**消息键哈希**（`messageKeyHash`）；哈希已在 `existing.source.mergedMessageKeyHashes` 中则跳过（幂等），否则纳入。
+- 仅当有真正新增消息时重算受影响统计并 merge（计数累加、时间线并集、Top-N 重排）；`mergedMessageKeyHashes = existing ∪ new_hashes`。
 - 硬规则：直接沿用 `existing.hardRules`，绝不用分析结果覆盖。
-- `id`：沿用 `existing.id`（跨版本不变）。
+- `id`：沿用 `existing.id`（跨版本不变；其派生签名亦不含消息数/首条消息，见 §3.1）。
+- `revisions`：追加一条 `SourceRevision(personaVersion, personMessages, totalMessages)` 快照（可追溯历史，无原文）。
 - 时间归一：所有 `timestamp` 统一转 UTC 后再做时间线/活跃时段分桶，保证确定性。
-- `personaVersion += 1`；`generatedAt` 由调用方注入的时钟提供（默认参数不使用 `DateTime.now()` 于纯分析路径）。
+- `personaVersion += 1`；`generatedAt` 由 `options.clock` 提供，未注入时取确定性哨兵 `epoch 0 (UTC)`——纯分析路径绝不调用 `DateTime.now()`。
 
 ### 5.2 边界与错误
 - 空会话 / 无目标人物消息：返回结构完整但各层 `Confidence.low` 的 Persona，`personMessages == 0`；不抛异常、不编造。
@@ -649,9 +699,10 @@ class PersonaSchemaException implements Exception {
 | 技术点 | 选型 | 理由 |
 |--------|------|------|
 | 序列化 | `dart:convert` JSON | 无依赖、可读、与 GLOSSARY `.persona` 一致；Protobuf 见 ADR-003（暂不采用）|
+| 消息键哈希 | `package:crypto` SHA-256 | Dart 官方维护、纯本地无网络；用于证据/去重键的不可逆持久化，替代落原文 |
 | 情感/停用词 | 内置轻量词表 + 可注入 | 避免重型 NLP 依赖，保持确定性与可测 |
 | n-gram | 自实现 `text_stats` | 完全可控、可测、无外部依赖 |
-| 时钟 | 注入式 `DateTime Function()` | 保证分析确定性、可测（禁 `DateTime.now()` 进结论）|
+| 时钟 | 注入式 `DateTime Function()?` | 保证分析确定性、可测（禁 `DateTime.now()` 进结论）；缺省取 epoch 0 哨兵，零配置可用 |
 
 ---
 
@@ -694,7 +745,7 @@ class PersonaSchemaException implements Exception {
 ### 8.1 安全要求
 - 无网络、无外传（可在无网络环境验证）。
 - 日志脱敏：不打印消息原文、称呼、地址等；仅打印计数/类别。
-- `.persona` 与 prompt 仅含 Persona 字段；`Evidence` 只存 id/计数/短示例，`sampleExcerpt` 需截断。
+- `.persona` 与 prompt 仅含 Persona 字段；`Evidence` 只存**消息键哈希**/计数/短示例，**不落逐条原文**，`sampleExcerpt` 是唯一原文片段且须截断（≤ 60 字符）。`.persona` 体积因此保持在数十~数百 KB 量级，不随聊天量线性膨胀。
 - 落盘与加密由存储层（模块 008）负责；本模块产物为明文，调用方须交由加密存储。
 - **绝不使用真实导出数据做测试/示例**——仅合成 fixture。
 
@@ -728,6 +779,7 @@ class PersonaSchemaException implements Exception {
 |------|------|---------|------|
 | 2026-08-02 | v1.0（草稿）| 初始草稿 | Claude |
 | 2026-08-02 | v1.0.1（草稿）| 代理评审修订：(B1) 去重/合并键改为消息内容键（`source\|senderId\|timestamp\|content\|type`，对齐模块 002，非 `Message.id`），`PersonaSource.mergedMessageIds`→`mergedMessageKeys`、`Evidence.messageIds`→`messageKeys`；(B2) 定义 `PersonaTag` 并加入 `Persona.tags`；(B3) 空会话下 `TimelineSpan.start/end` 改可空、`displayName` 回退 `defaultDisplayName`；(M1) `Persona.id` 明确确定性派生；补 `PromptOptions`/`PromptTone`/`PersonaSchemaException` 定义；活跃时段按 UTC 分桶 | Claude |
+| 2026-08-02 | v1.0.2（草稿）| PR #10 Owner 评审修订：(🔴1 隐私) 证据/去重键**持久化改存 SHA-256 哈希**（`Evidence.messageKeys`→`messageKeyHashes`、`PersonaSource.mergedMessageKeys`→`mergedMessageKeyHashes`，新增 `package:crypto` + `messageKeyHash()`），`.persona` 不再落逐条原文、体积不膨胀，兑现 §1.2/§8.1 承诺；(🔴3 切分) `splitBySender` 以 `Message.isFromMe` 为主判据、`personSenderIds`/`myIdentifiers` 覆盖，默认路径不再污染人格；(🟡4 历史) 新增 `SourceRevision` + `PersonaSource.revisions` 版本轨迹（有界、无原文），落实 PRD 用户故事 2；(minor) `Persona.id` 派生签名去除首条消息键/消息数（消除边界敏感）、`generatedAt` clock 缺省取 epoch 0 哨兵（不抛错、零配置可用）、`deriveTags` 增 `relation`/`memories` 入参覆盖关系/偏好标签、`PersonaSource` 标注即 PRD `sourceSummary` | Claude |
 
 ---
 
