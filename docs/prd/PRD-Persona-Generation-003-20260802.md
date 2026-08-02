@@ -2,7 +2,7 @@
 
 > 产品需求文档 - Persona 生成（Persona Generation）
 >
-> **版本**：v1.0.3
+> **版本**：v1.0.4
 > **状态**：📝 草稿
 > **作者**：Claude
 > **日期**：2026-08-02
@@ -55,7 +55,7 @@
 - Persona 的可视化 UI、编辑界面（属 Phase 4 UI）。
 - 多语言 NLP 深度语义分析（初版以中文为主、基于统计与规则；深度语义留待后续）。
 - 加密存储与生物识别（属模块 008；本模块只产出明文 JSON，交由存储层加密）。
-- **群聊多人格拆分**：v1 仅正式支持 **1:1 会话**（用户 ↔ 单一目标人物）。多方会话若未显式指定 `personSenderIds`，走守卫降级（低置信 + 标记切分不可靠），不臆断把多人并入单一人格；完整群聊支持留待后续。
+- **群聊多人格拆分**：v1 仅正式支持 **1:1 会话**（用户 ↔ 单一目标人物）。多方会话只要未显式指定 `personSenderIds` 即走守卫降级（低置信 + 标记切分不可靠；`myIdentifiers` 不抑制该守卫），不臆断把多人并入单一人格；完整群聊支持留待后续。
 
 ---
 
@@ -136,7 +136,7 @@
 - 关键事件：基于频次骤变、长文本、纪念性关键词（生日/节日/称呼变化等）的启发式标记，附证据（消息键哈希）。
 - 偏好/习惯：高频名词短语、常提及的人/地点/活动（基于统计，不做深度 NLP）。
 - 仅统计目标人物的消息用于"人格"，用户自己的消息（`isFromMe==true` 或命中 `myIdentifiers`）仅用于关系行为对照，绝不计入逝者人格。
-- 默认切分依赖模块 002 可靠填充 `Message.isFromMe`。当非空会话中无法判定方向（`isFromMe` 全为 `false`，无我方消息作对照）或为多方会话，且用户未显式指定 `personSenderIds`/`myIdentifiers` 时，触发**守卫降级**：各层标低置信、标记切分不可靠（`segmentationResolved=false`），不臆断把全体消息并入人格，并提示用户手动指定目标人物后重建（空会话/无目标场景不触发）。
+- 默认切分依赖模块 002 可靠填充 `Message.isFromMe`。两类**守卫降级**门控不同（`myIdentifiers` 只能定"我"、无法在多个对方中指出目标）：①方向不可判定（非空会话 `isFromMe` 全为 `false`）——`personSenderIds` 与 `myIdentifiers` **皆未传**时触发；②多方会话（>1 目标发送者）——**仅** `personSenderIds` 未传即触发（`myIdentifiers` 不抑制，避免群聊里非我方多人被静默并成一个人格）。触发时各层标低置信、`segmentationResolved=false`，不臆断把全体并入人格，提示用户手动指定目标人物后重建（空会话/无目标场景不触发）。
 
 **优先级**：P0
 
@@ -371,6 +371,7 @@
 | 2026-08-02 | v1.0.1（草稿）| 代理评审修订：增量去重/幂等改以**消息内容键**（对齐模块 002 `DataPreprocessor`，非 `Message.id`）为基石；证据引用改用消息键 | Claude |
 | 2026-08-02 | v1.0.2（草稿）| PR #10 Owner 评审修订：(🔴1 隐私) 证据/去重键持久化改存 **SHA-256 哈希**、绝不落逐条原文，`.persona` 体积不膨胀（功能3/功能A/§4.2/§8.1）；(🔴3 切分) 目标人物切分以 `Message.isFromMe` 为主判据、`personSenderIds`/`myIdentifiers` 覆盖，用户消息不再污染人格（功能1/§5.1）；(🟡4 历史) "history 摘要"落地为 `PersonaSource.revisions` 版本轨迹，兑现用户故事 2；(minor) 统一命名 `sourceSummary` 即 `PersonaSource`（JSON key `source`）| Claude |
 | 2026-08-02 | v1.0.3（草稿）| PR #10 Owner 复审修订：(🟡B) 显式声明默认切分依赖模块 002 可靠填充 `isFromMe`（§7.2），新增**守卫降级**——方向不可判定/多方会话且未显式指定时低置信 + 标记切分不可靠、不臆断并入（功能1/§5.1）；(minor E) 明确 v1 仅正式支持 1:1 会话、群聊多人格拆分不在范围（§1.3）。ERD/SPEC 同步 `revisions` 连续性(A)、`sampleExcerpt` 长度校验(C)、`id` 目标发送者定义(D) | Claude |
+| 2026-08-02 | v1.0.4（草稿）| PR #10 Owner 复审修订：(🟡) 守卫降级**门控拆分**——方向不可判定分支需 `personSenderIds` 与 `myIdentifiers` 皆未传方触发；多方会话分支只要未显式指定 `personSenderIds` 即触发，`myIdentifiers` 不抑制（功能1/§1.3）。ERD/SPEC 同步 | Claude |
 
 ---
 

@@ -136,7 +136,7 @@
 - 关键约束：纯 Dart、离线、**无 LLM/无网络**、可完全单元测试；LLM 增强留待 Phase 3 之后。
 - 核心组件：MemoriesAnalyzer / PersonaAnalyzer / PersonaBuilder（编排+版本+增量）/ PersonaCodec / PromptTemplate。
 - 增量更新：以**消息内容键的 SHA-256 哈希**（底层键 `source|senderId|timestamp.iso8601|content|type` 对齐模块 002 `DataPreprocessor` 去重键）去重保证幂等；`.persona` 存哈希不落原文；`revisions` 连续追加版本轨迹；硬规则永不被分析结果覆盖。
-- 目标人物切分：以 `Message.isFromMe` 为主判据（依赖模块 002 可靠填充）；方向不可判定/多方会话且无显式指定时走守卫降级（低置信 + `segmentationResolved=false`，不臆断并入）；v1 仅正式支持 1:1 会话。
+- 目标人物切分：以 `Message.isFromMe` 为主判据（依赖模块 002 可靠填充）；守卫降级门控**按分支拆分**——方向不可判定分支（`isFromMe` 全为 `false`）需 `personSenderIds` 与 `myIdentifiers` 皆未传方触发，多方会话分支（目标发送者 >1）只要 `personSenderIds` 未传即触发（`myIdentifiers` 不抑制）；触发时低置信 + `segmentationResolved=false`、不臆断并入；v1 仅正式支持 1:1 会话。
 
 ### 待办
 - [ ] 三文档评审
@@ -288,6 +288,7 @@ Spec：⚪ 待创建
 | 2026-08-02 | — | 模块 003 草稿代理评审 + 修订（三文档升 v1.0.1，仍草稿）：修复 3 处阻塞项——(B1) 增量去重/幂等/证据键从 `Message.id` 改为**消息内容键**（对齐模块 002 `DataPreprocessor` 去重键，`Message.id` 跨导入不唯一/不稳定）；(B2) 定义 `PersonaTag` 并纳入 `Persona.tags` 与 `.persona` JSON；(B3) 空会话下 `TimelineSpan.start/end` 可空、`displayName` 回退 `defaultDisplayName`；及 (M1) `Persona.id` 确定性派生、UTC 分桶、ratio ε 容差、阈值前后置统一、幂等单测夹具修正等 nit。评审确认交叉引用/状态/五层命名/模块 002 类型均一致 | Claude |
 | 2026-08-02 | — | 模块 003 PR #10 Owner 评审修订（三文档升 v1.0.2，仍草稿）：处理 3 🔴 + 1 🟡 + 3 minor——(🔴1 隐私) 证据/去重键持久化改存 **SHA-256 哈希**（`messageKeys`→`messageKeyHashes`、`mergedMessageKeys`→`mergedMessageKeyHashes`，加 `package:crypto`），`.persona` 不再落逐条原文、体积不膨胀，兑现文档自身隐私承诺；(🔴2 clock) 缺 `clock` 不再抛 `ArgumentError`，改取 epoch 0 哨兵、零配置 `build()` 可用（消解 Spec §3.2↔§6.1 自相矛盾）；(🔴3 切分) 目标人物切分以 `Message.isFromMe` 为主判据、`personSenderIds`/`myIdentifiers` 覆盖，默认路径不再污染人格；(🟡4 历史) 新增 `PersonaSource.revisions` 版本轨迹落实 PRD 用户故事 2；(minor) `Persona.id` 派生去首条消息/消息数消除边界敏感、`deriveTags` 增 `relation`/`memories` 覆盖关系/偏好标签、统一 `sourceSummary`↔`PersonaSource` 命名 | Claude |
 | 2026-08-02 | — | 模块 003 PR #10 Owner 复审修订（三文档升 v1.0.3，仍草稿）：处理复审 2 🟡 + 3 minor（不阻塞设计批准、编码前解决）——(🟡A) `revisions` 统一为**连续 `[v1..vN]`**（`build` 写 v1、每 `update` 追加、末条==顶层、不裁剪），消除示例↔"每次追加"↔校验矛盾；(🟡B) 显式声明默认切分依赖模块 002 可靠填充 `isFromMe`，`splitBySender` 新增**方向/组成不可判定守卫**（返回 `resolved`）+ `PersonaSource.segmentationResolved`——不可判定/多方且无显式指定时降 `low`、不臆断并入；(minor C) `sampleExcerpt` 加长度校验（encode 端字素簇截断 60、decode 端防御性截断，+`package:characters`）；(minor D) 明确 `id` 的 `sortedTargetSenderIds`=切分后观察到的目标发送者集（非原始入参），界定超集稳定性范围；(minor E) 声明 v1 仅正式支持 1:1、群聊多人格拆分不在范围（多方走守卫）| Claude |
+| 2026-08-02 | — | 模块 003 PR #10 Owner 复审修订（三文档升 v1.0.4，仍草稿）：处理 1 🟡——**守卫门控自相矛盾且多方分支存在漏洞**。拆分门控：方向不可判定分支（`isFromMe` 全为 `false`）门控 = `personSenderIds` **且** `myIdentifiers` 皆未传（`myIdentifiers` 确能解决方向、可抑制）；多方会话分支（目标发送者 >1）门控 = **仅** `personSenderIds` 未传——`myIdentifiers` 只判"谁是我"、无法在多个对方中指目标，**不得抑制**多方守卫。ERD §3.1/§4.2/§5.1/§5.2、SPEC §1.4/§3.1/§4.1/§6.1(+2 用例)/§6.2、PRD 功能1/§1.3 措辞统一 | Claude |
 
 ---
 
