@@ -72,8 +72,21 @@ flutter pub get          # 安装依赖
 
 flutter devices          # 查看可用设备
 flutter run -d chrome    # 在 Chrome 中运行（无需 Xcode，最快验证）
-flutter run -d macos     # 在 macOS 桌面运行（需完整 Xcode，见下）
+flutter run -d ios        # 在 iOS 模拟器运行（需完整 Xcode，见下）
+flutter run -d macos     # 在 macOS 桌面运行（延后，见下）
 ```
+
+**在 iOS 模拟器运行（已验证）**：
+```bash
+cd mobile
+open -a Simulator                      # 启动 iOS 模拟器
+flutter devices                        # 确认模拟器已列出（如 "iPhone 15 (mobile)"）
+flutter run -d ios                     # 首次运行会自动执行 pod install，稍慢
+# 或指定具体设备：flutter run -d "iPhone 15"
+```
+> 首次运行 Flutter 会自动 `pod install`（因 `flutter_secure_storage` 等含原生依赖），
+> 由此产生的 `ios/Pods/`、`Podfile.lock` 均已 gitignore，无需提交。
+> 运行成功后首页应显示 **Lostone / environment: development / version: 0.1.0**。
 
 **验证工程健康**：
 ```bash
@@ -82,11 +95,12 @@ flutter analyze          # 静态分析，应为 No issues found
 flutter test             # 单元 + Widget 测试，应 20/20 通过
 ```
 
-> **macOS/iOS 构建前置**：设备构建需要完整 Xcode（非仅 Command Line Tools）。
+> **iOS/macOS 构建前置**：设备/模拟器构建需要完整 Xcode（非仅 Command Line Tools）。
 > 若报 `xcrun: error: unable to find utility "xcodebuild"`，执行：
 > ```bash
 > sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 > ```
+> **macOS 桌面运行**：延后处理（down the road）；届时同样需完整 Xcode。
 
 **查看文档**：
 ```bash
