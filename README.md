@@ -37,7 +37,7 @@
 - ✅ Git 仓库和 GitHub 设置
 
 **进行中**：
-- 🚧 模块 002 三文档（数据导入）——草稿评审中（PR #4）
+- 🚧 模块 002（数据导入）——三文档已批准（v1.0）；纯 Dart 核心切片**已完成**（模型 + WeChatParser CSV/TXT/HTML 流式 + 预处理 + 导入编排 + Apple 时间转换，测试 42/42、analyze 0 警告）；原生解析器/存储/导入 UI 分阶段推进
 
 **查看详细进度**：[开发路线图](docs/overview/ROADMAP.md) · [文档状态](docs/DOCUMENT-STATUS.md)
 
@@ -160,7 +160,7 @@ lostone/
 | 模块 | PRD | ERD | Spec | 状态 |
 |------|-----|-----|------|------|
 | 001 - 项目初始化 | [PRD](docs/prd/PRD-Project-Setup-001-20260801.md) | [ERD](docs/erd/ERD-Flutter-Setup-001-20260801.md) | [Spec](docs/spec/SPEC-Project-Config-001-20260801.md) | ✅ 已完成（v1.1） |
-| 002 - 数据导入 | [PRD](docs/prd/PRD-Data-Import-002-20260801.md) | [ERD](docs/erd/ERD-Data-Parsers-002-20260801.md) | [Spec](docs/spec/SPEC-Data-Parser-002-20260801.md) | 📝 草稿 · 评审中 |
+| 002 - 数据导入 | [PRD](docs/prd/PRD-Data-Import-002-20260801.md) | [ERD](docs/erd/ERD-Data-Parsers-002-20260801.md) | [Spec](docs/spec/SPEC-Data-Parser-002-20260801.md) | ✅ 已批准 · 🚧 开发中 |
 | ... | ... | ... | ... | ... |
 
 **查看完整状态**：[DOCUMENT-STATUS.md](docs/DOCUMENT-STATUS.md)

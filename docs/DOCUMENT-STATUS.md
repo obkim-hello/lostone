@@ -9,7 +9,7 @@
 | 模块编号 | 模块名称 | PRD 状态 | ERD 状态 | Spec 状态 | 三文档齐全 | 开发状态 |
 |----------|---------|---------|---------|----------|-----------|----------|
 | 001 | 项目初始化 | ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | ✅ 已完成 |
-| 002 | 数据导入 | 📝 草稿 | 📝 草稿 | 📝 草稿 | ⚠️ 草稿完成 | 🚫 阻塞 |
+| 002 | 数据导入 | ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | 🚧 开发中 |
 | 003 | Persona 生成 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
 | 004 | 本地模型集成 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
 | 005 | 云端 API 集成 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
@@ -69,24 +69,39 @@
 ### 文档信息
 | 文档类型 | 文件名 | 状态 | 完成时间 | 批准时间 | 文件路径 |
 |----------|--------|------|---------|---------|---------|
-| PRD | PRD-Data-Import-002-20260801.md | 📝 草稿 | 2026-08-01 | 待批准 | docs/prd/PRD-Data-Import-002-20260801.md |
-| ERD | ERD-Data-Parsers-002-20260801.md | 📝 草稿 | 2026-08-01 | 待批准 | docs/erd/ERD-Data-Parsers-002-20260801.md |
-| Spec | SPEC-Data-Parser-002-20260801.md | 📝 草稿 | 2026-08-01 | 待批准 | docs/spec/SPEC-Data-Parser-002-20260801.md |
+| PRD | PRD-Data-Import-002-20260801.md | ✅ 已批准 | 2026-08-01 | 2026-08-02 | docs/prd/PRD-Data-Import-002-20260801.md |
+| ERD | ERD-Data-Parsers-002-20260801.md | ✅ 已批准 | 2026-08-01 | 2026-08-02 | docs/erd/ERD-Data-Parsers-002-20260801.md |
+| Spec | SPEC-Data-Parser-002-20260801.md | ✅ 已批准 | 2026-08-01 | 2026-08-02 | docs/spec/SPEC-Data-Parser-002-20260801.md |
 
 ### 三文档齐全检查
-- ✅ PRD 已创建（草稿）
-- ✅ ERD 已创建（草稿）
-- ✅ Spec 已创建（草稿）
+- ✅ PRD 已创建并批准
+- ✅ ERD 已创建并批准
+- ✅ Spec 已创建并批准
 - ✅ 编号一致（002）
 - ✅ 日期一致（20260801）
-- ⚠️ 状态：草稿（**尚未评审批准**）
-- 🚫 **三文档未批准，禁止开始开发**
+- ✅ 状态：已批准（2026-08-02，四轮评审后）
+- ✅ **三文档齐全，可以开始开发**
 
-### 待办
-- [ ] 三文档评审
-- [ ] 三文档批准（批准后将文件日期更新为批准日期）
-- [ ] 批准后添加第 4.3 节新增依赖并提交 pubspec.lock
-- [ ] 准备脱敏 fixtures（见 SPEC §7.3）
+### 开发进度
+> 模块 002 体量大（五类解析器 + 流式至 5GB + iOS/macOS 原生存储 + 导入 UI）。首个实现切片聚焦**纯 Dart、可单元测试的核心**；原生/设备相关部分分阶段推进。
+
+| 项目 | 状态 | 说明 |
+|------|------|------|
+| 核心数据模型 | ✅ 已完成 | Message/MessageType/DataSource、Conversation/ImportStats、ParseEvent/MediaIndexEntry/MediaTier/ParseOptions/ParseResult/ParseWarning |
+| DataParser 契约 + parseAll | ✅ 已完成 | 抽象接口 + 排空流便捷法 |
+| WeChatParser（CSV/TXT/HTML 流式） | ✅ 已完成 | 多行续行、媒体占位符 type-and-keep、列名别名、missing_media、自研 HTML 分块 tokenizer |
+| DataPreprocessor | ✅ 已完成 | 清洗/去重（内容复合键）/稳定升序 |
+| ParserRegistry / DataImportService | ✅ 已完成 | 调度 + 单文件失败隔离 + 组装 Conversation |
+| Apple 时间转换 | ✅ 已完成 | `appleDateToDateTime`（1e12 阈值，秒/纳秒） |
+| 单元测试 + fixtures | ✅ 已完成 | 覆盖 SPEC §7 用例 1-5、7-13；`flutter test` 42/42、`flutter analyze` 0 警告、核心切片行覆盖 ≈94% |
+
+### 分阶段推进（需真机 / 原生 fixtures / 大样本，本切片不含）
+- [ ] IMessageParser（`chat.db`，`sqlite3` 原生 + 脱敏 .db fixture）
+- [ ] PhotoExifParser（`exif` + 二进制 jpg fixtures，含 GPS IFD）
+- [ ] WeiboParser / InstagramParser（JSON）
+- [ ] MediaStore 原生落地（iOS 沙盒拷贝 + `isExcludedFromBackup` / macOS security-scoped bookmark）
+- [ ] file_picker 导入 UI + `import_providers`（Phase 4 视觉稿统一）
+- [ ] 5GB / 10 万条 峰值内存与吞吐压测（需设备 + 大样本）
 
 ---
 
@@ -214,6 +229,8 @@ Spec：⚪ 待创建
 | 2026-08-02 | 04:10 | 模块 002 第四轮评审（流式一致性）：ERD/Spec 同步——HTML 流式定案自研分块 tokenizer（package:html 无 SAX）、新增 MediaIndexEvent 明确媒体索引产出所有权与 storedPath 下游回填、补 Message↔MediaIndexEntry 单一真相来源关系、missing_media fixture 改 HTML。ERD/Spec 升至 v0.3，仍为草稿，待批准 | Claude |
 | 2026-08-02 | 04:30 | 模块 002 评审 nit：明确唯一 join key 为 mediaPath==sourceRef，四元组降级为描述性字段、禁止用作关联键（突发连发冲突）。仍为草稿，待批准 | Claude |
 | 2026-08-02 | — | 模块 001 收尾：PRD/ERD/Spec v1.1 对齐工具链版本（Flutter 3.38+/Dart 3.11+，Spec 环境检查阈值 >= 3.24 → >= 3.38）、iOS §8.4 验收通过、macOS 桌面明确延后；模块 001 开发状态更新为"已完成" | Claude |
+| 2026-08-02 | — | ✅ 批准模块 002 三文档（v1.0，四轮评审后），开发状态转"开发中"；首个实现切片聚焦纯 Dart 核心（模型/WeChat 解析/预处理/导入编排/Apple 时间），原生解析器与存储/UI 分阶段推进 | Project Owner |
+| 2026-08-02 | — | 模块 002 纯 Dart 核心切片实现完成：models（Message/Conversation/parse_result）+ WeChatParser（CSV/TXT/HTML 流式）+ DataPreprocessor + ParserRegistry + DataImportService + appleDateToDateTime；单测覆盖 SPEC §7 用例 1-5/7-13，`flutter test` 42/42、`flutter analyze` 0 警告、核心切片行覆盖 ≈94%。原生解析器/存储/UI 仍分阶段推进 | Claude |
 
 ---
 

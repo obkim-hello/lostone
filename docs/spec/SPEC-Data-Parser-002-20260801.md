@@ -2,12 +2,12 @@
 
 > 技术规格文档 - 数据解析器
 >
-> **版本**：v0.3
-> **状态**：📝 草稿
+> **版本**：v1.0
+> **状态**：✅ 已批准
 > **作者**：Claude
 > **日期**：2026-08-01
-> **批准日期**：待批准
-> **批准人**：待批准
+> **批准日期**：2026-08-02
+> **批准人**：Project Owner
 > **关联 ERD**：ERD-Data-Parsers-002-20260801.md
 
 ---
@@ -828,6 +828,7 @@ print('时间跨度：${conversation.stats.earliest} ~ ${conversation.stats.late
 | 2026-08-01 | v0.2 | 第三轮评审（规模/存储）：`parse` 改流式 `Stream<ParseEvent>` + `parseAll` 便捷法；新增 MediaTier/ParseEvent/MediaIndexEntry 模型与 `mediaTier` 选项；三层产物与流式正常流程；性能指标改为吞吐/内存解耦（废弃 1000 条<60s）；新增 missing_media 边界与测试 11/12/13；补 archive/path_provider 依赖与 iOS 沙盒/macOS bookmark 存储约束 | Claude |
 | 2026-08-01 | v0.3 | 第四轮评审（流式一致性）：新增 `MediaIndexEvent`，明确媒体索引由解析器产出、`storedPath` 由下游 MediaStore 回填；补 Message↔MediaIndexEntry 单一真相来源关系（`mediaPath == sourceRef`）；重写测试 13 为解析器契约、测试 12 fixture 改 HTML（CSV 无文件引用）；`html` 依赖标注为小文件回退（大文件走自研分块 tokenizer） | Claude |
 | 2026-08-02 | v0.3 | 评审 nit：唯一 join key 明确为 `mediaPath == sourceRef`；`(source,senderId,timestamp,type)` 降级为描述性字段、禁止用作 join key（突发连发会令四元组冲突） | Claude |
+| 2026-08-02 | v1.0 | 四轮评审后批准，进入实现阶段 | Project Owner |
 
 ---
 
