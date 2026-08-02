@@ -37,7 +37,7 @@
 - ✅ Git 仓库和 GitHub 设置
 
 **进行中**：
-- 🚧 模块 002（数据导入）——三文档已批准（v1.0）；核心切片**已完成**（模型 + WeChatParser CSV/TXT/HTML 流式 + InstagramParser + IMessageParser（chat.db 只读）+ 预处理 + 导入编排 + Apple 时间转换 + Riverpod 导入状态层，测试 64/64、analyze 0 警告，两轮代理评审并修复 SPEC 合规缺口）；照片 EXIF 解析器、原生存储、导入 UI、大样本压测分阶段推进
+- 🚧 模块 002（数据导入）——三文档已批准（v1.0）；核心切片**已完成**（模型 + WeChatParser CSV/TXT/HTML 流式 + InstagramParser + IMessageParser（chat.db 只读，含 attributedBody 回退）+ 预处理 + 导入编排 + Apple 时间转换 + Riverpod 导入状态层，测试 65/65、analyze 0 警告，两轮代理评审并修复 SPEC 合规缺口）；照片 EXIF 解析器、原生存储、导入 UI、大样本压测分阶段推进
 
 **查看详细进度**：[开发路线图](docs/overview/ROADMAP.md) · [文档状态](docs/DOCUMENT-STATUS.md)
 

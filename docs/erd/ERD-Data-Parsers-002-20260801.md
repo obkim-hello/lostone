@@ -524,12 +524,14 @@ class ParseWarning {
 
 | 表 | 关键字段 | 用途 |
 |----|---------|------|
-| `message` | `ROWID`, `text`, `date`, `is_from_me`, `handle_id` | 消息正文/时间/方向 |
+| `message` | `ROWID`, `text`, `attributedBody`, `date`, `is_from_me`, `handle_id` | 消息正文/时间/方向 |
 | `handle` | `ROWID`, `id` | 联系人标识 |
 | `chat` | `ROWID`, `chat_identifier` | 会话标识 |
 | `chat_message_join` | `chat_id`, `message_id` | 会话-消息关联 |
 
 > `date` 为 Apple 绝对时间（自 2001-01-01 UTC 起的纳秒），需转换为标准 `DateTime`。
+
+> **正文来源（`text` vs `attributedBody`）**：iOS 14 / macOS 11 起，正文常不再写入 `message.text`（为 `NULL`），而是存入 `attributedBody` BLOB——Apple `streamtyped`（NSArchiver）序列化的 `NSAttributedString`。解析优先读 `text`；为空时**尽力回退**从 `attributedBody` 提取纯文本（定位 `NSString` 标记后按 typedstream 长度前缀读取 UTF-8）。该回退为启发式：仅在 `text` 为空时触发，解码失败则安全降级为 `empty_message` 告警，不影响 `text` 路径。完整 typedstream 解码器（保留富文本/内联附件占位）需真机导出样本验证，列入分阶段推进。
 
 ---
 
