@@ -40,6 +40,9 @@ Future<String> _buildChatDb(Directory dir) async {
 
 Uint8List _attributedBody(String text) {
   final List<int> textBytes = utf8.encode(text);
+  final List<int> lengthPrefix = textBytes.length < 0x80
+      ? <int>[textBytes.length]
+      : <int>[0x81, textBytes.length & 0xff, (textBytes.length >> 8) & 0xff];
   return Uint8List.fromList(<int>[
     0x04,
     0x0b,
@@ -50,7 +53,7 @@ Uint8List _attributedBody(String text) {
     0x84,
     0x01,
     0x2b,
-    textBytes.length,
+    ...lengthPrefix,
     ...textBytes,
     0x86,
   ]);
@@ -150,6 +153,58 @@ void main() {
           r.messages.firstWhere((Message m) => m.content == '晚安好好休息');
       expect(recovered.senderId, 'mom@example.com');
       expect(recovered.isFromMe, isFalse);
+    });
+
+    test('decodes attributedBody with extended (0x81) length prefix', () async {
+      final String longText = '早' * 60;
+      expect(longText.length * 3, greaterThan(0x7f));
+      final Database db = sqlite3.open(dbPath);
+      final PreparedStatement stmt = db.prepare(
+        'INSERT INTO message(ROWID, text, attributedBody, date, '
+        'is_from_me, handle_id) VALUES (?, NULL, ?, ?, ?, ?)',
+      );
+      stmt.execute(<Object?>[
+        5,
+        _attributedBody(longText),
+        _nanos20220101 + 4 * _oneMinuteNanos,
+        0,
+        1,
+      ]);
+      stmt.dispose();
+      db.dispose();
+
+      final ParseResult r = await const IMessageParser().parseAll(dbPath);
+
+      expect(r.messages.any((Message m) => m.content == longText), isTrue);
+    });
+
+    test('malformed attributedBody degrades to empty_message, no throw',
+        () async {
+      final Database db = sqlite3.open(dbPath);
+      final PreparedStatement stmt = db.prepare(
+        'INSERT INTO message(ROWID, text, attributedBody, date, '
+        'is_from_me, handle_id) VALUES (?, NULL, ?, ?, ?, ?)',
+      );
+      final Uint8List junk =
+          Uint8List.fromList(<int>[0x04, 0x0b, 0x01, 0x02, 0x03, 0x04, 0x05]);
+      stmt.execute(<Object?>[
+        6,
+        junk,
+        _nanos20220101 + 5 * _oneMinuteNanos,
+        0,
+        1,
+      ]);
+      stmt.dispose();
+      db.dispose();
+
+      final ParseResult r = await const IMessageParser().parseAll(dbPath);
+
+      expect(r.messages.every((Message m) => m.content.isNotEmpty), isTrue);
+      expect(r.messages.any((Message m) => m.id == 'imessage-6'), isFalse);
+      expect(
+        r.warnings.where((ParseWarning w) => w.code == 'empty_message').length,
+        greaterThanOrEqualTo(2),
+      );
     });
 
     test('is selected by the registry for a .db file', () async {
