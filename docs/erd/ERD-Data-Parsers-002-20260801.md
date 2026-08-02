@@ -566,6 +566,32 @@ class ParseWarning {
 }
 ```
 
+#### 输入 JSON（微博私信导出）
+微博私信无「一键打包」用户导出，实践中以微博开放平台 `direct_messages` API v2 的 JSON 落盘为准（第三方备份工具亦沿用此结构）。解析器以此为输入契约：
+
+```json
+{
+  "direct_messages": [
+    {
+      "id": 12345,
+      "created_at": "Wed Jun 12 08:47:29 +0800 2013",
+      "text": "在吗",
+      "sender_id": 66666,
+      "sender_screen_name": "妈妈",
+      "recipient_id": 77777,
+      "recipient_screen_name": "我"
+    }
+  ]
+}
+```
+
+- `created_at`：微博/Twitter 风格 `EEE MMM dd HH:mm:ss ±ZZZZ yyyy`（含时区偏移，归一为 UTC）；亦容错接受 Unix 秒/毫秒整数。
+- 方向：`sender_screen_name`（回退 `sender_id`）命中 `ParseOptions.myIdentifiers` 即 `isFromMe`。
+- 正文为纯文本；媒体在微博私信中以内联 URL 形式出现在 `text` 内，故不单列媒体索引（与 §3.2「社媒 JSON 解析」一致）。
+- `created_at` 缺失/不可解析 → `malformed_row` 告警并跳过该条；`text` 为空 → `empty_message` 告警并跳过。
+
+> 该输入契约锚定真实微博 API v2 结构（非臆造），待项目 Owner 确认后固化；若官方导出格式变化，按本节增补版本说明。
+
 #### 新增依赖（拟）
 ```yaml
 dependencies:
@@ -732,6 +758,7 @@ importFiles(paths)
 **解析器特定要求（规范细节见 SPEC §3.4）**：
 - **WeChatParser**：必须支持多行正文续行（消息头之后的非头行追加到上一条），媒体占位符按类型保留（`[图片]→image`、`[语音]→voice` 等，`[撤回了一条消息]→system`），CSV 列名按别名集容错。
 - **PhotoExifParser**：`exif` 包默认只取 `DateTimeOriginal`；`extractLocation=true` 时须**显式解析 GPS IFD**（`GPSLatitude`/`GPSLongitude` + 参考方向）并换算十进制经纬度写入 `metadata`。此处无参考实现可抄，实现者须自行接线并测试。
+- **WeiboParser**：读取 §4.3「输入 JSON（微博私信导出）」的 `direct_messages` 数组；`created_at` 支持微博/Twitter 风格带时区字符串（归一 UTC）与 Unix 秒/毫秒；`sender_screen_name`/`sender_id` 命中 `myIdentifiers` 判 `isFromMe`；纯文本，无媒体索引。JSON 非法/结构缺 `direct_messages` → `ParseException`，单条缺时间/空文本 → 告警跳过。
 
 ### 6.3 错误处理
 

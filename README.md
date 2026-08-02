@@ -37,7 +37,7 @@
 - ✅ Git 仓库和 GitHub 设置
 
 **进行中**：
-- 🚧 模块 002（数据导入）——三文档已批准（v1.0）；核心切片**已完成**（模型 + WeChatParser CSV/TXT/HTML 流式 + InstagramParser + IMessageParser（chat.db 只读，含 attributedBody 回退）+ PhotoExifParser（EXIF/GPS）+ MediaStore 分层字节落地（ERD §4.4）+ 预处理 + 导入编排 + Apple 时间转换 + Riverpod 导入状态层，测试 86/86、analyze 0 警告，四轮代理评审并修复 SPEC 合规缺口）；微博解析器、原生存储装配、导入 UI、大样本压测分阶段推进
+- 🚧 模块 002（数据导入）——三文档已批准（v1.0）；核心切片**已完成**（模型 + WeChatParser CSV/TXT/HTML 流式 + InstagramParser + WeiboParser（direct_messages API v2 JSON）+ IMessageParser（chat.db 只读，含 attributedBody 回退）+ PhotoExifParser（EXIF/GPS）+ MediaStore 分层字节落地（ERD §4.4）+ 预处理 + 导入编排 + Apple 时间转换 + Riverpod 导入状态层，测试 95/95、analyze 0 警告，四轮代理评审并修复 SPEC 合规缺口）；ERD §3.4 文件范围内的五类解析器全部落地；原生存储装配、导入 UI（Phase 4）、大样本压测、微博契约 Owner 终审分阶段推进
 
 **查看详细进度**：[开发路线图](docs/overview/ROADMAP.md) · [文档状态](docs/DOCUMENT-STATUS.md)
 
