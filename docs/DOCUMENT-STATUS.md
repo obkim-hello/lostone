@@ -91,16 +91,18 @@
 | DataParser 契约 + parseAll | ✅ 已完成 | 抽象接口 + 排空流便捷法 |
 | WeChatParser（CSV/TXT/HTML 流式） | ✅ 已完成 | 多行续行、媒体占位符 type-and-keep、列名别名、missing_media、自研 HTML 分块 tokenizer |
 | DataPreprocessor | ✅ 已完成 | 清洗/去重（内容复合键）/稳定升序 |
-| ParserRegistry / DataImportService | ✅ 已完成 | 调度 + 单文件失败隔离 + 组装 Conversation |
+| ParserRegistry / DataImportService | ✅ 已完成 | 调度 + 单文件失败隔离（所有 Exception）+ 组装 Conversation；告警/媒体索引跨文件累积并透出；file_too_large（>200MB）拒绝 |
+| InstagramParser（Meta DYI JSON） | ✅ 已完成 | `message_1.json`（participants+messages）；文本/图片分条 + 媒体索引；timestamp_ms→UTC；missing_media |
+| 导入状态管理（Riverpod） | ✅ 已完成 | `ImportPhase`/`ImportState`/`ImportNotifier`/`importStateProvider`（ERD §5.2）；空列表转 failed |
 | Apple 时间转换 | ✅ 已完成 | `appleDateToDateTime`（1e12 阈值，秒/纳秒） |
-| 单元测试 + fixtures | ✅ 已完成 | 覆盖 SPEC §7 用例 1-5、7-13；`flutter test` 42/42、`flutter analyze` 0 警告、核心切片行覆盖 ≈94% |
+| 单元测试 + fixtures | ✅ 已完成 | 覆盖 SPEC §7 用例 1-5、7-13 + 评审补充用例；`flutter test` 58/58、`flutter analyze` 0 警告 |
 
-### 分阶段推进（需真机 / 原生 fixtures / 大样本，本切片不含）
+### 分阶段推进（需真机 / 原生 fixtures / 大样本 / 待补文档，本切片不含）
 - [ ] IMessageParser（`chat.db`，`sqlite3` 原生 + 脱敏 .db fixture）
 - [ ] PhotoExifParser（`exif` + 二进制 jpg fixtures，含 GPS IFD）
-- [ ] WeiboParser / InstagramParser（JSON）
+- [ ] WeiboParser（微博私信无标准导出 schema，SPEC/ERD 未定义输入格式，待补文档后实现）
 - [ ] MediaStore 原生落地（iOS 沙盒拷贝 + `isExcludedFromBackup` / macOS security-scoped bookmark）
-- [ ] file_picker 导入 UI + `import_providers`（Phase 4 视觉稿统一）
+- [ ] file_picker 导入 UI（Phase 4 视觉稿统一；状态层 `import_providers` 已就绪）
 - [ ] 5GB / 10 万条 峰值内存与吞吐压测（需设备 + 大样本）
 
 ---
@@ -231,6 +233,7 @@ Spec：⚪ 待创建
 | 2026-08-02 | — | 模块 001 收尾：PRD/ERD/Spec v1.1 对齐工具链版本（Flutter 3.38+/Dart 3.11+，Spec 环境检查阈值 >= 3.24 → >= 3.38）、iOS §8.4 验收通过、macOS 桌面明确延后；模块 001 开发状态更新为"已完成" | Claude |
 | 2026-08-02 | — | ✅ 批准模块 002 三文档（v1.0，四轮评审后），开发状态转"开发中"；首个实现切片聚焦纯 Dart 核心（模型/WeChat 解析/预处理/导入编排/Apple 时间），原生解析器与存储/UI 分阶段推进 | Project Owner |
 | 2026-08-02 | — | 模块 002 纯 Dart 核心切片实现完成：models（Message/Conversation/parse_result）+ WeChatParser（CSV/TXT/HTML 流式）+ DataPreprocessor + ParserRegistry + DataImportService + appleDateToDateTime；单测覆盖 SPEC §7 用例 1-5/7-13，`flutter test` 42/42、`flutter analyze` 0 警告、核心切片行覆盖 ≈94%。原生解析器/存储/UI 仍分阶段推进 | Claude |
+| 2026-08-02 | — | 模块 002 切片扩展：新增导入状态层 `import_providers`（Riverpod，ERD §5.2）+ InstagramParser（Meta DYI JSON）；代理评审对照 SPEC §edge-cases/§5.1-5.2 修复 4 项合规缺口（乱码行 allowMalformed+malformed_row、单文件隔离扩至所有 Exception、告警/媒体索引透出 Conversation、空列表转 failed），并补 file_too_large。`flutter test` 58/58、`flutter analyze` 0 警告。Weibo 待补输入格式文档 | Claude |
 
 ---
 
