@@ -2,7 +2,7 @@
 
 > 技术规格 - Persona 构建器（Persona Builder）
 >
-> **版本**：v1.0.2
+> **版本**：v1.0.3
 > **状态**：📝 草稿
 > **作者**：Claude
 > **日期**：2026-08-02
@@ -106,11 +106,13 @@ class PersonaBuildOptions {
 - `build`：`conversation != null`；`options` 阈值合法（`minMessagesForHigh ≥ minMessagesForMedium ≥ 0`，`topN ≥ 1`）。
 - `update`：`existing.schemaVersion == kPersonaSchemaVersion`（否则先 `decode` 迁移）。
 - 消息若非升序，实现须先归一化排序（保证确定性）。
+- **默认切分依赖模块 002 可靠填充 `Message.isFromMe`**（未传 `personSenderIds`/`myIdentifiers` 时）。SPEC-Data-Parser-002 须保证 parser 尽力判定方向、不静默全部置 `false`。若该前置不满足，`build` 不抛错而走守卫降级（见 §3.1「方向/组成不可判定」、§4.1 步骤 1）。
 
 ### 1.4 后置条件（Postconditions）
 - 输出 Persona 各层非 null；`memories.timeline.messageCount == source.personMessages`。
 - `source.mergedMessageKeyHashes` 含所有已并入消息的**消息键 SHA-256 哈希**，且无重复。
-- `source.revisions` 末条 `personaVersion == persona.personaVersion`（每次生成追加一条）。
+- `source.revisions` **连续完整**：`revisions[i].personaVersion == i + 1`，末条 `== persona.personaVersion`，`length == persona.personaVersion`（`build` 写 v1，每 `update` 追加一条，不裁剪）。
+- `source.segmentationResolved == false` **当且仅当**方向/组成不可判定（无显式 `personSenderIds`/`myIdentifiers` 且 `isFromMe` 全同，或多方会话）；此时各层与 `identity.confidence` 均为 `Confidence.low`。
 - `decode(encode(p))` 与 `p` 值相等。
 - `render` 对同一 `(persona, options)` 恒等输出。
 
@@ -185,8 +187,10 @@ class PersonaBuildOptions {
     "totalMessages": 2600,
     "personMessages": 1240,
     "mergedMessageKeyHashes": ["e18b3d90a2c4f..."],
+    "segmentationResolved": true,
     "revisions": [
       {"personaVersion": 1, "personMessages": 900, "totalMessages": 1800},
+      {"personaVersion": 2, "personMessages": 1100, "totalMessages": 2200},
       {"personaVersion": 3, "personMessages": 1240, "totalMessages": 2600}
     ]
   }
@@ -206,13 +210,15 @@ class PersonaBuildOptions {
 | 时间字段（其余）| ISO-8601 UTC | 不可解析 → `FormatException` |
 | tags[].label | 非空字符串 | 空 → `FormatException` |
 | *MessageKeyHashes | SHA-256 十六进制字符串 | 非字符串/含原文分隔符 `\|` → `FormatException` |
-| source.revisions | 数组，`personaVersion` 单调递增 | 非法 → `FormatException` |
+| evidence.sampleExcerpt | 字符串，≤ 60 字素簇（脱敏）| encode 端强制截断；decode 端超长**截断至 60**（防御性，不抛错，保持向后兼容）|
+| source.revisions | 数组，`personaVersion` **连续**（`revisions[i]==i+1`，末条==顶层 `personaVersion`）| 非连续/末条不匹配 → `FormatException` |
+| source.segmentationResolved | 布尔（缺省视为 `true`，向后兼容）| 非布尔 → `FormatException` |
 
 ### 2.3 数据约束
 - Top-N 列表长度 ≤ `options.topN`。
 - `mergedMessageKeyHashes` 唯一（消息键哈希去重，见 §1.5）；元素为 SHA-256 十六进制，**不含原文**。
-- `Evidence.messageKeyHashes` 亦为哈希；`sampleExcerpt` 是唯一允许的原文片段，若存在须截断（≤ 60 字符，脱敏）。
-- `source.revisions` 每次生成追加一条，大小随更新次数而非消息量增长。
+- `Evidence.messageKeyHashes` 亦为哈希；`sampleExcerpt` 是唯一允许的原文片段，若存在须截断（≤ 60 字素簇，脱敏，encode 端强制、decode 端防御性截断）。
+- `source.revisions` 连续 `[v1..vN]`（`build` 写 v1、每 `update` 追加一条、不裁剪），大小随更新次数而非消息量增长。
 - 空会话时 `timeline.start == null && timeline.end == null && timeline.messageCount == 0`。
 
 ---
@@ -225,6 +231,8 @@ class PersonaBuildOptions {
 | 空会话 | `messages == []` | 返回五层齐全、`tags==[]`、全 `low`、`personMessages==0`、`timeline.start/end==null` 的 Persona；`displayName == options.defaultDisplayName`；不抛异常 |
 | 无目标人物消息 | 全是 `myIdentifiers` 或全 `isFromMe==true` | 同上；`RelationalBehavior` 仅有用户侧对照，风格层为空 |
 | 默认切分 | 未传 `personSenderIds`/`myIdentifiers` | 以 `Message.isFromMe==false` 判对方，用户自身消息**不**计入人格 |
+| 方向不可判定 | 未传显式指定，且 `isFromMe` 全同（parser 未判方向，通常全 false）| 守卫：不臆断并入；各层与 identity 均 `low`、`source.segmentationResolved==false`；不抛异常 |
+| 多方会话（群聊）| 解析出 >1 目标发送者，且未传 `personSenderIds` | v1 不做多人格拆分：同上守卫（`segmentationResolved==false`、全 `low`），提示用户显式指定后重建 |
 | 单条消息 | 1 条目标消息 | `low` 置信度；统计不崩溃 |
 | 内容重复 | 消息键相同、`Message.id` 不同 | 按消息键**哈希**去重后按唯一集统计（幂等）；`Message.id` 不影响结果 |
 | 超长消息 | 单条极长文本 | 参与统计但不 OOM（分块）|
@@ -248,9 +256,11 @@ class PersonaBuildOptions {
 ### 4.1 正常流程
 ```
 build(conversation):
-  1. splitBySender → (personMessages, userMessages)
+  1. splitBySender → (personMessages, userMessages, resolved)
      主判据 Message.isFromMe（==false 为对方）；personSenderIds 覆盖、
-     myIdentifiers 细化（优先级见 ERD §4.2）——默认路径不把用户消息计入人格
+     myIdentifiers 细化（优先级见 ERD §4.2）——默认路径不把用户消息计入人格。
+     守卫：无显式指定且 isFromMe 全同，或多方（>1 目标发送者）→ resolved=false
+     （最终强制各层/identity 置信度 low、source.segmentationResolved=false）
   2. timestamp 统一归一到 UTC；按 timestamp 升序稳定排序 personMessages
   3. 计算各 messageKeyHash = sha256Hex(消息键) → source.mergedMessageKeyHashes（去重）
   4. MemoriesAnalyzer.analyze(personMessages) → memories（空集时 timeline.start/end=null）
@@ -259,9 +269,12 @@ build(conversation):
      identity/风格置信度按阈值判定；
      displayName 取自消息推断，缺失回退 options.defaultDisplayName
   7. id = sha256Hex(sortedParticipants|sortedTargetSenderIds|sortedDataSources)
-     （不含首条消息/消息数 → 子集/超集重建 id 稳定）；
+     其中 sortedTargetSenderIds = 切分后**观察到的目标发送者 senderId** 升序集
+     （非原始入参；默认路径=isFromMe==false 的发送者集）——不含首条消息/消息数，
+     故同一组成的消息级子集/超集重建 id 稳定；
      generatedAt = options.clock?.call() ?? epoch0UTC；
-     source.revisions = [SourceRevision(1, personMessages, totalMessages)]；
+     source.revisions = [SourceRevision(1, personMessages, totalMessages)]（连续起点 v1）；
+     source.segmentationResolved = resolved（见步骤 1）；
      组装 Persona(version=1, hardRules=默认空, tags, source)
   8. 返回
 ```
@@ -331,6 +344,22 @@ group('PersonaBuilder.build', () {
     final Persona p = await builder.build(_mixedFromMeConversation());
     expect(p.source.personMessages, _mixedFromMeConversation().messages
         .where((Message m) => !m.isFromMe).length);
+    expect(p.source.segmentationResolved, isTrue);
+  });
+
+  test('方向不可判定时守卫降级：全 low 且 segmentationResolved=false', () async {
+    final Persona p = await builder.build(_indeterminateDirectionConversation());
+    expect(p.source.segmentationResolved, isFalse);
+    expect(p.identity.confidence, Confidence.low);
+    expect(p.expressionStyle.confidence, Confidence.low);
+  });
+
+  test('显式指定 personSenderIds 时不触发守卫', () async {
+    final Persona p = await builder.build(
+      _indeterminateDirectionConversation(),
+      personSenderIds: const <String>{'mom'},
+    );
+    expect(p.source.segmentationResolved, isTrue);
   });
 
   test('口头禅按出现次数统计并截断到 topN', () async {
@@ -356,11 +385,14 @@ group('PersonaBuilder.update', () {
     expect(v2.hardRules.mustNeverClaim, v1.hardRules.mustNeverClaim);
   });
 
-  test('每次更新追加一条 revision 快照', () async {
+  test('revisions 连续：build 写 v1，每次 update 追加，末条==personaVersion', () async {
     final Persona v1 = await builder.build(_conv());
+    expect(v1.source.revisions.single.personaVersion, 1);
     final Persona v2 = await builder.update(v1, _moreMessages());
-    expect(v2.source.revisions.length, 2);
-    expect(v2.source.revisions.last.personaVersion, 2);
+    final Persona v3 = await builder.update(v2, _evenMoreMessages());
+    expect(v3.source.revisions.map((SourceRevision r) => r.personaVersion),
+        <int>[1, 2, 3]);
+    expect(v3.source.revisions.last.personaVersion, v3.personaVersion);
   });
 
   test('超集重建 id 稳定（不含首条消息/消息数）', () async {
@@ -408,9 +440,11 @@ group('PromptTemplate', () {
 | `_synthConversation()` | 含目标人物+用户消息、中英 emoji 混合 |
 | `_emptyConversation()` | 空消息列表 |
 | `_mixedFromMeConversation()` | 含 `isFromMe` true/false 混合，验证默认切分 |
+| `_indeterminateDirectionConversation()` | 所有消息 `isFromMe==false`（parser 未判方向），验证守卫降级 |
 | `_repeatedPhraseConversation()` | 高频口头禅，验证计数/截断 |
 | `_sameContentDifferentIds()` | 与 `_conv()` 内容键相同但 `Message.id` 不同，验证键哈希去重幂等 |
-| `_convSuperset()` | `_conv()` 的超集（更多消息、参与者不变），验证 id 稳定 |
+| `_moreMessages()` / `_evenMoreMessages()` | 增量新增消息，验证 version 递增与 revisions 连续 |
+| `_convSuperset()` | `_conv()` 的超集（更多消息、参与者/目标发送者不变），验证 id 稳定 |
 | `_samplePersona()` | 往返序列化基准（含 tags、消息键哈希证据、revisions）|
 | `_emptyPersona()` | 空会话 Persona（timeline.start/end 为 null）|
 | `_futureSchemaBytes()` | `schemaVersion` 大于当前 |
@@ -429,8 +463,9 @@ group('PromptTemplate', () {
 | Dart SDK | >=3.11.0 <4.0.0 | 语言与 `dart:convert` |
 | Flutter | 3.38+ | 宿主运行时（引擎层无 UI 依赖）|
 | `package:crypto` | ^3.0.0 | SHA-256（`messageKeyHash`，Dart 官方维护、纯本地无网络）|
+| `package:characters` | Flutter 内置 | `sampleExcerpt` 按字素簇安全截断至 60（避免截断多字节/emoji）|
 
-> 不引入第三方 NLP/网络依赖。情感/停用词表内置于 `text_stats`；`crypto` 仅用于本地哈希。
+> 不引入第三方 NLP/网络依赖。情感/停用词表内置于 `text_stats`；`crypto` 仅用于本地哈希；`characters` 随 Flutter SDK 提供，无新增第三方依赖。
 
 ### 7.2 内部依赖
 | 模块 | 接口 | 用途 |
@@ -489,6 +524,7 @@ final String systemPrompt = DefaultPromptTemplate().render(persona);
 | 2026-08-02 | v1.0（草稿）| 初始草稿 | Claude |
 | 2026-08-02 | v1.0.1（草稿）| 代理评审修订：去重/幂等/证据全改用消息键（非 `Message.id`），`.persona` JSON 补 `tags`、`mergedMessageKeys`、`messageKeys`；空会话 `timeline.start/end` 可空、`displayName` 回退 `defaultDisplayName`、`tags==[]`；`PersonaBuildOptions` 加 `defaultDisplayName`；ratio 越界改 ε 容差 clamp/损坏判定；阈值前后置条件统一（`topN≥1`、`min*≥0`）；幂等单测改用"内容键相同/id 不同"夹具、新增空会话往返用例 | Claude |
 | 2026-08-02 | v1.0.2（草稿）| PR #10 Owner 评审修订：(🔴1) 证据/去重键持久化改存 **SHA-256 哈希**（`messageKeys`→`messageKeyHashes`、`mergedMessageKeys`→`mergedMessageKeyHashes`，JSON 示例与验证/约束同步，加 `package:crypto` 依赖），不落原文；(🔴2) `clock` 缺失**不再抛 `ArgumentError`**，改取 epoch 0 哨兵、零配置 `build()` 可用（§1.1/§3.2/§4.1/示例 + 新用例）；(🔴3) 切分以 `Message.isFromMe` 为主判据（§1.2/§3.1/§4.1 + 新用例）；(🟡4) `.persona` `source` 增 `revisions` 版本轨迹（后置/约束/往返/新用例）；(minor) `Persona.id` 派生去首条消息/消息数、`deriveTags` 增 `relation`/`memories`、新增 `_mixedFromMeConversation`/`_convSuperset` 夹具 | Claude |
+| 2026-08-02 | v1.0.3（草稿）| PR #10 Owner 复审修订：(🟡A) `revisions` 统一为**连续 `[v1..vN]`**——JSON 示例补 v2、§1.4 后置/§2.2 校验/§2.3 约束改「连续、末条==顶层」、测试改断言 `[1,2,3]`；(🟡B) §1.3 显式声明对模块 002 `isFromMe` 的依赖，`splitBySender` 返回 `resolved`、新增 `source.segmentationResolved` 与守卫降级（§3.1/§4.1 + 2 新用例 + `_indeterminateDirectionConversation` 夹具）；(minor C) `sampleExcerpt` §2.2 加长度校验（encode 截断/decode 防御性截断，字素簇），加 `package:characters`；(minor D) §4.1 步骤 7 明确 `sortedTargetSenderIds`=观察到的目标发送者集；(minor E) §3.1 增多方会话守卫行、`_convSuperset` 注明目标发送者不变、补 `_moreMessages`/`_evenMoreMessages` 夹具 | Claude |
 
 ---
 
