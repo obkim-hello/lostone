@@ -2,11 +2,11 @@
 
 > 技术规格文档 - 项目配置
 >
-> **版本**：v1.0
+> **版本**：v1.1
 > **状态**：已批准
 > **作者**：Claude
-> **日期**：2026-08-01
-> **批准日期**：2026-08-01
+> **日期**：2026-08-02（v1.1 版本修订）
+> **批准日期**：2026-08-02（v1.1 版本修订）
 > **批准人**：Project Owner
 > **关联 ERD**：ERD-Flutter-Setup-001-20260801.md
 
@@ -87,7 +87,7 @@ Future<void> initializeApp({
 **前置条件**（Preconditions）：
 - [ ] Flutter 绑定已初始化（`WidgetsFlutterBinding.ensureInitialized()`）
 - [ ] Hive 数据库未初始化（首次调用）
-- [ ] Flutter SDK 版本 >= 3.24
+- [ ] Flutter SDK 版本 >= 3.38
 
 **后置条件**（Postconditions）：
 - [ ] Hive 数据库已初始化
@@ -249,7 +249,7 @@ class EnvironmentStatus {
 | 超长 appName | 长度 > 50 | 抛出 `ArgumentError` |
 | 无效 version | `'invalid'` | 抛出 `ArgumentError` |
 | 无效 environment | `'unknown'` | 抛出 `ArgumentError` |
-| Flutter SDK 版本过低 | < 3.24 | 抛出 `EnvironmentError` |
+| Flutter SDK 版本过低 | < 3.38 | 抛出 `EnvironmentError` |
 
 ---
 
@@ -289,7 +289,7 @@ throw InitializationError(
 **异常信息**：
 ```dart
 throw EnvironmentError([
-  'Flutter SDK version 3.10.0 is too low, required >= 3.24.0',
+  'Flutter SDK version 3.10.0 is too low, required >= 3.38.4',
   'Xcode not found',
 ]);
 ```
@@ -503,7 +503,7 @@ final invalidConfigs = [
 ### 8.2 外部依赖
 | 库 | 版本 | 用途 |
 |------|------|------|
-| flutter | >=3.24.0 | UI 框架 |
+| flutter | >=3.38.4 | UI 框架 |
 | hive_flutter | ^1.1.0 | 本地数据库 |
 | flutter_secure_storage | ^9.0.0 | 安全存储 |
 
@@ -660,6 +660,7 @@ void main() async {
 | 日期 | 版本 | 变更内容 | 作者 |
 |------|------|---------|------|
 | 2026-08-01 | v1.0 | 初始版本 | Claude |
+| 2026-08-02 | v1.1 | 对齐实际工具链版本：Flutter SDK 阈值 >= 3.24 → >= 3.38（与 pubspec.yaml `flutter >=3.38.4` 一致）；同步环境检查错误信息示例与依赖表 | Claude |
 
 ---
 

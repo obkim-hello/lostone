@@ -8,7 +8,7 @@
 
 | 模块编号 | 模块名称 | PRD 状态 | ERD 状态 | Spec 状态 | 三文档齐全 | 开发状态 |
 |----------|---------|---------|---------|----------|-----------|----------|
-| 001 | 项目初始化 | ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | 🚧 开发中 |
+| 001 | 项目初始化 | ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | ✅ 已完成 |
 | 002 | 数据导入 | 📝 草稿 | 📝 草稿 | 📝 草稿 | ⚠️ 草稿完成 | 🚫 阻塞 |
 | 003 | Persona 生成 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
 | 004 | 本地模型集成 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
@@ -52,13 +52,15 @@
 
 分支：`feature/PRD-001-flutter-setup`
 
-### ⚠️ 待处理：ERD-001 需修订
-- **SDK 版本约束**：本机安装 Flutter 3.44.8（Dart 3.11），已批准的依赖集解析后最低要求
-  Flutter `>=3.38.4` / Dart `>=3.11.0`，无法在 ERD-001 §2.1 声明的 Flutter 3.24 上 `pub get`。
-  `pubspec.yaml` 已按实际解析结果对齐，**ERD-001 的 3.24 目标需重新评审并修订**。
+### ✅ 已解决：SDK 版本对齐（v1.1）
+- **SDK 版本约束**：✅ 已解决。PRD-001 / ERD-001 / SPEC-001 三文档已随 v1.1 修订将 Flutter 3.24+/Dart 3.0+
+  更正为 **Flutter 3.38+ / Dart 3.11+**（SPEC 环境检查阈值 >= 3.24 → >= 3.38），与 `pubspec.yaml`（`flutter >=3.38.4` / `sdk >=3.11.0`）一致。
 - **原生 runner**：✅ 已执行 `flutter create --org com.obkim --platforms=macos,ios,web .`，补齐 `ios/`、`macos/`、`web/` 目录，可 `flutter run`。
 - **iOS 兼容性验收（PRD-001 §8.4）**：✅ iOS 模拟器编译并运行通过。
-- **macOS 兼容性验收（PRD-001 §8.4）**：⏸ 延后处理（down the road），届时如报 `xcodebuild not found` 先 `sudo xcode-select -s /Applications/Xcode.app`。
+- **macOS 兼容性验收（PRD-001 §8.4）**：⏸ **已决定延后**（不阻塞模块 001 收尾），届时如报 `xcodebuild not found` 先 `sudo xcode-select -s /Applications/Xcode.app`。
+
+> **模块 001 收尾结论**：核心骨架实现完成，iOS/web 运行验证通过，PRD/ERD 版本已对齐并 v1.1 重新批准；
+> macOS 桌面验收明确延后。模块 001 视为**已完成**（macOS 桌面为已知延后项）。
 
 ---
 
@@ -211,6 +213,7 @@ Spec：⚪ 待创建
 | 2026-08-01 | 23:40 | 模块 002 第三轮评审（规模/存储）：三文档同步更新——流式解析（Stream<ParseEvent>）、三层解析产物、iOS 沙盒/macOS bookmark 存储模型、MediaTier 分层、性能指标改为吞吐/内存解耦。仍为草稿，待批准 | Claude |
 | 2026-08-02 | 04:10 | 模块 002 第四轮评审（流式一致性）：ERD/Spec 同步——HTML 流式定案自研分块 tokenizer（package:html 无 SAX）、新增 MediaIndexEvent 明确媒体索引产出所有权与 storedPath 下游回填、补 Message↔MediaIndexEntry 单一真相来源关系、missing_media fixture 改 HTML。ERD/Spec 升至 v0.3，仍为草稿，待批准 | Claude |
 | 2026-08-02 | 04:30 | 模块 002 评审 nit：明确唯一 join key 为 mediaPath==sourceRef，四元组降级为描述性字段、禁止用作关联键（突发连发冲突）。仍为草稿，待批准 | Claude |
+| 2026-08-02 | — | 模块 001 收尾：PRD/ERD/Spec v1.1 对齐工具链版本（Flutter 3.38+/Dart 3.11+，Spec 环境检查阈值 >= 3.24 → >= 3.38）、iOS §8.4 验收通过、macOS 桌面明确延后；模块 001 开发状态更新为"已完成" | Claude |
 
 ---
 
