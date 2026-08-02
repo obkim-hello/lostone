@@ -330,7 +330,14 @@ feat(data-import): 实现微信聊天记录解析器
 Closes #123
 ```
 
+**提交信息要求**：
+- 必须遵循 Conventional Commits 规范
+- 每个 commit 只做一件事
+- commit message 要清晰描述变更
+
 ### Pull Request 规范
+
+**🔴 PR 是合并到 main 的唯一途径**
 
 **PR 标题**：
 ```
@@ -359,7 +366,14 @@ Closes #123
 - [ ] 公共 API 有文档注释
 - [ ] 无 `flutter analyze` 警告
 - [ ] 相关文档已更新
+- [ ] DOCUMENT-STATUS.md 已更新
 ```
+
+**PR 审查要求**：
+- 至少 1 人 approve
+- 通过所有自动化测试（后续配置）
+- 无冲突
+- 符合代码规范
 
 ---
 
