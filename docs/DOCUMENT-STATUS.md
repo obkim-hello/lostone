@@ -16,6 +16,7 @@
 | 006 | 聊天界面 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
 | 007 | 模型管理 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
 | 008 | 数据安全 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
+| 009 | CI/CD 流水线 | 📝 草稿 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
 
 ---
 
@@ -87,6 +88,31 @@
 - [ ] 三文档批准（批准后将文件日期更新为批准日期）
 - [ ] 批准后添加第 4.3 节新增依赖并提交 pubspec.lock
 - [ ] 准备脱敏 fixtures（见 SPEC §7.3）
+
+---
+
+## 📋 模块 009 详细状态
+
+### 文档信息
+| 文档类型 | 文件名 | 状态 | 完成时间 | 批准时间 | 文件路径 |
+|----------|--------|------|---------|---------|---------|
+| PRD | PRD-CICD-Pipeline-009-20260802.md | 📝 草稿 | 2026-08-02 | 待批准 | docs/prd/PRD-CICD-Pipeline-009-20260802.md |
+| ERD | ERD-CICD-Pipeline-009-20260802.md | ⚪ 待创建 | - | 待批准 | docs/erd/ERD-CICD-Pipeline-009-20260802.md |
+| Spec | SPEC-CICD-Pipeline-009-20260802.md | ⚪ 待创建 | - | 待批准 | docs/spec/SPEC-CICD-Pipeline-009-20260802.md |
+
+### 三文档齐全检查
+- ✅ PRD 已创建（草稿）
+- ⚪ ERD 待创建
+- ⚪ Spec 待创建
+- ✅ 编号一致（009）
+- 🚫 **三文档未齐全，禁止开始开发**
+
+### 待办
+- [ ] 编写 ERD-009、SPEC-009
+- [ ] 三文档评审
+- [ ] 三文档批准（批准后将文件日期更新为批准日期）
+- [ ] Phase A（CI）实现：工作流 + 覆盖率闸门 + 治理脚本 + 分支保护
+- [ ] Phase B（CD）随 Phase 7：TestFlight / App Store 发布（阻塞于 Apple Developer 账号）
 
 ---
 
@@ -214,6 +240,7 @@ Spec：⚪ 待创建
 | 2026-08-02 | 04:10 | 模块 002 第四轮评审（流式一致性）：ERD/Spec 同步——HTML 流式定案自研分块 tokenizer（package:html 无 SAX）、新增 MediaIndexEvent 明确媒体索引产出所有权与 storedPath 下游回填、补 Message↔MediaIndexEntry 单一真相来源关系、missing_media fixture 改 HTML。ERD/Spec 升至 v0.3，仍为草稿，待批准 | Claude |
 | 2026-08-02 | 04:30 | 模块 002 评审 nit：明确唯一 join key 为 mediaPath==sourceRef，四元组降级为描述性字段、禁止用作关联键（突发连发冲突）。仍为草稿，待批准 | Claude |
 | 2026-08-02 | — | 模块 001 收尾：PRD/ERD/Spec v1.1 对齐工具链版本（Flutter 3.38+/Dart 3.11+，Spec 环境检查阈值 >= 3.24 → >= 3.38）、iOS §8.4 验收通过、macOS 桌面明确延后；模块 001 开发状态更新为"已完成" | Claude |
+| 2026-08-02 | — | 创建模块 009（CI/CD 流水线）PRD 草稿（Phase A 持续集成 + Phase B 发布随 Phase 7）；ERD/Spec 待创建，三文档未齐全，开发阻塞 | Claude |
 
 ---
 
