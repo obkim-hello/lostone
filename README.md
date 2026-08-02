@@ -38,6 +38,7 @@
 
 **进行中**：
 - 🚧 模块 002 三文档（数据导入）——草稿评审中（PR #4）
+- 🚧 模块 009（CI/CD 流水线）——PRD 草稿（ERD/Spec 待编写）
 
 **查看详细进度**：[开发路线图](docs/overview/ROADMAP.md) · [文档状态](docs/DOCUMENT-STATUS.md)
 
@@ -161,6 +162,7 @@ lostone/
 |------|-----|-----|------|------|
 | 001 - 项目初始化 | [PRD](docs/prd/PRD-Project-Setup-001-20260801.md) | [ERD](docs/erd/ERD-Flutter-Setup-001-20260801.md) | [Spec](docs/spec/SPEC-Project-Config-001-20260801.md) | ✅ 已完成（v1.1） |
 | 002 - 数据导入 | [PRD](docs/prd/PRD-Data-Import-002-20260801.md) | [ERD](docs/erd/ERD-Data-Parsers-002-20260801.md) | [Spec](docs/spec/SPEC-Data-Parser-002-20260801.md) | 📝 草稿 · 评审中 |
+| 009 - CI/CD 流水线 | [PRD](docs/prd/PRD-CICD-Pipeline-009-20260802.md) | ⚪ 待创建 | ⚪ 待创建 | 📝 PRD 草稿 |
 | ... | ... | ... | ... | ... |
 
 **查看完整状态**：[DOCUMENT-STATUS.md](docs/DOCUMENT-STATUS.md)
