@@ -8,7 +8,7 @@
 
 | 模块编号 | 模块名称 | PRD 状态 | ERD 状态 | Spec 状态 | 三文档齐全 | 开发状态 |
 |----------|---------|---------|---------|----------|-----------|----------|
-| 001 | 项目初始化 | ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | ✅ 可开发 |
+| 001 | 项目初始化 | ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | 🚧 开发中 |
 | 002 | 数据导入 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
 | 003 | Persona 生成 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
 | 004 | 本地模型集成 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
@@ -36,6 +36,18 @@
 - ✅ 日期一致（20260801）
 - ✅ 状态：已批准
 - ✅ **三文档齐全，可以开始开发**
+
+### 开发进度
+| 项目 | 状态 | 说明 |
+|------|------|------|
+| Flutter 项目骨架 | ✅ 已实现 | `mobile/` 目录，pubspec.yaml + analysis_options.yaml |
+| 数据模型 | ✅ 已实现 | AppConfig、DependencyConfig、EnvironmentStatus |
+| 初始化服务 | ✅ 已实现 | AppInitializer、initializeApp、checkEnvironment |
+| 状态管理 | ✅ 已实现 | appConfigProvider、initializationProvider |
+| 单元/Widget 测试 | ✅ 已通过 | test/unit、test/widget，14/14 通过 |
+| flutter analyze / test 验证 | ✅ 已通过 | analyze 无 issue；test 14/14；dart format 已应用 |
+
+分支：`feature/PRD-001-flutter-setup`
 
 ---
 
