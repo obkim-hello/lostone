@@ -206,6 +206,7 @@ Spec：⚪ 待创建
 | 2026-08-01 | 22:30 | 创建模块 002（数据导入）三文档草稿，状态为"草稿"，待评审批准 | Claude |
 | 2026-08-01 | 23:40 | 模块 002 第三轮评审（规模/存储）：三文档同步更新——流式解析（Stream<ParseEvent>）、三层解析产物、iOS 沙盒/macOS bookmark 存储模型、MediaTier 分层、性能指标改为吞吐/内存解耦。仍为草稿，待批准 | Claude |
 | 2026-08-02 | 04:10 | 模块 002 第四轮评审（流式一致性）：ERD/Spec 同步——HTML 流式定案自研分块 tokenizer（package:html 无 SAX）、新增 MediaIndexEvent 明确媒体索引产出所有权与 storedPath 下游回填、补 Message↔MediaIndexEntry 单一真相来源关系、missing_media fixture 改 HTML。ERD/Spec 升至 v0.3，仍为草稿，待批准 | Claude |
+| 2026-08-02 | 04:30 | 模块 002 评审 nit：明确唯一 join key 为 mediaPath==sourceRef，四元组降级为描述性字段、禁止用作关联键（突发连发冲突）。仍为草稿，待批准 | Claude |
 
 ---
 

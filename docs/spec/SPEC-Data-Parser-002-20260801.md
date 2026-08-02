@@ -302,8 +302,9 @@ class Message {
 - `mediaPath`：仅媒体类型可非空；其值**等于**对应 `MediaIndexEntry.sourceRef`（源引用）
 
 **Message 与 MediaIndexEntry 的关系（单一真相来源，权威定义见 ERD §3.6 注）**：
-- 每条媒体类 `Message` 恰对应一条 `MediaIndexEntry`，以 `(source, senderId, timestamp, type)` 关联。
-- `Message.mediaPath == MediaIndexEntry.sourceRef`；解析后落地的沙盒字节路径**只存在于** `MediaIndexEntry.storedPath`（由 MediaStore 回填），**不回写 Message**。
+- 每条媒体类 `Message` 恰对应一条 `MediaIndexEntry`。**唯一关联键**：`Message.mediaPath == MediaIndexEntry.sourceRef`（同一文件引用），实现必须按此做 1:1 关联。
+- `(source, senderId, timestamp, type)` **仅为描述性字段，不得用作 join key**——突发连发（同发送者/同秒/多张图）会令四元组冲突而文件引用不冲突。
+- 解析后落地的沙盒字节路径**只存在于** `MediaIndexEntry.storedPath`（由 MediaStore 回填），**不回写 Message**。
 - `Message` 属文本语料层，`MediaIndexEntry` 属媒体索引层；实现不得在两处各自维护可变路径状态。
 
 ---
@@ -826,6 +827,7 @@ print('时间跨度：${conversation.stats.earliest} ~ ${conversation.stats.late
 | 2026-08-01 | v0.1 | 初始草稿 | Claude |
 | 2026-08-01 | v0.2 | 第三轮评审（规模/存储）：`parse` 改流式 `Stream<ParseEvent>` + `parseAll` 便捷法；新增 MediaTier/ParseEvent/MediaIndexEntry 模型与 `mediaTier` 选项；三层产物与流式正常流程；性能指标改为吞吐/内存解耦（废弃 1000 条<60s）；新增 missing_media 边界与测试 11/12/13；补 archive/path_provider 依赖与 iOS 沙盒/macOS bookmark 存储约束 | Claude |
 | 2026-08-01 | v0.3 | 第四轮评审（流式一致性）：新增 `MediaIndexEvent`，明确媒体索引由解析器产出、`storedPath` 由下游 MediaStore 回填；补 Message↔MediaIndexEntry 单一真相来源关系（`mediaPath == sourceRef`）；重写测试 13 为解析器契约、测试 12 fixture 改 HTML（CSV 无文件引用）；`html` 依赖标注为小文件回退（大文件走自研分块 tokenizer） | Claude |
+| 2026-08-02 | v0.3 | 评审 nit：唯一 join key 明确为 `mediaPath == sourceRef`；`(source,senderId,timestamp,type)` 降级为描述性字段、禁止用作 join key（突发连发会令四元组冲突） | Claude |
 
 ---
 

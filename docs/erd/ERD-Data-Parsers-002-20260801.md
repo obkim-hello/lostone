@@ -333,8 +333,9 @@ class MediaIndexEntry {
 }
 ```
 
-> **Message 与 MediaIndexEntry 的关系（单一真相来源）**：每条媒体类 `Message`（`type ∈ {image,voice,video,location}`）恰好对应一条 `MediaIndexEntry`。二者以 `(source, senderId, timestamp, type)` 关联。字段归属明确、互不重复：
-> - `Message.mediaPath` **等于** `MediaIndexEntry.sourceRef`（解析器产出的源引用），是消息在对话语料中的媒体占位引用；
+> **Message 与 MediaIndexEntry 的关系（单一真相来源）**：每条媒体类 `Message`（`type ∈ {image,voice,video,location}`）恰好对应一条 `MediaIndexEntry`。字段归属明确、互不重复：
+> - **唯一关联键（join key）**：`Message.mediaPath == MediaIndexEntry.sourceRef`（同一份文件引用）。实现**必须**按此路径引用做 1:1 关联。
+> - `(source, senderId, timestamp, type)` **仅为描述性字段，不得用作 join key**——突发连发（同一发送者、同秒、多张图）会使四元组冲突而文件引用不冲突。
 > - 解析后落地的沙盒字节路径**只存在于** `MediaIndexEntry.storedPath`（由 `MediaStore` 填充），**不回写 `Message`**；
 > - `Message` 属文本语料层（对话上下文），`MediaIndexEntry` 属媒体索引层（字节解析/浏览）。实现不得在两处各自维护一份可变的路径状态。
 
@@ -918,6 +919,7 @@ test('parse memory stays bounded regardless of file size', () async {
 | 2026-08-01 | v0.1 | 初始草稿 | Claude |
 | 2026-08-01 | v0.2 | 第三轮评审（规模/存储）：`DataParser.parse` 改为 `Stream<ParseEvent>` + `parseAll` 便捷法；新增 ParseEvent/MediaTier/MediaIndexEntry 模型与三层解析产物；`ParseResult` 增加 `mediaIndex`；新增 §4.4 分平台存储模型（iOS 沙盒拷贝+isExcludedFromBackup / macOS security-scoped bookmark）；性能目标改为吞吐/内存解耦；补 archive/path_provider 依赖 | Claude |
 | 2026-08-01 | v0.3 | 第四轮评审（流式一致性）：HTML 流式定案为自研分块 tokenizer（`package:html` 仅小文件回退，因其 DOM-only 无 SAX）；新增 `MediaIndexEvent` 明确媒体索引由解析器产出、`storedPath` 由下游 `MediaStore` 回填；补 Message↔MediaIndexEntry 单一真相来源关系（`mediaPath == sourceRef`，`storedPath` 仅存于索引）；`missing_media` fixture 由 CSV 改为 HTML（CSV 仅占位符无文件引用） | Claude |
+| 2026-08-02 | v0.3 | 评审 nit：明确 Message↔MediaIndexEntry 唯一 join key 为 `mediaPath == sourceRef`；将 `(source,senderId,timestamp,type)` 降级为描述性字段、禁止用作 join key（突发连发会令四元组冲突） | Claude |
 
 ---
 
