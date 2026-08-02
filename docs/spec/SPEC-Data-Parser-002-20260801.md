@@ -114,7 +114,10 @@ Future<Conversation> importFiles(
 ///
 /// 抛出：
 /// - [ParseException]：文件无法解析（致命）。
-Future<ParseResult> parse(String filePath, {ParseOptions options});
+Future<ParseResult> parse(
+  String filePath, {
+  ParseOptions options = const ParseOptions(),
+});
 ```
 
 **输入规格**：
@@ -211,7 +214,7 @@ class ParseOptions {
 #### 模型：Message
 ```dart
 class Message {
-  final String id;              // 稳定标识，去重用
+  final String id;              // 引用/展示标识，非去重键
   final DataSource source;      // 来源
   final String senderId;        // 发送者标识
   final String senderName;      // 发送者展示名
@@ -225,7 +228,7 @@ class Message {
 ```
 
 **字段约束**：
-- `id`：非空，同一 `source` 内唯一
+- `id`：非空，同一 `source` 内唯一；仅作引用/展示，**不用于去重**（去重键见 ERD §6.1 算法1）
 - `senderId` / `senderName`：非空
 - `timestamp`：合法 `DateTime`，本地时区
 - `content`：文本类型非空；非文本类型可为摘要/占位
@@ -238,7 +241,7 @@ class Message {
 | 输入 | 转换规则 | 输出字段 |
 |------|---------|----------|
 | 微信 CSV 时间列 | 解析为本地 `DateTime` | timestamp |
-| iMessage `date`（Apple 纳秒） | `epoch2001 + date` | timestamp |
+| iMessage `date`（Apple 秒/纳秒） | 按 1e12 阈值判定单位后 `epoch2001 + 秒`（ERD §6.1 算法3） | timestamp |
 | 发送方标识 ∈ myIdentifiers | true | isFromMe |
 | 系统消息文本模式匹配 | 标记为 `MessageType.system` | type |
 | 文本首尾空白 | trim | content |
@@ -410,11 +413,17 @@ test('isolates single-file failure as warning', () async {
 });
 ```
 
-#### 测试用例 5：iMessage Apple 时间转换
+#### 测试用例 5：iMessage Apple 时间转换（精确断言，覆盖两种单位）
 ```dart
-test('converts Apple nanosecond date to DateTime', () {
-  final DateTime t = appleDateToDateTime(694224000000000000);
-  expect(t.year, greaterThan(2001));
+// 662688000 秒 == 662688000000000000 纳秒 == 2022-01-01T00:00:00Z（自 2001-01-01Z 起）
+test('converts Apple nanosecond date to exact UTC datetime', () {
+  final DateTime t = appleDateToDateTime(662688000000000000).toUtc();
+  expect(t, DateTime.utc(2022, 1, 1));
+});
+
+test('converts Apple second-format date to exact UTC datetime', () {
+  final DateTime t = appleDateToDateTime(662688000).toUtc();
+  expect(t, DateTime.utc(2022, 1, 1));
 });
 ```
 

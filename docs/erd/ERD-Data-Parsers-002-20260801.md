@@ -204,7 +204,10 @@ class Message {
     this.metadata = const <String, dynamic>{},
   });
 
-  /// 稳定的消息标识（用于去重）。
+  /// 稳定的消息标识（引用/展示用途，**非去重键**）。
+  ///
+  /// 去重以内容复合键为准（见 ERD §6.1 算法1）；解析器可用
+  /// `<source>-<序号>` 等生成，仅需在单次导入内可引用即可。
   final String id;
 
   /// 来源数据源。
@@ -280,7 +283,8 @@ class Conversation {
   /// 主要数据源。
   final DataSource source;
 
-  /// 参与者展示名列表。
+  /// 参与者展示名列表（由预处理后消息的 `senderName` 去重收集，
+  /// 按首次出现顺序排列）。
   final List<String> participants;
 
   /// 已清洗、去重、排序后的消息。
@@ -315,7 +319,10 @@ class ImportStats {
   /// 解析出的原始条数。
   final int totalParsed;
 
-  /// 去重后的条数。
+  /// 清洗与去重后的最终条数（等于 `Conversation.messages.length`）。
+  ///
+  /// 注意：`skipped` 同时包含系统消息过滤与去重两部分，故本字段是
+  /// “清洗+去重后”的结果，不仅是去重。
   final int afterDedup;
 
   /// 被跳过/过滤的条数。
@@ -472,7 +479,10 @@ abstract interface class DataParser {
   ///
   /// 抛出：
   /// - [ParseException]：当文件无法解析（致命）。
-  Future<ParseResult> parse(String filePath, {ParseOptions options});
+  Future<ParseResult> parse(
+    String filePath, {
+    ParseOptions options = const ParseOptions(),
+  });
 }
 ```
 
@@ -495,7 +505,7 @@ class DataImportService {
   Future<Conversation> importFiles(
     List<String> filePaths, {
     DataSource? source,
-    ParseOptions options,
+    ParseOptions options = const ParseOptions(),
   });
 }
 ```
@@ -524,7 +534,8 @@ final importStateProvider =
 #### 算法 1：去重
 **目的**：去除跨文件/重复导入产生的完全重复消息
 
-**键**：`hash(source | senderId | timestamp.iso | content | type)`
+**去重键（唯一权威定义）**：`hash(source | senderId | timestamp.iso | content | type)`。
+`Message.id` **不参与去重**——它只是引用标识，不同解析器/多次导入可能给相同内容分配不同 id，故不能用作去重依据。
 
 **步骤**：
 ```
@@ -540,10 +551,13 @@ final importStateProvider =
 - 复杂度：O(n log n)
 
 #### 算法 3：Apple 时间转换（iMessage）
+`chat.db` 的 `message.date` 有两种单位：macOS 10.13 之前为**秒**，之后为**纳秒**（均自 2001-01-01 UTC 起）。
+以数量级判定单位（确定性阈值）：秒格式约 10^8~10^9，纳秒格式约 10^17~10^18，取 `1e12` 为分界，二者相差远超阈值，未来数十年内不会歧义。
 ```
+const int kAppleNanoThreshold = 1000000000000; // 1e12
 epoch2001 = DateTime.utc(2001, 1, 1)
-若 date 为纳秒 → seconds = date / 1e9；否则按秒
-result = epoch2001.add(Duration(seconds: seconds)).toLocal()
+seconds = date.abs() >= kAppleNanoThreshold ? date ~/ 1000000000 : date
+result = epoch2001.add(Duration(seconds: seconds)) // 以 UTC 计算，展示层再 toLocal()
 ```
 
 ### 6.2 解析流程
@@ -579,13 +593,25 @@ class ParseException implements Exception {
   String toString() =>
       'ParseException(${source.name}): $message${details != null ? ' - $details' : ''}';
 }
+
+/// 整体导入失败（所有文件均未产出任何消息时由 [DataImportService] 抛出）。
+class ImportException implements Exception {
+  /// 创建一个导入异常。
+  ImportException(this.message);
+
+  /// 错误摘要。
+  final String message;
+
+  @override
+  String toString() => 'ImportException: $message';
+}
 ```
 
 #### 处理策略
 | 错误类型 | 处理方式 | 用户提示 |
 |----------|---------|---------|
 | `ParseException`（单文件） | 隔离为告警，继续其他文件 | "某文件解析失败，已跳过" |
-| 全部文件失败 | 抛出并展示错误页 | "没有可导入的数据" |
+| `ImportException`（全部文件失败） | 抛出并展示错误页 | "没有可导入的数据" |
 | `missing_exif`（告警） | 记录告警并跳过该条 | 结果页显示告警数 |
 | 权限不足（chat.db） | 明确提示授权步骤 | "需要访问权限" |
 
