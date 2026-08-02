@@ -1,0 +1,18 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Source code
+*.dart text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.sh text eol=lf
+
+# iOS/macOS
+*.pbxproj text eol=lf
+*.plist text eol=lf
+*.xcscheme text eol=lf
+
+# Git
+.gitattributes text eol=lf
+.gitignore text eol=lf
