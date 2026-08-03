@@ -27,7 +27,7 @@
 
 ## 📚 项目状态
 
-**当前阶段**：Phase 1 - 数据导入（文档评审中）
+**当前阶段**：Phase 1 - 数据导入（模块 002 开发中）｜ Phase 2 - Persona 生成（模块 003 ✅ 已完成）｜ Phase 3 - 混合模型集成（模块 004 文档草稿，待批准）
 
 **已完成**：
 - ✅ 项目文档体系建立
@@ -39,6 +39,7 @@
 **进行中**：
 - 🚧 模块 002（数据导入）——三文档已批准（v1.0）；核心切片**已完成**（模型 + WeChatParser CSV/TXT/HTML 流式 + WeFlowParser（真实微信 WeFlow 导出 JSON/CSV/TXT/HTML 四格式）+ InstagramParser + WeiboParser（direct_messages API v2 JSON）+ IMessageParser（chat.db 只读，含 attributedBody 回退）+ PhotoExifParser（EXIF/GPS）+ MediaStore 分层字节落地（ERD §4.4）+ 预处理 + 导入编排 + Apple 时间转换 + Riverpod 导入状态层，测试 122/122、analyze 0 警告，四轮代理评审并修复 SPEC 合规缺口）；ERD §3.4 文件范围内的解析器全部落地，10 万条流式吞吐已宿主验证（ERD §7.3）；原生存储装配、导入 UI（Phase 4）、5GB 设备内存采样、微博/WeFlow 契约 Owner 终审分阶段推进
 - ✅ 模块 003（Persona 生成，Phase 2）——三文档**已批准**（PRD/ERD/Spec v1.0.4，编号 003，2026-08-02），纯 Dart、离线、无 LLM 的确定性五层 Persona 生成引擎（记忆提取 + 性格分析 + Builder 版本/增量 + `.persona` 序列化 + Prompt 渲染），输入锚定模块 002 `Conversation`；**已完成 TDD 实现**（65 用例通过，模块覆盖率 95.3%，`flutter analyze` 0 警告）
+- 📝 模块 004（LLM Persona Builder，含 Runtime 抽象层，Phase 3）——三文档**草稿已就绪**（PRD/ERD/Spec，编号 004，2026-08-02），**待评审批准**（🚫 阻塞）。以 **LLM 蒸馏**产出忠实五层人格并映射进模块 003 现有 `Persona` 契约（**输出契约不变**、不重写 003）；默认本地 LiteRT、云端 API 显式授权 opt-in；统计引擎（003）降级为预处理 + 离线兜底（依据 ADR-004）。原「模块 005 云端 API 集成」已折叠并入本模块
 
 **查看详细进度**：[开发路线图](docs/overview/ROADMAP.md) · [文档状态](docs/DOCUMENT-STATUS.md)
 
@@ -163,6 +164,7 @@ lostone/
 | 001 - 项目初始化 | [PRD](docs/prd/PRD-Project-Setup-001-20260801.md) | [ERD](docs/erd/ERD-Flutter-Setup-001-20260801.md) | [Spec](docs/spec/SPEC-Project-Config-001-20260801.md) | ✅ 已完成（v1.1） |
 | 002 - 数据导入 | [PRD](docs/prd/PRD-Data-Import-002-20260801.md) | [ERD](docs/erd/ERD-Data-Parsers-002-20260801.md) | [Spec](docs/spec/SPEC-Data-Parser-002-20260801.md) | ✅ 已批准 · 🚧 开发中 |
 | 003 - Persona 生成 | [PRD](docs/prd/PRD-Persona-Generation-003-20260802.md) | [ERD](docs/erd/ERD-Persona-Engine-003-20260802.md) | [Spec](docs/spec/SPEC-Persona-Builder-003-20260802.md) | ✅ 已批准（v1.0.4）· ✅ 已完成 |
+| 004 - LLM Persona Builder | [PRD](docs/prd/PRD-LLM-Persona-Builder-004-20260802.md) | [ERD](docs/erd/ERD-LLM-Persona-Builder-004-20260802.md) | [Spec](docs/spec/SPEC-LLM-Persona-Builder-004-20260802.md) | 📝 草稿 · 待批准 |
 | ... | ... | ... | ... | ... |
 
 **查看完整状态**：[DOCUMENT-STATUS.md](docs/DOCUMENT-STATUS.md)

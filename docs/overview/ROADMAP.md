@@ -8,7 +8,7 @@
 
 **项目名称**：Lostone  
 **启动日期**：2026年8月  
-**当前阶段**：Phase 1 - 数据输入与解析（模块 002 开发中）；Phase 2 - Persona 生成引擎（模块 003 三文档草稿已就绪，待批准）  
+**当前阶段**：Phase 1 - 数据输入与解析（模块 002 开发中）；Phase 2 - Persona 生成引擎（模块 003 ✅ 已完成）；Phase 3 - 混合模型集成（模块 004 LLM Persona Builder 三文档草稿已就绪，待批准）  
 **预计首个版本发布**：2026年11月（12周后）
 
 ---
@@ -19,8 +19,8 @@
 |------|------|------|------|-----------|
 | Phase 0 | 项目初始化 | 第 1 周 | ✅ 完成 | 项目骨架、文档体系 |
 | Phase 1 | 数据输入与解析 | 第 2-3 周 | 🟡 进行中 | 数据解析器、导入流程 |
-| Phase 2 | Persona 生成引擎 | 第 4-5 周 | 🟡 进行中（文档草稿） | Persona Builder、五层模型 |
-| Phase 3 | 混合模型集成 | 第 6-7 周 | ⚪ 未开始 | LiteRT 集成、云端 API |
+| Phase 2 | Persona 生成引擎 | 第 4-5 周 | ✅ 完成（模块 003） | Persona Builder、五层模型 |
+| Phase 3 | 混合模型集成 | 第 6-7 周 | 🟡 进行中（模块 004 文档草稿） | LLM Persona Builder、LiteRT + 云端 Runtime |
 | Phase 4 | UI 实现 | 第 8-9 周 | ⚪ 未开始 | Material Design UI |
 | Phase 5 | 数据持久化与安全 | 第 10 周 | ⚪ 未开始 | 加密存储、生物识别 |
 | Phase 6 | 测试与优化 | 第 11 周 | ⚪ 未开始 | 全面测试、性能优化 |
@@ -141,12 +141,12 @@
 
 **目标**：实现从聊天记录生成 Persona
 
-> **文档状态（2026-08-02）**：模块 003 三文档草稿已就绪并交叉引用，**待评审批准**（开发状态 🚫 阻塞）。
+> **文档状态（2026-08-02）**：模块 003 三文档已批准（v1.0.4），**TDD 实现完成（PR #11）**，开发状态 ✅ 已完成。
 > - PRD：[PRD-Persona-Generation-003-20260802.md](../prd/PRD-Persona-Generation-003-20260802.md)
 > - ERD：[ERD-Persona-Engine-003-20260802.md](../erd/ERD-Persona-Engine-003-20260802.md)
 > - Spec：[SPEC-Persona-Builder-003-20260802.md](../spec/SPEC-Persona-Builder-003-20260802.md)
 >
-> **范围定案**：模块 003 为纯 Dart、离线、**无 LLM/无网络**的确定性五层 Persona 生成引擎（统计/规则法），输入锚定模块 002 `Conversation`；LLM 增强留待 Phase 3 之后。下方任务清单据此细化。
+> **范围定案**：模块 003 为纯 Dart、离线、**无 LLM/无网络**的确定性五层 Persona 生成引擎（统计/规则法），输入锚定模块 002 `Conversation`。实测其产出偏单薄/易失真，**LLM 增强由 Phase 3 的模块 004 承接**（见 ADR-004）；模块 003 降级为预处理 + 离线兜底。
 
 ### 关键任务
 
@@ -197,6 +197,13 @@
 ## Phase 3: 混合模型集成（第 6-7 周）
 
 **目标**：实现本地模型 + 云端 API 混合推理
+
+> **文档状态（2026-08-02）**：模块 004（LLM Persona Builder，**含 Runtime 抽象层**）三文档草稿已就绪并交叉引用，**待评审批准**（开发状态 🚫 阻塞）。原「模块 005 云端 API 集成」**已折叠并入模块 004** 的 Runtime 抽象层。
+> - PRD：[PRD-LLM-Persona-Builder-004-20260802.md](../prd/PRD-LLM-Persona-Builder-004-20260802.md)
+> - ERD：[ERD-LLM-Persona-Builder-004-20260802.md](../erd/ERD-LLM-Persona-Builder-004-20260802.md)
+> - Spec：[SPEC-LLM-Persona-Builder-004-20260802.md](../spec/SPEC-LLM-Persona-Builder-004-20260802.md)
+>
+> **范围定案（ADR-004）**：以 **LLM 蒸馏**产出忠实五层人格，映射进模块 003 现有 `Persona` 契约（**输出契约不变**、不重写 003）；默认本地 LiteRT、云端 API 显式授权 opt-in；统计引擎（003）降级为预处理 + 离线兜底；测试由 byte-identical 改为契约/结构断言 + mock Runtime + 快照/人工评审。下方任务清单据此归入模块 004。
 
 ### 关键任务
 
@@ -495,6 +502,8 @@
 ### 2026-08-02
 - 同步实际进度：Phase 0 标记完成；Phase 1（数据导入/模块 002）转「进行中」；Phase 2（Persona 生成引擎/模块 003）三文档草稿就绪，标记「进行中（文档草稿）」，待批准
 - Phase 2 补充模块 003 三文档链接与范围定案（纯 Dart、离线、无 LLM 的确定性五层引擎）
+- 模块 003 三文档批准（v1.0.4）+ TDD 实现完成（PR #11），Phase 2 标记 ✅ 完成
+- 新增模块 004（LLM Persona Builder，含 Runtime 抽象层）三文档草稿并归入 Phase 3；原模块 005（云端 API 集成）折叠并入 004；Phase 3 转「进行中（文档草稿）」，待批准（依据 ADR-004）
 
 ### 2026-08-01
 - 创建 ROADMAP.md
