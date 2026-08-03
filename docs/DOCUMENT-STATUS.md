@@ -304,6 +304,7 @@ Spec：⚪ 待创建
 | 2026-08-02 | — | 模块 003 PR #10 Owner 复审修订（三文档升 v1.0.3，仍草稿）：处理复审 2 🟡 + 3 minor（不阻塞设计批准、编码前解决）——(🟡A) `revisions` 统一为**连续 `[v1..vN]`**（`build` 写 v1、每 `update` 追加、末条==顶层、不裁剪），消除示例↔"每次追加"↔校验矛盾；(🟡B) 显式声明默认切分依赖模块 002 可靠填充 `isFromMe`，`splitBySender` 新增**方向/组成不可判定守卫**（返回 `resolved`）+ `PersonaSource.segmentationResolved`——不可判定/多方且无显式指定时降 `low`、不臆断并入；(minor C) `sampleExcerpt` 加长度校验（encode 端字素簇截断 60、decode 端防御性截断，+`package:characters`）；(minor D) 明确 `id` 的 `sortedTargetSenderIds`=切分后观察到的目标发送者集（非原始入参），界定超集稳定性范围；(minor E) 声明 v1 仅正式支持 1:1、群聊多人格拆分不在范围（多方走守卫）| Claude |
 | 2026-08-02 | — | 模块 003 PR #10 Owner 复审修订（三文档升 v1.0.4，仍草稿）：处理 1 🟡——**守卫门控自相矛盾且多方分支存在漏洞**。拆分门控：方向不可判定分支（`isFromMe` 全为 `false`）门控 = `personSenderIds` **且** `myIdentifiers` 皆未传（`myIdentifiers` 确能解决方向、可抑制）；多方会话分支（目标发送者 >1）门控 = **仅** `personSenderIds` 未传——`myIdentifiers` 只判"谁是我"、无法在多个对方中指目标，**不得抑制**多方守卫。ERD §3.1/§4.2/§5.1/§5.2、SPEC §1.4/§3.1/§4.1/§6.1(+2 用例)/§6.2、PRD 功能1/§1.3 措辞统一 | Claude |
 | 2026-08-02 | — | ✅ 批准模块 003 三文档（v1.0.4，多轮评审后）：PRD/ERD/SPEC 状态转"已批准"、批准日期 2026-08-02、批准人 Project Owner（文件日期即批准日期，无需重命名）。矩阵行 003 → ✅/✅/✅、三文档齐全、开发状态转"开发中"，解除阻塞，进入 TDD 编码 | Project Owner |
+| 2026-08-02 | df40c4e | ✅ 模块 003 TDD 实现完成（PR #11）：五层模型 + text_stats/MemoriesAnalyzer/PersonaAnalyzer/PersonaBuilder/PersonaCodec/PromptTemplate 全部落地；65 用例通过、模块覆盖率 95.3%、`flutter analyze` 0 警告。矩阵行 003 开发状态 → ✅ 已完成 | Claude |
 
 ---
 
