@@ -31,6 +31,10 @@ dependencies:
   sqlite3_flutter_libs: ^0.5.24
   exif: ^3.3.0
 
+  # Persona Generation (模块 003)
+  crypto: ^3.0.0
+  characters: ^1.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

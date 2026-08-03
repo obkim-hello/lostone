@@ -3,7 +3,7 @@
 > 产品需求文档 - Persona 生成（Persona Generation）
 >
 > **版本**：v1.0.4
-> **状态**：📝 草稿
+> **状态**：✅ 已批准
 > **作者**：Claude
 > **日期**：2026-08-02
 > **优先级**：P0
@@ -19,8 +19,8 @@
 | **关联 ERD** | ERD-Persona-Engine-003-20260802.md |
 | **关联 Spec** | SPEC-Persona-Builder-003-20260802.md |
 | **依赖模块** | PRD-002（数据导入）|
-| **批准日期** | 待批准 |
-| **批准人** | 待批准 |
+| **批准日期** | 2026-08-02 |
+| **批准人** | Project Owner |
 
 ---
 
@@ -372,7 +372,8 @@
 | 2026-08-02 | v1.0.2（草稿）| PR #10 Owner 评审修订：(🔴1 隐私) 证据/去重键持久化改存 **SHA-256 哈希**、绝不落逐条原文，`.persona` 体积不膨胀（功能3/功能A/§4.2/§8.1）；(🔴3 切分) 目标人物切分以 `Message.isFromMe` 为主判据、`personSenderIds`/`myIdentifiers` 覆盖，用户消息不再污染人格（功能1/§5.1）；(🟡4 历史) "history 摘要"落地为 `PersonaSource.revisions` 版本轨迹，兑现用户故事 2；(minor) 统一命名 `sourceSummary` 即 `PersonaSource`（JSON key `source`）| Claude |
 | 2026-08-02 | v1.0.3（草稿）| PR #10 Owner 复审修订：(🟡B) 显式声明默认切分依赖模块 002 可靠填充 `isFromMe`（§7.2），新增**守卫降级**——方向不可判定/多方会话且未显式指定时低置信 + 标记切分不可靠、不臆断并入（功能1/§5.1）；(minor E) 明确 v1 仅正式支持 1:1 会话、群聊多人格拆分不在范围（§1.3）。ERD/SPEC 同步 `revisions` 连续性(A)、`sampleExcerpt` 长度校验(C)、`id` 目标发送者定义(D) | Claude |
 | 2026-08-02 | v1.0.4（草稿）| PR #10 Owner 复审修订：(🟡) 守卫降级**门控拆分**——方向不可判定分支需 `personSenderIds` 与 `myIdentifiers` 皆未传方触发；多方会话分支只要未显式指定 `personSenderIds` 即触发，`myIdentifiers` 不抑制（功能1/§1.3）。ERD/SPEC 同步 | Claude |
+| 2026-08-02 | v1.0.4（已批准）| Project Owner 批准三文档，开发状态解除阻塞，进入编码（TDD） | Project Owner |
 
 ---
 
-> 本文档遵循 Lostone 项目的文档驱动开发规范。当前为**草稿**，开发状态**阻塞**，需三文档评审批准后方可编码；批准时请将日期改为批准日期并同步重命名文件。
+> 本文档遵循 Lostone 项目的文档驱动开发规范。当前为**已批准**（2026-08-02），三文档齐全，开发状态**可开发**。
