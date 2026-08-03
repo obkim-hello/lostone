@@ -8,7 +8,7 @@
 
 **项目名称**：Lostone  
 **启动日期**：2026年8月  
-**当前阶段**：Phase 1 - 数据输入与解析（模块 002 开发中）；Phase 2 - Persona 生成引擎（模块 003 ✅ 已完成）；Phase 3 - 混合模型集成（模块 004 LLM Persona Builder 三文档草稿已就绪，待批准）  
+**当前阶段**：Phase 1 - 数据输入与解析（模块 002 开发中）；Phase 2 - Persona 生成引擎（模块 003 ✅ 已完成）；Phase 3 - LLM 集成（模块 007 模型管理[提前] + 模块 004 LLM 集成 三文档草稿已就绪，待批准）  
 **预计首个版本发布**：2026年11月（12周后）
 
 ---
@@ -20,7 +20,7 @@
 | Phase 0 | 项目初始化 | 第 1 周 | ✅ 完成 | 项目骨架、文档体系 |
 | Phase 1 | 数据输入与解析 | 第 2-3 周 | 🟡 进行中 | 数据解析器、导入流程 |
 | Phase 2 | Persona 生成引擎 | 第 4-5 周 | ✅ 完成（模块 003） | Persona Builder、五层模型 |
-| Phase 3 | 混合模型集成 | 第 6-7 周 | 🟡 进行中（模块 004 文档草稿） | LLM Persona Builder、LiteRT + 云端 Runtime |
+| Phase 3 | LLM 集成 | 第 6-7 周 | 🟡 进行中（模块 007 + 004 文档草稿） | 模型管理[提前]、LLM 蒸馏 + 对话引擎、flutter_gemma/LiteRT + 云端 Runtime |
 | Phase 4 | UI 实现 | 第 8-9 周 | ⚪ 未开始 | Material Design UI |
 | Phase 5 | 数据持久化与安全 | 第 10 周 | ⚪ 未开始 | 加密存储、生物识别 |
 | Phase 6 | 测试与优化 | 第 11 周 | ⚪ 未开始 | 全面测试、性能优化 |
@@ -198,45 +198,44 @@
 
 **目标**：实现本地模型 + 云端 API 混合推理
 
-> **文档状态（2026-08-02）**：模块 004（LLM Persona Builder，**含 Runtime 抽象层**）三文档草稿已就绪并交叉引用，**待评审批准**（开发状态 🚫 阻塞）。原「模块 005 云端 API 集成」**已折叠并入模块 004** 的 Runtime 抽象层。
-> - PRD：[PRD-LLM-Persona-Builder-004-20260802.md](../prd/PRD-LLM-Persona-Builder-004-20260802.md)
-> - ERD：[ERD-LLM-Persona-Builder-004-20260802.md](../erd/ERD-LLM-Persona-Builder-004-20260802.md)
-> - Spec：[SPEC-LLM-Persona-Builder-004-20260802.md](../spec/SPEC-LLM-Persona-Builder-004-20260802.md)
+> **文档状态（2026-08-02）**：Phase 3 含**两个模块**三文档草稿，均**待评审批准**（开发状态 🚫 阻塞）。原「模块 005 云端 API 集成」**已折叠并入模块 004** 的 Runtime 抽象层。
+> - **模块 007（模型管理，提前至 Phase 3）**——作为模块 004 本地默认路径的**前置依赖**（无就绪模型则 004 无法真机验证）；薄封装 flutter_gemma `ModelFileManager`（ADR-005）：
+>   - PRD：[PRD-Model-Management-007-20260802.md](../prd/PRD-Model-Management-007-20260802.md)
+>   - ERD：[ERD-Model-Management-007-20260802.md](../erd/ERD-Model-Management-007-20260802.md)
+>   - Spec：[SPEC-Model-Management-007-20260802.md](../spec/SPEC-Model-Management-007-20260802.md)
+> - **模块 004（LLM 集成：蒸馏 + 对话引擎 + Runtime 抽象层，v1.1）**：
+>   - PRD：[PRD-LLM-Integration-004-20260802.md](../prd/PRD-LLM-Integration-004-20260802.md)
+>   - ERD：[ERD-LLM-Integration-004-20260802.md](../erd/ERD-LLM-Integration-004-20260802.md)
+>   - Spec：[SPEC-LLM-Integration-004-20260802.md](../spec/SPEC-LLM-Integration-004-20260802.md)
 >
-> **范围定案（ADR-004）**：以 **LLM 蒸馏**产出忠实五层人格，映射进模块 003 现有 `Persona` 契约（**输出契约不变**、不重写 003）；默认本地 LiteRT、云端 API 显式授权 opt-in；统计引擎（003）降级为预处理 + 离线兜底；测试由 byte-identical 改为契约/结构断言 + mock Runtime + 快照/人工评审。下方任务清单据此归入模块 004。
+> **范围定案（ADR-004 + ADR-005）**：模块 004 两大支柱——(A) **LLM 蒸馏**产出忠实五层人格，映射进模块 003 现有 `Persona` 契约（**输出契约不变**、不重写 003）；(B) **对话引擎 ChatEngine**——以 `Persona` 的 system prompt 驱动多轮流式对话（滑窗上下文、硬规则强制、本地/云端切换）。端侧栈定为 **flutter_gemma/LiteRT-LM**（ADR-005），模型就绪由模块 007 提供；默认本地、云端 opt-in；统计引擎（003）降级为预处理 + 离线兜底；测试由 byte-identical 改为契约/结构断言 + mock Runtime + 快照/人工评审 + 真机冒烟。开发者调试台（dev-only）供真机质量评审，正式聊天 UI 属模块 006。
 
 ### 关键任务
 
-#### Week 6: 本地模型集成
-- [ ] 集成 Google AI Edge LiteRT
-- [ ] 实现模型下载管理器
-  - [ ] 从 Hugging Face 下载
-  - [ ] 断点续传支持
-  - [ ] 下载进度显示
-- [ ] 支持多模型切换
-  - [ ] Gemma 4 (2B/4B/12B)
-  - [ ] Llama 3.2 (1B/3B)
-  - [ ] Qwen 2.5 (3B/7B)
-  - [ ] Phi-3 (mini/small)
-- [ ] Metal GPU 加速配置
+#### Week 6: 模型管理（模块 007）+ 本地推理底座
+- [ ] 集成 **flutter_gemma**（LiteRT-LM/MediaPipe，ADR-005）
+- [ ] 模型下载管理器（薄封装 `ModelFileManager`，模块 007）
+  - [ ] 从 Hugging Face 下载（HF token 经 Secure Storage）
+  - [ ] 断点续传 + 进度流（`Stream<InstallEvent>`）
+  - [ ] 校验 + 落盘（app documents，内存映射）
+- [ ] ModelCatalog + 多模型切换（`ModelHandle` / `getActiveModelHandle()`）
+  - [ ] SmolLM 135M（冒烟/CPU）
+  - [ ] Gemma 3 1B（0.5GB，设备默认）
+  - [ ] Gemma 4 E2B（2.4GB，高质量可选）
+- [ ] 设备能力探测（Metal/内存档、引擎选择）+ iOS 装配（entitlements/静态链接）
 
-#### Week 7: 云端 API 集成与对话引擎
-- [ ] 云端 API 客户端
-  - [ ] OpenAI API 客户端
-  - [ ] Anthropic API 客户端
-  - [ ] Google Gemini API 客户端
-- [ ] API Key 安全存储
-  - [ ] Flutter Secure Storage 集成
-  - [ ] 加密存储 API Key
-- [ ] 成本追踪系统
-  - [ ] Token 使用量统计
-  - [ ] 预估费用计算
-  - [ ] 月度使用报告
-- [ ] 对话引擎
-  - [ ] Prompt 模板系统
+#### Week 7: LLM 集成（模块 004）——蒸馏 + 对话引擎 + Runtime
+- [ ] Runtime 抽象层（LiteRtRuntime[flutter_gemma] / CloudRuntime / FallbackRuntime + MockRuntime）
+- [ ] LLM 蒸馏（PromptComposer analyzer/builder → DistilledPersona → PersonaMapper → `Persona`）
+- [ ] 云端 API 客户端（OpenAI/Anthropic/Gemini，opt-in）+ API Key 安全存储（Secure Storage）
+- [ ] 对话引擎（ChatEngine）
+  - [ ] system prompt 经现有 `PromptTemplate.render()`（契约不变）
   - [ ] 上下文管理（滑动窗口）
-  - [ ] 流式响应
+  - [ ] 流式响应（`Stream<ChatDelta>`）+ 取消/错误分类
+  - [ ] 聊天时硬规则强制（HardRuleGuard）
   - [ ] 统一接口（本地/云端）
+- [ ] 隐私门控 + 统计兜底（仅蒸馏）+ 增量更新（复用模块 003 语义）
+- [ ] 开发者调试台（dev-only）真机质量评审
 
 ### 关键文件
 - `mobile/lib/services/model_manager.dart`
@@ -252,9 +251,11 @@
 - [ ] 成本追踪误差 < 5%
 
 ### 交付物
-- ⚪ LiteRT 集成
+- ⚪ 模型管理（模块 007：下载/存储/切换，flutter_gemma 封装）
+- ⚪ flutter_gemma/LiteRT 集成（本地推理底座）
 - ⚪ 云端 API 客户端
-- ⚪ 对话引擎
+- ⚪ LLM 蒸馏（模块 004 支柱 A）
+- ⚪ 对话引擎 ChatEngine（模块 004 支柱 B）
 - ⚪ 成本追踪系统
 
 ---
@@ -283,8 +284,8 @@
 
 #### Week 9: 设置与细节
 - [ ] 设置页
-  - [ ] 模型管理
-    - [ ] 本地模型库（下载、删除、切换）
+  - [ ] 模型管理 **UI**（消费模块 007 的 `ModelRepository` + `Stream<InstallEvent>`；下载/存储/切换逻辑已在 Phase 3 模块 007 落地）
+    - [ ] 本地模型库界面（下载进度、删除、切换）
     - [ ] 云端 API 配置（输入 API Key）
     - [ ] 性能对比和推荐
   - [ ] 数据备份与导出
@@ -504,6 +505,8 @@
 - Phase 2 补充模块 003 三文档链接与范围定案（纯 Dart、离线、无 LLM 的确定性五层引擎）
 - 模块 003 三文档批准（v1.0.4）+ TDD 实现完成（PR #11），Phase 2 标记 ✅ 完成
 - 新增模块 004（LLM Persona Builder，含 Runtime 抽象层）三文档草稿并归入 Phase 3；原模块 005（云端 API 集成）折叠并入 004；Phase 3 转「进行中（文档草稿）」，待批准（依据 ADR-004）
+- 新增 ADR-005（端侧栈 flutter_gemma/LiteRT-LM）；**模块 007（模型管理）提前至 Phase 3** 并出三文档草稿（004 本地路径前置依赖，薄封装 flutter_gemma `ModelFileManager`）
+- **模块 004 拓宽为「LLM 集成」**（文件重命名 LLM-Persona-Builder → LLM-Integration，三文档升 v1.1）：在蒸馏之外新增**对话引擎 ChatEngine**（滑窗上下文/流式/硬规则强制/本地云端切换）+ 开发者调试台（dev-only）；接入 flutter_gemma/模块 007；Phase 3 Week 6/7 任务清单重排为「模型管理 + 本地底座」→「LLM 集成」
 
 ### 2026-08-01
 - 创建 ROADMAP.md

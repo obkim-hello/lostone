@@ -1,8 +1,8 @@
-# SPEC-004-LLM Persona Builder
+# SPEC-004-LLM 集成
 
-> 技术规格 - LLM Persona Builder（LLM 蒸馏人格，含 Runtime 抽象层）
+> 技术规格 - LLM 集成（LLM 蒸馏人格 + 对话引擎，含 Runtime 抽象层）
 >
-> **版本**：v1.0
+> **版本**：v1.1
 > **状态**：📝 草稿
 > **作者**：Claude
 > **日期**：2026-08-02
@@ -15,17 +15,17 @@
 | 项目 | 内容 |
 |------|------|
 | **Spec 编号** | SPEC-004 |
-| **模块名称** | LLM Persona Builder |
-| **关联 PRD** | PRD-LLM-Persona-Builder-004-20260802.md |
-| **关联 ERD** | ERD-LLM-Persona-Builder-004-20260802.md |
-| **依赖模块** | 模块 002（数据导入）、模块 003（Persona 生成/契约）|
-| **关联决策** | ADR-002、ADR-004 |
+| **模块名称** | LLM 集成（蒸馏 + 对话引擎 + Runtime 抽象层）|
+| **关联 PRD** | PRD-LLM-Integration-004-20260802.md |
+| **关联 ERD** | ERD-LLM-Integration-004-20260802.md |
+| **依赖模块** | 模块 002（数据导入）、模块 003（Persona 生成/契约）、模块 007（模型管理）|
+| **关联决策** | ADR-002、ADR-004、ADR-005 |
 
 ---
 
 ## 1. 范围
 
-规定 `LlmPersonaBuilder` 与 `PersonaRuntime` 的输入输出契约、前后置条件、边界处理、测试用例与性能要求。**不涉及**聊天界面（006）、模型管理（007）、数据加密（008），也不改动模块 003 的 `Persona`/`PromptTemplate` 对外契约。
+规定 `LlmPersonaBuilder`、`ChatEngine` 与 `PersonaRuntime` 的输入输出契约、前后置条件、边界处理、测试用例与性能要求。**不涉及**正式聊天界面（006）、模型管理实现（007）、数据加密（008），也不改动模块 003 的 `Persona`/`PromptTemplate` 对外契约。本模块经模块 007 的 `getActiveModelHandle()` 消费已就绪模型（经 flutter_gemma 加载，ADR-005）。
 
 ---
 
@@ -52,11 +52,29 @@
 - `revisions` 连续追加一条（恒为 `[v1..vN]`）；`hardRules` **永不被覆盖**。
 - 无新素材（键哈希全命中）→ 幂等：仅版本/修订语义，五层内容不变。
 
-### 2.3 `PersonaRuntime.generate`
-**输入**：`prompt: String`、`temperature: double`。
-**输出**：`Future<RuntimeResult>{text, source, truncated, error?}`。
-- 云端未授权 → `error == RuntimeError.unauthorized`，不发起请求。
-- 本地不可用/失败 → 交由 Builder 触发兜底（§5）。
+### 2.3 `PersonaRuntime.generate` / `generateStream`
+**输入**：`prompt: String`、`temperature: double`（`generateStream` 另含 `maxNewTokens?`）。
+**输出**：`generate` → `Future<RuntimeResult>{text, source, truncated, error?}`；`generateStream` → `Stream<String>`（逐 token）。
+- 云端未授权 → `error == RuntimeError.unauthorized` / 流首帧错误，不发起请求。
+- 本地不可用/失败 → 蒸馏交由 Builder 触发兜底（§5）；对话无兜底（§2.4）。
+- `LiteRtRuntime` 经 `getActiveModelHandle()` 加载 flutter_gemma 模型；无 handle → 不可用。
+
+### 2.4 `ChatEngine.chat`
+**输入**
+| 参数 | 类型 | 约束 |
+|------|------|------|
+| persona | `Persona` | 合法五层（模块 003/004 产物）|
+| history | `List<ChatTurn>` | 可空（首轮为空）|
+| userMessage | `String` | 非空（空则边界 §5.10）|
+| options | `ChatOptions` | 见 ERD §3.5；默认 `mode=local, temperature=0.7` |
+| runtime | `PersonaRuntime` | 注入；测试注入 `MockRuntime` |
+
+**输出**：`Stream<ChatDelta>{textDelta, done, error?}`
+- system prompt **仅**由 `PromptTemplate.render(persona)` 产生（契约不变）。
+- 历史超上下文 → 滑窗保留 `system + 最近 maxContextTurns 轮 + userMessage`，裁剪最旧轮，记录裁剪数（不静默）。
+- `persona.hardRules` 注入 system prompt 且对输出后置校验；越界（自称真人/禁忌话题）→ 拦截/改写/安全回复。
+- 逐 token 发 `textDelta`；结束发 `done: true`；订阅取消 → 立即停止生成。
+- 无模型 / `maxPrivacy` / 云端未授权 → 发 `error`（`modelUnavailable`/`unauthorized`），**不兜底、不静默失败**。
 
 ---
 
@@ -90,6 +108,12 @@
 | 5.7 | 云端未授权 / 网络失败 | 未授权：`RuntimeError.unauthorized`；失败可重试后降级兜底 |
 | 5.8 | 模型输出不可解析 | 有限次重试（更严格格式指令）→ 仍失败则兜底 |
 | 5.9 | 模型试图编造事实 | prompt 硬约束 + 解析后校验：结论须可追溯原文素材，否则丢弃该结论（见 §6 反例）|
+| 5.10 | 空 `userMessage` | 不调用 runtime，发 `error(emptyInput)` 或 no-op；不产生空回复 |
+| 5.11 | 对话历史超上下文窗口 | 滑窗裁剪最旧轮，保留 system + 最近 `maxContextTurns` + 新消息；记录裁剪数，不丢人格 |
+| 5.12 | 对话时无模型 / `maxPrivacy` | 发 `ChatDelta{error: modelUnavailable}`；**不统计兜底**（统计法无法对话），提示先下载/激活模型（模块 007）|
+| 5.13 | 对话时硬规则越界 | 输出后置校验：自称真人/触碰 `forbiddenTopics`/危险建议 → 拦截并改写为安全回复 |
+| 5.14 | 生成中用户取消 | 取消订阅 → 立即停止生成，已发增量保留，不抛未捕获异常 |
+| 5.15 | 对话云端未授权/网络失败 | 未授权 → `error(unauthorized)`，无网络调用；失败 → `error(network)`，不静默 |
 
 ---
 
@@ -112,6 +136,14 @@
 | T11 | 非文本消息（5.3）| 计入 `totalMessages`、不进入蒸馏语料 |
 | T12 | 隐私持久化 | `.persona` 不含原文、仅哈希 + 短示例 |
 | T13 | 结构快照 | 固定 prompt + 固定 mock → 结构快照稳定（层齐全、Evidence 为哈希）|
+| T14 | chat 正常流（mock token 流）| `chat` 逐 `ChatDelta{textDelta}` 顺序输出、末帧 `done`；system prompt == `PromptTemplate.render(persona)` |
+| T15 | chat 滑窗（5.11）| 超窗历史 → 保留 system + 最近 `maxContextTurns` 轮 + 新消息；裁剪数被记录 |
+| T16 | chat 硬规则强制（5.13）| mock 注入越界回复 → 被拦截/改写；`mustNeverClaim` 不出现 |
+| T17 | chat 无模型（5.12）| `maxPrivacy`/无 handle → `error(modelUnavailable)`、无兜底、无网络 |
+| T18 | chat 取消（5.14）| 取消订阅后无更多增量、无异常 |
+| T19 | chat 云端未授权（5.15）| `error(unauthorized)`、无网络调用 |
+| T20 | chat 空消息（5.10）| `error(emptyInput)`/no-op，不调用 runtime |
+| T21 | SmolLM 冒烟（真机/CPU）| 真实模型经 flutter_gemma 加载 + 蒸馏 + 单轮对话产出 token（分阶段）|
 
 ---
 
@@ -120,17 +152,19 @@
 | 指标 | 目标 |
 |------|------|
 | 本地蒸馏（1000 条）| 基线对齐 CLAUDE.md ≤ 60s；受设备/模型影响分档，超时反馈进度 |
-| 本地首 token | < 2s（iPhone 15+）|
-| 本地推理速度 | > 5 tokens/s（iPhone 15+）|
+| 本地对话首 token | < 2s（iPhone 15+，真机）|
+| 本地对话流式增量延迟 | < 500ms |
+| 本地推理速度 | > 5 tokens/s（iPhone 15+；Gemma 4 E2B iOS Metal 实测 ~56 tok/s）|
 | 本地内存峰值 | < 2GB |
-| 云端端到端 | 分钟级，含分块与进度反馈 |
-| 兜底（统计）| 对齐模块 003 性能指标 |
+| 云端端到端 | 蒸馏分钟级 / 对话秒级，含进度反馈 |
+| 兜底（统计，仅蒸馏）| 对齐模块 003 性能指标 |
 
 ---
 
 ## 8. 依赖与契约引用
 - 输入：模块 002 `Conversation`。
 - 复用：模块 003 `Persona`/`persona_layers`/`PersonaJsonCodec`/`PromptTemplate`/预处理/`splitBySender`/统计兜底。
+- 模型：模块 007 `ModelRepository.getActiveModelHandle()` → `ModelHandle`；经 `flutter_gemma`（LiteRT-LM/MediaPipe，ADR-005）加载。
 - Runtime：LiteRT（本地）、云端 API（opt-in）；Key 经 Flutter Secure Storage。
 
 ---
@@ -139,6 +173,7 @@
 | 日期 | 版本 | 变更内容 | 作者 |
 |------|------|---------|------|
 | 2026-08-02 | v1.0（草稿）| 初始草稿（依据 HANDOFF-004、ERD-004、模块 003 契约）| Claude |
+| 2026-08-02 | v1.1（草稿）| 更名"LLM 集成"；新增 `ChatEngine.chat` I/O（§2.4）+ 流式 Runtime + 对话边界（§5.10–5.15）+ 对话用例（T14–T21）+ 对话性能；接入模块 007/flutter_gemma（ADR-005）；文件重命名 | Claude |
 
 ---
 
