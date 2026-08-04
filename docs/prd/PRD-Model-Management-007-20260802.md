@@ -2,7 +2,7 @@
 
 > 产品需求文档 - 模型管理（端侧 LLM 模型下载 / 存储 / 切换）
 >
-> **版本**：v1.0
+> **版本**：v1.0.1
 > **状态**：📝 草稿
 > **作者**：Claude
 > **日期**：2026-08-02
@@ -34,7 +34,7 @@ ADR-004 确定 Persona 蒸馏与对话默认走**本地 LLM**（原文不出设�
 
 ### 1.2 目标
 - 提供**模型目录**（可下载模型清单 + 元数据：名称/大小/格式/能力/推荐设备档）。
-- 提供**下载 → 存储 → 加载就绪**能力：断点续传、进度、校验、失败重试（薄封装 `flutter_gemma` 的 `ModelFileManager`，不自造下载器，ADR-005）。
+- 提供**下载 → 存储 → 加载就绪**能力：断点续传、进度、校验、失败重试（薄封装 `flutter_gemma` 模型安装 builder API `installModel().fromNetwork().install()`；旧 `ModelFileManager` 为其 legacy facade，封装对 builder API 编程，不自造下载器，ADR-005）。
 - 提供**模型切换/删除/查询**：查询已安装模型、当前激活模型、剩余空间；切换激活模型供模块 004 使用。
 - 向模块 004 暴露稳定契约：`ModelHandle`（已就绪模型的标识/路径/能力），使 `LiteRtRuntime` 无需关心下载细节。
 
@@ -123,7 +123,7 @@ ADR-004 确定 Persona 蒸馏与对话默认走**本地 LLM**（原文不出设�
 **优先级**：P0
 
 #### 功能 2：下载 / 安装（ModelInstaller）
-**描述**：薄封装 `flutter_gemma` `installModel().fromNetwork(url).install()` / `ModelFileManager`；进度、断点续传、校验、取消、失败重试。
+**描述**：薄封装 `flutter_gemma` 模型安装 builder API `installModel().fromNetwork(url).withProgress(...).install()`（旧 `ModelFileManager` 为 legacy facade）；进度、断点续传、校验、取消、失败重试。
 **业务规则**：只在用户发起时下载；下载中可取消并清理半成品；完成后做完整性校验（大小/可加载）方标"已就绪"；HF token 按需注入。
 **优先级**：P0
 
@@ -200,7 +200,7 @@ ADR-004 确定 Persona 蒸馏与对话默认走**本地 LLM**（原文不出设�
 ## 7. 接口依赖
 | 模块 | 接口 | 用途 |
 |------|------|------|
-| `flutter_gemma` v1.5.0 | `FlutterGemma.installModel/getActiveModel` / `ModelFileManager` | 下载/存储/加载底座（ADR-005）|
+| `flutter_gemma` v1.5.2 | builder API `FlutterGemma.installModel().fromNetwork().install()` + `getActiveModel`（旧 `ModelFileManager` 为 legacy facade）| 下载/存储/加载底座（ADR-005）|
 | Flutter Secure Storage | token/凭据 | 受限模型下载 |
 | 模块 004（LLM 集成）| `getActiveModelHandle()` 消费方 | 提供已就绪模型 |
 | 模块 008（未来）| 加密/排除备份钩子 | 模型文件保护 |
@@ -240,7 +240,7 @@ ADR-004 确定 Persona 蒸馏与对话默认走**本地 LLM**（原文不出设�
 |------|------|------|------|
 | 模拟器无法跑大模型 → 质量难测 | 中 | 高 | 宿主用 SmolLM 冒烟；质量验收明确置于真机（ADR-005）|
 | 大模型下载失败/耗流量 | 中 | 中 | 断点续传 + 校验 + 仅用户发起 + 空间预检 |
-| 上游 `flutter_gemma` API 变更 | 中 | 中 | 锁版本(v1.5.0)、封装隔离、契约稳定 |
+| 上游 `flutter_gemma` API 变更 | 中 | 中 | 锁版本(v1.5.2)、封装隔离、契约稳定 |
 | iOS entitlements/内存不当致崩溃 | 高 | 中 | 按 ADR-005 配置 + 能力探测 + 超档告警 |
 
 ---
@@ -259,7 +259,7 @@ ADR-004 确定 Persona 蒸馏与对话默认走**本地 LLM**（原文不出设�
 
 ### 12.1 参考
 - ADR-002/004/005（CLAUDE.md）。
-- `flutter_gemma` v1.5.0：pub.dev/packages/flutter_gemma；docs fluttergemma.dev；LiteRT-LM ai.google.dev/edge/litert-lm。
+- `flutter_gemma` v1.5.2：pub.dev/packages/flutter_gemma；docs fluttergemma.dev；LiteRT-LM ai.google.dev/edge/litert-lm。
 - 消费方契约：模块 004 `PersonaRuntime`（ERD-LLM-Integration-004）。
 
 ### 12.2 术语
@@ -271,6 +271,7 @@ ADR-004 确定 Persona 蒸馏与对话默认走**本地 LLM**（原文不出设�
 | 日期 | 版本 | 变更 | 作者 |
 |------|------|------|------|
 | 2026-08-02 | v1.0（草稿）| 初始草稿（提前至 Phase 3，依据 ADR-005 与模块 004 需求）| Claude |
+| 2026-08-04 | v1.0.1（草稿）| PR #13 评审修订：封装对象由 legacy `ModelFileManager` 改为 builder API `installModel().fromNetwork().install()`；flutter_gemma 锁版本 v1.5.0→v1.5.2 | Claude |
 
 ---
 

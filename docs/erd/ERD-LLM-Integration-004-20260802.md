@@ -2,7 +2,7 @@
 
 > 工程需求文档 - LLM 集成（LLM 蒸馏人格 + 对话引擎，含 Runtime 抽象层）
 >
-> **版本**：v1.1
+> **版本**：v1.1.1
 > **状态**：📝 草稿
 > **作者**：Claude
 > **日期**：2026-08-02
@@ -288,7 +288,7 @@ abstract class ChatEngine {
 
 ## 7. 性能指标
 - 本地蒸馏：分档目标（低端设备/高端设备），基线对齐 CLAUDE.md「Persona 生成 ≤ 60s/1000 条」；首 token < 2s、> 5 tokens/s @ iPhone 15+。
-- **本地对话**：首 token < 2s、流式增量延迟 < 500ms、> 5 tokens/s（真机；Gemma 4 E2B iOS Metal 实测 ~56 tok/s，ADR-005）。
+- **本地对话**：首 token < 2s、流式增量延迟 < 500ms、> 5 tokens/s（真机；iOS Metal 具体吞吐以真机基线为准，不预设未实测数值，ADR-005）。
 - 本地推理内存峰值 < 2GB。
 - 云端：端到端分钟级（蒸馏）/秒级（对话），含分块与进度反馈。
 - 分块：`maxChunkMessages` 依模型上下文长度自适应，保证不超上限、可汇总；对话滑窗依 `capabilities.contextTokens`。
@@ -305,7 +305,7 @@ abstract class ChatEngine {
 ## 9. 依赖与技术选型
 | 依赖 | 用途 | 备注 |
 |------|------|------|
-| `flutter_gemma` v1.5.0（LiteRT-LM/MediaPipe）| 本地蒸馏 + 对话推理 | ADR-005；经 `LiteRtRuntime` 封装；模型由模块 007 提供 |
+| `flutter_gemma` v1.5.2（LiteRT-LM/MediaPipe）| 本地蒸馏 + 对话推理 | ADR-005；经 `LiteRtRuntime` 封装；模型由模块 007 提供 |
 | 模块 007（模型管理）| `getActiveModelHandle()` → `ModelHandle` | 本地模型就绪（前置依赖）|
 | 云端 API（OpenAI/Anthropic/Gemini）| opt-in 高质量蒸馏/对话 | 需授权 + Key 加密 |
 | 模块 003（`crypto`/`characters` 等）| 预处理/契约/兜底 | 只读复用 |
@@ -318,6 +318,7 @@ abstract class ChatEngine {
 |------|------|---------|------|
 | 2026-08-02 | v1.0（草稿）| 初始草稿（依据 HANDOFF-004、ADR-004、模块 003 契约）| Claude |
 | 2026-08-02 | v1.1（草稿）| 更名"LLM 集成"；新增 ChatEngine（数据结构 §3.5、接口 §4.2.5、流程 §5.4、测试 §6.1）+ 流式 Runtime；接入 flutter_gemma/模块 007（ADR-005）；文件重命名 | Claude |
+| 2026-08-04 | v1.1.1（草稿）| PR #13 评审修订：删除 §7 未实测的 iOS Metal 吞吐数字（改为真机基线为准）；flutter_gemma 锁版本 v1.5.0→v1.5.2 | Claude |
 
 ---
 

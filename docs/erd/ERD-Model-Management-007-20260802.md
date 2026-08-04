@@ -2,7 +2,7 @@
 
 > 工程需求文档 - 模型管理（端侧 LLM 模型下载 / 存储 / 切换）
 >
-> **版本**：v1.0
+> **版本**：v1.0.1
 > **状态**：📝 草稿
 > **作者**：Claude
 > **日期**：2026-08-02
@@ -18,7 +18,7 @@
 | **模块名称** | 模型管理（Model Management）|
 | **关联 PRD** | PRD-Model-Management-007-20260802.md |
 | **关联 Spec** | SPEC-Model-Management-007-20260802.md |
-| **依赖** | `flutter_gemma` v1.5.0（LiteRT-LM/MediaPipe）、Flutter Secure Storage |
+| **依赖** | `flutter_gemma` v1.5.2（LiteRT-LM/MediaPipe）、Flutter Secure Storage |
 | **关联决策** | ADR-002、ADR-004、ADR-005 |
 
 ---
@@ -31,7 +31,7 @@
 - 提供确定性可测的状态机与元数据管理（宿主用 mock 下载器/文件系统）。
 
 ### 1.2 约束（ADR-005）
-- **端侧栈固定** `flutter_gemma` v1.5.0（LiteRtLmEngine 默认，MediaPipeEngine 备）；不自造下载器/推理绑定。
+- **端侧栈固定** `flutter_gemma` v1.5.2（LiteRtLmEngine 默认，MediaPipeEngine 备）；不自造下载器/推理绑定。
 - **iOS 16.0+**；`Runner.entitlements`（扩展虚拟寻址、放宽内存、`com.apple.security.cs.disable-library-validation`）、`Info.plist` `UIFileSharingEnabled`、Podfile `use_frameworks! :linkage => :static`。
 - **模拟器仅 CPU、Metal 256MB** → 大模型不可运行；宿主/模拟器仅 SmolLM 135M 冒烟。
 - 模型须**落盘内存映射**，不可 assets 流式；存于 app documents 目录。
@@ -47,13 +47,13 @@
         │
 [模块 007 ModelRepository]  ← 本模块对外门面
    ├─ ModelCatalog       内置目录 + 元数据 + 设备推荐
-   ├─ ModelInstaller     下载/安装（封装 flutter_gemma ModelFileManager）
+   ├─ ModelInstaller     下载/安装（封装 flutter_gemma installModel builder API）
    ├─ ModelStore         已安装列表/占用/删除/落盘位置
    ├─ ActiveModelService 激活/切换/查询 → ModelHandle
    ├─ DeviceCapabilities GPU(Metal)/内存档/引擎选择
    └─ TokenStore         HF token（Flutter Secure Storage）
         │
-[flutter_gemma v1.5.0]  installModel().fromNetwork().install() / getActiveModel()
+[flutter_gemma v1.5.2]  installModel().fromNetwork().install() / getActiveModel()
         │
 [模块 004 LiteRtRuntime]  getActiveModelHandle() → 加载 → 推理
 ```
@@ -132,7 +132,7 @@ abstract class ModelInstaller {
 }
 // 默认实现 FlutterGemmaInstaller：
 //   FlutterGemma.installModel(modelType: ...).fromNetwork(d.sourceUrl).install()
-//   进度经 ModelFileManager 回调 → InstallEvent
+//   进度经 installModel().withProgress(...) 回调 → InstallEvent
 // 测试用 MockInstaller：注入进度/失败序列，确定性断言状态机。
 ```
 
@@ -199,7 +199,7 @@ abstract class DeviceCapabilities {      // GPU/内存探测 + 引擎/后端选�
 ## 9. 依赖与技术选型
 | 依赖 | 用途 | 备注 |
 |------|------|------|
-| `flutter_gemma` v1.5.0 | 下载/存储/加载/推理底座 | ADR-005；锁版本、封装隔离 |
+| `flutter_gemma` v1.5.2 | 下载/存储/加载/推理底座 | ADR-005；锁版本、封装隔离 |
 | Flutter Secure Storage | HF token | 受限模型 |
 | path_provider | app 目录定位 | 落盘位置 |
 | Hive/JSON（轻量）| 目录激活状态元数据 | 模块内自管 |
@@ -219,6 +219,7 @@ abstract class DeviceCapabilities {      // GPU/内存探测 + 引擎/后端选�
 | 日期 | 版本 | 变更 | 作者 |
 |------|------|------|------|
 | 2026-08-02 | v1.0（草稿）| 初始草稿（依据 ADR-005、PRD-007、模块 004 契约需求）| Claude |
+| 2026-08-04 | v1.0.1（草稿）| PR #13 评审修订：封装对象由 legacy `ModelFileManager` 改为 builder API `installModel().fromNetwork().install()`；flutter_gemma 锁版本 v1.5.0→v1.5.2 | Claude |
 
 ---
 

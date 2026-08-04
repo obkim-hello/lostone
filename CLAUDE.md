@@ -485,24 +485,24 @@ Persona 文件需要高效序列化和跨平台兼容。
 **状态**：已接受
 
 **背景**：
-ADR-004 要求端侧 LLM（默认本地、原文不出设备）以支撑 Persona 蒸馏与对话。需确定 Flutter 上"模型下载/加载 + 推理"的具体技术栈。调研（2026-08）结论：Google **LiteRT-LM** 是其生产级端侧推理框架（Chrome/Pixel/AI Edge Gallery 同款），官方在 Flutter 上的支持即**社区维护的 `flutter_gemma`**（v1.5.0，MIT，verified publisher），内置模型下载器（`ModelFileManager` / `installModel().fromNetwork().install()`）、多引擎（`LiteRtLmEngine` / `MediaPipeEngine`）、聊天与流式生成、GPU（iOS Metal）加速，支持 Gemma/Llama/Phi-4/Qwen 等。
+ADR-004 要求端侧 LLM（默认本地、原文不出设备）以支撑 Persona 蒸馏与对话。需确定 Flutter 上"模型下载/加载 + 推理"的具体技术栈。调研（2026-08）结论：Google **LiteRT-LM** 是其生产级端侧推理框架（Chrome/Pixel/AI Edge Gallery 同款），官方在 Flutter 上的支持即**社区维护的 `flutter_gemma`**（v1.5.2，MIT 许可，verified publisher），内置模型下载器（现代 builder API `FlutterGemma.installModel().fromNetwork().install()`，`ModelFileManager` 为其 legacy facade）、多引擎（`LiteRtLmEngine` / `MediaPipeEngine`）、聊天与流式生成、GPU（iOS Metal）加速，支持 Gemma/Llama/Phi-4/Qwen 等。
 
 **决策**：
-- 端侧推理与模型管理统一采用 **`flutter_gemma`**（LiteRT-LM 为主引擎，MediaPipe 为备）。
+- 端侧推理与模型管理统一采用 **`flutter_gemma` v1.5.2**（LiteRT-LM 为主引擎，MediaPipe 为备）。
 - **模块 007（模型管理）** 封装其模型下载/存储/切换（不自造下载器）；**模块 004** 的 `LiteRtRuntime` 与对话引擎封装其 `getActiveModel/createChat/generate`。
 - 模型目录分档：**SmolLM 135M**（宿主/模拟器 CPU 冒烟）、**Gemma 3 1B（0.5GB）**（设备默认）、**Gemma 4 E2B（2.4GB）**（高质量可选）。模型格式 `.litertlm`（跨端）/`.task`（MediaPipe）。
 
 **理由**：
 1. 唯一成熟的 Flutter 端侧 LLM 路径，且是 Google LiteRT-LM 的官方 Flutter 通道，避免自写 FFI 绑定。
 2. 自带下载/存储/进度/断点，使模块 007 成为薄封装、快速可测。
-3. 性能达标：Gemma 4 E2B 在 iOS Metal ~56 tokens/s，远超 CLAUDE.md「> 5 tokens/s」。
+3. 性能达标：端侧 GPU 推理可满足 CLAUDE.md「> 5 tokens/s」目标；iOS Metal 具体吞吐以真机基线为准（不预设未经实测的数值）。
 4. 隐私：纯端侧、原文不出设备，落实 ADR-004 默认本地路径。
 
 **后果**：
 - **iOS 约束**：iOS 16.0+；`Runner.entitlements` 需扩展虚拟寻址/放宽内存上限 + `com.apple.security.cs.disable-library-validation`；`Info.plist` 需 `UIFileSharingEnabled`；Podfile 需 `use_frameworks! :linkage => :static`。
 - **模拟器限制**：iOS 模拟器仅 CPU、Metal 分配上限 256MB → 0.5–2.4GB 模型无法在模拟器运行；**真机（Metal）方可跑 1B/E2B**，模拟器/宿主仅能用 SmolLM 135M 做 CPU 冒烟。故 LLM **质量验收必须在真机**，宿主/CI 仅做结构/契约/冒烟。
 - 模型文件须落盘（内存映射），不能从 assets 流式加载；存于 app documents 目录（模块 008 视需要加密/排除备份）。
-- 依赖社区包：需锁版本、关注上游 API 变更（1.x builder API 与旧 `FlutterGemmaPlugin` API 有差异）。
+- 依赖社区包：需锁版本（当前 v1.5.2）、关注上游 API 变更（1.x builder API 与旧 `FlutterGemmaPlugin` / `ModelFileManager` legacy API 有差异，封装应对 builder API 编程）。
 
 ---
 

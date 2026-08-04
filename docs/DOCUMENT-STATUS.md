@@ -216,7 +216,7 @@
 - 🚫 **开发状态：阻塞（未批准，禁止编码）**
 
 ### 范围摘要
-- 模块定位：端侧 LLM 模型的**下载 / 存储 / 切换 / 查询**，以**薄封装**隔离 `flutter_gemma` 的 `ModelFileManager`（ADR-005，不自造下载器）；向模块 004 暴露稳定的 `ModelHandle` / `ModelRepository.getActiveModelHandle()` 契约。
+- 模块定位：端侧 LLM 模型的**下载 / 存储 / 切换 / 查询**，以**薄封装**隔离 `flutter_gemma` 模型安装 builder API（`installModel().fromNetwork().install()`；旧 `ModelFileManager` 为 legacy facade，ADR-005，不自造下载器）；向模块 004 暴露稳定的 `ModelHandle` / `ModelRepository.getActiveModelHandle()` 契约。
 - 提前依据：**从 Phase 4 提前至 Phase 3**，作为模块 004 本地默认路径的**前置依赖**——没有就绪模型，004 的本地蒸馏/对话无法真机验证。
 - 包含：ModelCatalog（SmolLM 135M / Gemma 3 1B / Gemma 4 E2B）、下载状态机 + 断点续传 + 进度流、存储/占用/删除、激活/切换、设备能力探测（Metal/内存档、引擎选择）、HF token（Secure Storage）。
 - 不包含：推理/对话/蒸馏（模块 004）、模型管理**正式 UI**（Phase 4 / 模块 006 设置）、云端 API Key、加密/排除备份（模块 008，预留注入点）。
@@ -382,6 +382,7 @@ Spec：⚪ 待创建
 | 2026-08-02 | — | 新增 ADR-005（CLAUDE.md）：端侧 LLM 栈定为 **flutter_gemma v1.5.0（LiteRT-LM/MediaPipe 引擎）**——Google LiteRT-LM 官方 Flutter 通道，内置模型下载器/多引擎/流式/GPU；模块 007 薄封装其下载、模块 004 封装其 getActiveModel/createChat/generate；模型分档 SmolLM 135M（冒烟）/ Gemma 3 1B（设备默认 0.5GB）/ Gemma 4 E2B（2.4GB）；iOS 16+/entitlements/静态链接、模拟器仅 CPU（大模型不可运行）→ 质量验收须真机 | Claude |
 | 2026-08-02 | — | **模块 007（模型管理）提前至 Phase 3** 并创建三文档草稿（PRD/ERD/SPEC-Model-Management-007，编号 007、日期 20260802、互相交叉引用）：作为模块 004 本地默认路径的**前置依赖**（无就绪模型则 004 无法真机验证）；以薄封装隔离 flutter_gemma `ModelFileManager`（不自造下载器），暴露 `ModelHandle`/`getActiveModelHandle()` 契约；含 ModelCatalog/下载状态机+断点续传/存储/激活切换/设备能力探测/HF token；不含推理（004）与正式 UI（Phase 4）。矩阵行 007 → 📝/📝/📝、⚠️草稿完成、🚫阻塞；优先级列表 007 置于 004 之前；同步 README、ROADMAP。**未改任何源码/pubspec**，待评审批准后方可编码 | Claude |
 | 2026-08-02 | — | **模块 004 拓宽为"LLM 集成"**并三文档改版 v1.1（文件 PRD/ERD/SPEC-LLM-Persona-Builder → **LLM-Integration**，`git mv` 重命名）：在蒸馏之外**新增对话引擎 ChatEngine**（以 `Persona` 的 system prompt 驱动多轮流式对话——滑窗上下文、聊天时硬规则强制、本地/云端切换、取消/错误分类；对话**无统计兜底**，无模型明确提示）；接入 **flutter_gemma/模块 007**（ADR-005）为本地推理底座与前置依赖；新增**开发者调试台（dev-only harness）**供真机质量评审；PRD 加故事 6 + 功能 2.5/C、ERD 加 §3.5/§4.2.5/§5.4/§6.1 对话设计 + 流式 Runtime、SPEC 加 §2.4 + 边界 5.10–5.15 + 用例 T14–T21 + 对话性能。矩阵/详情/优先级同步。**未改任何源码/pubspec**，仍草稿待批准 | Claude |
+| 2026-08-04 | — | **PR #13 Owner 评审修订**（四项阻塞项）：(🔴1) 删除编造的"Gemma 4 E2B iOS Metal 实测 ~56 tok/s"（ADR-005/ERD-004 §7/SPEC-004 §7）→ 改为「> 5 tokens/s，iOS Metal 具体吞吐以真机基线为准，不预设未实测数值」；(🔴2) 模块 007 封装对象由 legacy `ModelFileManager` 改为**现代 builder API** `installModel().fromNetwork().install()`（旧类降为 legacy facade，核实 v1.5.x 公开 API）；(🔴3) `flutter_gemma` 为 **MIT** 已核实属实（LICENSE：Copyright 2024 Sasha Denisov），保留；(🔴4) PRD-004 版本头 v1.0→v1.1、§7 编号 7.2→7.1。另非阻塞：锁版本 v1.5.0→**v1.5.2**（已核实当前版）。004 三文档升 v1.1.1、007 三文档升 v1.0.1，均仍草稿。范围扩张（ChatEngine/模块 007/ADR-005）待 Owner 明确认可 | Claude |
 
 ---
 

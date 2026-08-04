@@ -199,7 +199,7 @@
 **目标**：实现本地模型 + 云端 API 混合推理
 
 > **文档状态（2026-08-02）**：Phase 3 含**两个模块**三文档草稿，均**待评审批准**（开发状态 🚫 阻塞）。原「模块 005 云端 API 集成」**已折叠并入模块 004** 的 Runtime 抽象层。
-> - **模块 007（模型管理，提前至 Phase 3）**——作为模块 004 本地默认路径的**前置依赖**（无就绪模型则 004 无法真机验证）；薄封装 flutter_gemma `ModelFileManager`（ADR-005）：
+> - **模块 007（模型管理，提前至 Phase 3）**——作为模块 004 本地默认路径的**前置依赖**（无就绪模型则 004 无法真机验证）；薄封装 flutter_gemma 模型安装 builder API `installModel().fromNetwork().install()`（旧 `ModelFileManager` 为 legacy facade，ADR-005）：
 >   - PRD：[PRD-Model-Management-007-20260802.md](../prd/PRD-Model-Management-007-20260802.md)
 >   - ERD：[ERD-Model-Management-007-20260802.md](../erd/ERD-Model-Management-007-20260802.md)
 >   - Spec：[SPEC-Model-Management-007-20260802.md](../spec/SPEC-Model-Management-007-20260802.md)
@@ -214,7 +214,7 @@
 
 #### Week 6: 模型管理（模块 007）+ 本地推理底座
 - [ ] 集成 **flutter_gemma**（LiteRT-LM/MediaPipe，ADR-005）
-- [ ] 模型下载管理器（薄封装 `ModelFileManager`，模块 007）
+- [ ] 模型下载管理器（薄封装 `installModel().fromNetwork().install()` builder API，模块 007）
   - [ ] 从 Hugging Face 下载（HF token 经 Secure Storage）
   - [ ] 断点续传 + 进度流（`Stream<InstallEvent>`）
   - [ ] 校验 + 落盘（app documents，内存映射）
