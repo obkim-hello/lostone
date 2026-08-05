@@ -35,7 +35,12 @@ class LlmHarnessScreen extends StatefulWidget {
 }
 
 class _LlmHarnessScreenState extends State<LlmHarnessScreen> {
-  static const ModelDescriptor _model = ModelCatalog.smolLm135m;
+  static const List<ModelDescriptor> _choices = <ModelDescriptor>[
+    ModelCatalog.smolLm135m,
+    ModelCatalog.gemma3_1b,
+  ];
+
+  ModelDescriptor _model = ModelCatalog.smolLm135m;
 
   final ModelRepository _repo = DefaultModelRepository(
     catalog: const ModelCatalog(),
@@ -52,6 +57,7 @@ class _LlmHarnessScreenState extends State<LlmHarnessScreen> {
 
   final DefaultChatEngine _chat = const DefaultChatEngine();
   final TextEditingController _input = TextEditingController();
+  final TextEditingController _token = TextEditingController();
   final ScrollController _logScroll = ScrollController();
 
   final List<String> _log = <String>[];
@@ -76,6 +82,7 @@ class _LlmHarnessScreenState extends State<LlmHarnessScreen> {
     _installSub?.cancel();
     _chatSub?.cancel();
     _input.dispose();
+    _token.dispose();
     _logScroll.dispose();
     super.dispose();
   }
@@ -105,8 +112,19 @@ class _LlmHarnessScreenState extends State<LlmHarnessScreen> {
       _stage = '安装中';
     });
     _addLog('开始安装 ${_model.displayName}（${_mb(_model.sizeBytes)} MB）');
+    final String token = _token.text.trim();
+    if (_model.requiresToken && token.isEmpty) {
+      _addLog('该模型受限：请先填入 Hugging Face token');
+      setState(() {
+        _busy = false;
+        _stage = '需要 token';
+      });
+      return;
+    }
     final Completer<void> done = Completer<void>();
-    _installSub = _repo.install(_model.id).listen(
+    _installSub = _repo
+        .install(_model.id, hfToken: token.isEmpty ? null : token)
+        .listen(
       (InstallEvent e) {
         final int pct = e.totalBytes == 0
             ? 0
@@ -176,6 +194,7 @@ class _LlmHarnessScreenState extends State<LlmHarnessScreen> {
       return;
     }
     _input.clear();
+    final List<ChatTurn> prior = List<ChatTurn>.of(_history);
     setState(() {
       _busy = true;
       _reply = '';
@@ -189,7 +208,7 @@ class _LlmHarnessScreenState extends State<LlmHarnessScreen> {
 
     final Completer<void> done = Completer<void>();
     _chatSub = _chat
-        .chat(persona, _history, text, runtime: _runtime,
+        .chat(persona, prior, text, runtime: _runtime,
             options: const ChatOptions())
         .listen(
       (ChatDelta d) {
@@ -215,10 +234,11 @@ class _LlmHarnessScreenState extends State<LlmHarnessScreen> {
       },
     );
     await done.future;
-    if (_reply.isNotEmpty) {
+    final String clean = _stripControlTokens(_reply);
+    if (clean.isNotEmpty) {
       _history.add(ChatTurn(
         role: ChatRole.persona,
-        text: _reply,
+        text: clean,
         at: DateTime.now().toUtc(),
       ));
     }
@@ -275,6 +295,14 @@ class _LlmHarnessScreenState extends State<LlmHarnessScreen> {
 
   String _mb(int bytes) => (bytes / (1024 * 1024)).toStringAsFixed(0);
 
+  static String _stripControlTokens(String s) => s
+      .replaceAll('<end_of_turn>', '')
+      .replaceAll('<start_of_turn>', '')
+      .replaceAll('<eos>', '')
+      .replaceAll('<bos>', '')
+      .replaceAll('<pad>', '')
+      .trim();
+
   @override
   Widget build(BuildContext context) {
     final Persona? persona = _persona;
@@ -286,6 +314,36 @@ class _LlmHarnessScreenState extends State<LlmHarnessScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             Text('阶段：$_stage', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                for (final ModelDescriptor m in _choices)
+                  ChoiceChip(
+                    label: Text(
+                        m.requiresToken ? '${m.displayName} 🔒' : m.displayName),
+                    selected: _model.id == m.id,
+                    onSelected: _busy
+                        ? null
+                        : (_) => setState(() => _model = m),
+                  ),
+              ],
+            ),
+            if (_model.requiresToken) ...<Widget>[
+              const SizedBox(height: 8),
+              TextField(
+                controller: _token,
+                enabled: !_busy,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Hugging Face token（受限模型需先在 HF 接受许可）',
+                  hintText: 'hf_…',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ],
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -315,7 +373,7 @@ class _LlmHarnessScreenState extends State<LlmHarnessScreen> {
                 child: _mono(const DefaultPromptTemplate().render(persona)),
               ),
               const SizedBox(height: 8),
-              _ChatBox(reply: _reply, history: _history),
+              _ChatBox(reply: _stripControlTokens(_reply), history: _history),
               Row(
                 children: <Widget>[
                   Expanded(
