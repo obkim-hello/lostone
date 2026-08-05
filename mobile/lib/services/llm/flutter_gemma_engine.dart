@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
 
 import 'lite_rt_runtime.dart';
@@ -26,17 +27,23 @@ class FlutterGemmaEngine implements GemmaEngine {
     double temperature = 0.2,
     int? maxNewTokens,
   }) async {
-    final InferenceModel model =
-        await FlutterGemma.getActiveModel(maxTokens: maxTokens);
-    final InferenceModelSession session = await model.createSession(
-      temperature: temperature,
-      maxOutputTokens: maxNewTokens,
-    );
     try {
-      await session.addQueryChunk(Message.text(text: prompt, isUser: true));
-      return await session.getResponse();
-    } finally {
-      await session.close();
+      final InferenceModel model =
+          await FlutterGemma.getActiveModel(maxTokens: maxTokens);
+      final InferenceModelSession session = await model.createSession(
+        temperature: temperature,
+        maxOutputTokens: maxNewTokens,
+      );
+      try {
+        await session.addQueryChunk(Message.text(text: prompt, isUser: true));
+        return await session.getResponse();
+      } finally {
+        await session.close();
+      }
+    } on Object catch (e, s) {
+      debugPrint('[FlutterGemmaEngine] complete 失败：$e');
+      debugPrintStack(stackTrace: s, maxFrames: 8);
+      rethrow;
     }
   }
 
@@ -55,6 +62,10 @@ class FlutterGemmaEngine implements GemmaEngine {
     try {
       await session.addQueryChunk(Message.text(text: prompt, isUser: true));
       yield* session.getResponseAsync();
+    } on Object catch (e, s) {
+      debugPrint('[FlutterGemmaEngine] stream 失败：$e');
+      debugPrintStack(stackTrace: s, maxFrames: 8);
+      rethrow;
     } finally {
       await session.close();
     }
