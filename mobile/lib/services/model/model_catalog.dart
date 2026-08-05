@@ -10,17 +10,17 @@ class ModelCatalog {
 
   final List<ModelDescriptor>? _entries;
 
-  /// SmolLM 135M：宿主/模拟器 CPU 冒烟档。
+  /// SmolLM2 135M：宿主/模拟器 CPU 冒烟档（免 token 的 `.litertlm`）。
   static const ModelDescriptor smolLm135m = ModelDescriptor(
-    id: 'smollm-135m',
-    displayName: 'SmolLM 135M',
+    id: 'smollm2-135m',
+    displayName: 'SmolLM2 135M',
     format: ModelFormat.litertlm,
     family: ModelFamily.general,
-    sizeBytes: 105 * 1024 * 1024,
+    sizeBytes: 142819328,
     capabilities: <ModelCapability>{ModelCapability.text},
     minTier: DeviceTier.simulatorCpu,
     sourceUrl:
-        'https://huggingface.co/litert-community/SmolLM-135M-Instruct/resolve/main/SmolLM-135M-Instruct.litertlm',
+        'https://huggingface.co/litert-community/SmolLM2-135M-Instruct/resolve/main/SmolLM2_135M_Instruct.litertlm',
   );
 
   /// Gemma 3 1B（int4）：设备默认档，0.5GB。

@@ -97,7 +97,12 @@ class FlutterGemmaInstaller implements ModelInstaller {
         gemma.UnauthorizedError() ||
         gemma.ForbiddenError() =>
           InstallErrorKind.authRequired,
+        gemma.NotFoundError() => InstallErrorKind.unknownModel,
         gemma.CanceledError() => InstallErrorKind.canceled,
-        _ => InstallErrorKind.network,
+        gemma.NetworkError() ||
+        gemma.RateLimitedError() ||
+        gemma.ServerError() =>
+          InstallErrorKind.network,
+        gemma.UnknownError() => InstallErrorKind.unknown,
       };
 }
