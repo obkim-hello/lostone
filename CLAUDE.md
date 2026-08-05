@@ -455,6 +455,57 @@ Persona 文件需要高效序列化和跨平台兼容。
 
 ---
 
+### ADR-004：Persona 生成采用 LLM 蒸馏，统计引擎降级为预处理/离线兜底
+
+**状态**：已接受
+
+**背景**：
+模块 003 交付了纯统计/规则的确定性五层 Persona 引擎（离线、无 LLM）。实测发现：对同一份真实聊天语料，统计引擎产出偏单薄、且会拼凑出"不像本人"的结论（签名特征缺失、缺少真实例句）；而基于 LLM 蒸馏的方法（参考 `.claude/skills/create-ex` 的 `persona_analyzer` + `persona_builder` 方法论）产出更忠实——能提炼签名特征、给出**真实例句**，并在素材不足时诚实标注"原材料不足"而非编造。这与 ADR-002（混合模型策略）一致：需要 LLM 才能达到"像本人"的质量。
+
+**决策**：
+新增**模块 004（LLM Persona Builder，含 Runtime 抽象层）**，以 LLM 蒸馏作为 Persona 生成的正式路径；模块 003 的统计引擎**降级为预处理 + 离线兜底**（去重、消息键哈希、切分、表层统计、无模型/最大隐私时的兜底）。原「模块 005 云端 API 集成」折叠并入模块 004 的 Runtime 抽象层。
+
+**理由**：
+1. 质量：LLM 蒸馏产出忠实、"像本人"，统计法达不到（§背景实测）。
+2. 隐私可控：默认本地 LiteRT（原文不出设备），云端 API 显式授权 opt-in（对齐 ADR-002）。
+3. 契约稳定：LLM 蒸馏结果映射进模块 003 现有 `Persona` 五层模型与 `PromptTemplate.render()`，**对外契约不变**，下游（006/008）无感。
+4. 韧性：无模型/最大隐私/推理失败时回落统计兜底，任何路径都产出合法 `Persona`。
+5. 诚实优先：prompt 硬约束"仅用原文出现的事实、不得编造"，素材不足层标注并置低置信。
+
+**后果**：
+- 引入 `PersonaRuntime` 抽象（LiteRtRuntime / CloudRuntime / FallbackRuntime）与 LLM 蒸馏 prompt 工程。
+- 测试策略变更：LLM 非确定性 → 由 byte-identical 断言改为**契约/结构断言 + mock Runtime + 快照/人工评审**。
+- 依赖模块 007（模型管理）提供本地模型；云端 Key 经 Flutter Secure Storage 加密。
+- 模块 003 不重写，仅被只读复用。
+
+---
+
+### ADR-005：端侧 LLM 栈采用 flutter_gemma（LiteRT-LM / MediaPipe 引擎）
+
+**状态**：已接受
+
+**背景**：
+ADR-004 要求端侧 LLM（默认本地、原文不出设备）以支撑 Persona 蒸馏与对话。需确定 Flutter 上"模型下载/加载 + 推理"的具体技术栈。调研（2026-08）结论：Google **LiteRT-LM** 是其生产级端侧推理框架（Chrome/Pixel/AI Edge Gallery 同款），官方在 Flutter 上的支持即**社区维护的 `flutter_gemma`**（v1.5.2，MIT 许可，verified publisher），内置模型下载器（现代 builder API `FlutterGemma.installModel().fromNetwork().install()`，`ModelFileManager` 为其 legacy facade）、多引擎（`LiteRtLmEngine` / `MediaPipeEngine`）、聊天与流式生成、GPU（iOS Metal）加速，支持 Gemma/Llama/Phi-4/Qwen 等。
+
+**决策**：
+- 端侧推理与模型管理统一采用 **`flutter_gemma` v1.5.2**（LiteRT-LM 为主引擎，MediaPipe 为备）。
+- **模块 007（模型管理）** 封装其模型下载/存储/切换（不自造下载器）；**模块 004** 的 `LiteRtRuntime` 与对话引擎封装其 `getActiveModel/createChat/generate`。
+- 模型目录分档：**SmolLM 135M**（宿主/模拟器 CPU 冒烟）、**Gemma 3 1B（0.5GB）**（设备默认）、**Gemma 4 E2B（2.4GB）**（高质量可选）。模型格式 `.litertlm`（跨端）/`.task`（MediaPipe）。
+
+**理由**：
+1. 唯一成熟的 Flutter 端侧 LLM 路径，且是 Google LiteRT-LM 的官方 Flutter 通道，避免自写 FFI 绑定。
+2. 自带下载/存储/进度/断点，使模块 007 成为薄封装、快速可测。
+3. 性能达标：端侧 GPU 推理可满足 CLAUDE.md「> 5 tokens/s」目标；iOS Metal 具体吞吐以真机基线为准（不预设未经实测的数值）。
+4. 隐私：纯端侧、原文不出设备，落实 ADR-004 默认本地路径。
+
+**后果**：
+- **iOS 约束**：iOS 16.0+；`Runner.entitlements` 需扩展虚拟寻址/放宽内存上限 + `com.apple.security.cs.disable-library-validation`；`Info.plist` 需 `UIFileSharingEnabled`；Podfile 需 `use_frameworks! :linkage => :static`。
+- **模拟器限制**：iOS 模拟器仅 CPU、Metal 分配上限 256MB → 0.5–2.4GB 模型无法在模拟器运行；**真机（Metal）方可跑 1B/E2B**，模拟器/宿主仅能用 SmolLM 135M 做 CPU 冒烟。故 LLM **质量验收必须在真机**，宿主/CI 仅做结构/契约/冒烟。
+- 模型文件须落盘（内存映射），不能从 assets 流式加载；存于 app documents 目录（模块 008 视需要加密/排除备份）。
+- 依赖社区包：需锁版本（当前 v1.5.2）、关注上游 API 变更（1.x builder API 与旧 `FlutterGemmaPlugin` / `ModelFileManager` legacy API 有差异，封装应对 builder API 编程）。
+
+---
+
 ## 常用命令
 
 ### Flutter 开发
