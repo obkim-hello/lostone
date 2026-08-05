@@ -4,10 +4,12 @@ import 'package:lostone/models/evidence.dart';
 import 'package:lostone/models/memories.dart';
 import 'package:lostone/models/message.dart';
 import 'package:lostone/models/persona.dart';
+import 'package:lostone/models/persona_layers.dart';
 import 'package:lostone/services/llm/llm_persona_builder.dart';
 import 'package:lostone/services/llm/mock_runtime.dart';
 import 'package:lostone/services/llm/persona_runtime.dart';
 import 'package:lostone/services/persona/persona_builder.dart';
+import 'package:lostone/services/persona/persona_codec.dart';
 import 'package:lostone/services/persona/prompt_template.dart';
 
 const String _kJson = '''
@@ -197,4 +199,136 @@ void main() {
       expect(runtime.receivedPrompts.single, contains('记得吃饭'));
     });
   });
+
+  group('DefaultLlmPersonaBuilder.update · 增量', () {
+    test('T8 无新素材（键哈希全命中）→ 幂等：五层不变，仅版本/修订', () async {
+      final DefaultLlmPersonaBuilder builder = DefaultLlmPersonaBuilder();
+      final Conversation conv = _conv(_corpus());
+      final Persona base = await builder.build(
+        conv,
+        runtime: MockRuntime(response: _kJson),
+      );
+
+      final MockRuntime runtime = MockRuntime(response: _kJson);
+      final Persona updated = await builder.update(
+        base,
+        conv,
+        runtime: runtime,
+      );
+
+      expect(updated.personaVersion, base.personaVersion + 1);
+      expect(updated.id, base.id);
+      expect(updated.source.revisions, hasLength(base.source.revisions.length + 1));
+      expect(updated.expressionStyle, base.expressionStyle);
+      expect(updated.emotionalLogic, base.emotionalLogic);
+      expect(updated.relationalBehavior, base.relationalBehavior);
+      expect(updated.memories, base.memories);
+      expect(runtime.receivedPrompts, isEmpty);
+    });
+
+    test('T9 增量后 existing.hardRules 永不被覆盖', () async {
+      final DefaultLlmPersonaBuilder builder = DefaultLlmPersonaBuilder();
+      final Persona base = await builder.build(
+        _conv(_corpus()),
+        runtime: MockRuntime(response: _kJson),
+      );
+      const HardRules userRules = HardRules(
+        forbiddenTopics: <String>['病情'],
+        mustNeverClaim: <String>['我还活着'],
+      );
+      final Persona edited = _withHardRules(base, userRules);
+
+      final Conversation more = _conv(<Message>[
+        _msg('多穿点别感冒', minute: 10),
+        _msg('按时睡觉', minute: 11),
+        _msg('作业写了吗', minute: 12, fromMe: true),
+      ]);
+      final Persona updated = await builder.update(
+        edited,
+        more,
+        runtime: MockRuntime(response: _kJson),
+      );
+
+      expect(updated.hardRules, userRules);
+      expect(updated.personaVersion, edited.personaVersion + 1);
+    });
+
+    test('实质新增 → 合并计数累加、来源哈希扩张、契约完整', () async {
+      final DefaultLlmPersonaBuilder builder = DefaultLlmPersonaBuilder();
+      final Persona base = await builder.build(
+        _conv(_corpus()),
+        runtime: MockRuntime(response: _kJson),
+      );
+      final Conversation more = _conv(<Message>[
+        _msg('记得吃饭，别累着自己', minute: 20),
+        _msg('天冷加衣，宝贝', minute: 21),
+      ]);
+      final Persona updated = await builder.update(
+        base,
+        more,
+        runtime: MockRuntime(response: _kJson),
+      );
+
+      expect(updated.personaVersion, 2);
+      expect(updated.source.personMessages,
+          greaterThan(base.source.personMessages));
+      expect(
+        updated.source.mergedMessageKeyHashes.length,
+        greaterThan(base.source.mergedMessageKeyHashes.length),
+      );
+      final TermStat merged = updated.expressionStyle.catchphrases
+          .firstWhere((TermStat t) => t.term == '记得吃饭');
+      final TermStat original = base.expressionStyle.catchphrases
+          .firstWhere((TermStat t) => t.term == '记得吃饭');
+      expect(merged.count, greaterThan(original.count));
+      expect(const PersonaJsonCodec().decode(const PersonaJsonCodec().encode(updated)),
+          updated);
+    });
+
+    test('schemaVersion 不符 → 抛 PersonaSchemaException', () async {
+      final DefaultLlmPersonaBuilder builder = DefaultLlmPersonaBuilder();
+      final Persona base = await builder.build(
+        _conv(_corpus()),
+        runtime: MockRuntime(response: _kJson),
+      );
+      final Persona stale = _withSchemaVersion(base, kPersonaSchemaVersion + 1);
+      expect(
+        () => builder.update(stale, _conv(_corpus()),
+            runtime: MockRuntime(response: _kJson)),
+        throwsA(isA<PersonaSchemaException>()),
+      );
+    });
+  });
 }
+
+Persona _withHardRules(Persona p, HardRules rules) => Persona(
+      id: p.id,
+      schemaVersion: p.schemaVersion,
+      personaVersion: p.personaVersion,
+      generatedAt: p.generatedAt,
+      identity: p.identity,
+      hardRules: rules,
+      expressionStyle: p.expressionStyle,
+      emotionalLogic: p.emotionalLogic,
+      relationalBehavior: p.relationalBehavior,
+      tags: p.tags,
+      memories: p.memories,
+      source: p.source,
+      notes: p.notes,
+    );
+
+Persona _withSchemaVersion(Persona p, int schemaVersion) => Persona(
+      id: p.id,
+      schemaVersion: schemaVersion,
+      personaVersion: p.personaVersion,
+      generatedAt: p.generatedAt,
+      identity: p.identity,
+      hardRules: p.hardRules,
+      expressionStyle: p.expressionStyle,
+      emotionalLogic: p.emotionalLogic,
+      relationalBehavior: p.relationalBehavior,
+      tags: p.tags,
+      memories: p.memories,
+      source: p.source,
+      notes: p.notes,
+    );

@@ -1,9 +1,11 @@
 import '../../models/conversation.dart';
 import '../../models/evidence.dart';
+import '../../models/memories.dart';
 import '../../models/message.dart';
 import '../../models/persona.dart';
 import '../../models/persona_layers.dart';
 import '../persona/persona_builder.dart';
+import '../persona/persona_codec.dart';
 import '../persona/text_stats.dart';
 import 'distilled_persona.dart';
 import 'persona_mapper.dart';
@@ -90,6 +92,19 @@ abstract class LlmPersonaBuilder {
   /// 模块 003 统计兜底并在 `Persona.notes` 标注。
   Future<Persona> build(
     Conversation conversation, {
+    required PersonaRuntime runtime,
+    LlmBuildOptions options,
+  });
+
+  /// 增量更新已有 Persona（`personaVersion == existing.personaVersion + 1`）。
+  ///
+  /// 仅对**真实新增**素材（键哈希未命中）重蒸馏得到增量 Persona，再与 [existing]
+  /// 结构合并；`hardRules` **永不覆盖**（T9）。无新素材（键哈希全命中）时幂等：
+  /// 仅递增版本、追加 revision，五层内容不变（T8）。`.persona` 只存哈希，无法
+  /// 复现旧原文，故不重蒸馏旧语料——旧结论经证据/计数结构性合并保留。
+  Future<Persona> update(
+    Persona existing,
+    Conversation newConversation, {
     required PersonaRuntime runtime,
     LlmBuildOptions options,
   });
@@ -204,6 +219,408 @@ class DefaultLlmPersonaBuilder implements LlmPersonaBuilder {
       baseLevel: baseLevel,
       defaultDisplayName: options.defaultDisplayName,
     );
+  }
+
+  @override
+  Future<Persona> update(
+    Persona existing,
+    Conversation newConversation, {
+    required PersonaRuntime runtime,
+    LlmBuildOptions options = const LlmBuildOptions(),
+  }) async {
+    if (existing.schemaVersion != kPersonaSchemaVersion) {
+      throw PersonaSchemaException(
+        'existing.schemaVersion ${existing.schemaVersion} '
+        '!= $kPersonaSchemaVersion（请先 decode 迁移）',
+      );
+    }
+
+    final SplitResult split = splitBySender(
+        newConversation, options.personSenderIds, options.myIdentifiers);
+    final List<Message> newPerson = _sortByTimestamp(split.$1);
+    final List<Message> newUser = _sortByTimestamp(split.$2);
+    final bool resolvedNew = split.$3;
+
+    final Set<String> existingHashes = existing.source.mergedMessageKeyHashes;
+    final Set<String> seen = <String>{...existingHashes};
+    final List<Message> trulyNew = <Message>[];
+    for (final Message m in newPerson) {
+      if (seen.add(messageKeyHash(m))) {
+        trulyNew.add(m);
+      }
+    }
+
+    final int newVersion = existing.personaVersion + 1;
+    if (trulyNew.isEmpty) {
+      return _revisionOnly(existing, newVersion, options);
+    }
+
+    final Persona delta =
+        await _buildDelta(newConversation, trulyNew, newUser, runtime, options);
+    return _merge(
+      existing,
+      delta,
+      trulyNew,
+      newConversation,
+      newVersion,
+      resolvedNew,
+      options,
+    );
+  }
+
+  Future<Persona> _buildDelta(
+    Conversation base,
+    List<Message> trulyNew,
+    List<Message> newUser,
+    PersonaRuntime runtime,
+    LlmBuildOptions options,
+  ) {
+    final List<Message> msgs = <Message>[...trulyNew, ...newUser];
+    final Conversation deltaConv = Conversation(
+      source: base.source,
+      participants: base.participants,
+      messages: msgs,
+      stats: ImportStats(
+        totalParsed: msgs.length,
+        afterDedup: msgs.length,
+        skipped: 0,
+        earliest: null,
+        latest: null,
+      ),
+    );
+    return build(deltaConv, runtime: runtime, options: options);
+  }
+
+  Persona _revisionOnly(Persona existing, int newVersion, LlmBuildOptions options) =>
+      Persona(
+        id: existing.id,
+        schemaVersion: kPersonaSchemaVersion,
+        personaVersion: newVersion,
+        generatedAt: _now(options),
+        identity: existing.identity,
+        hardRules: existing.hardRules,
+        expressionStyle: existing.expressionStyle,
+        emotionalLogic: existing.emotionalLogic,
+        relationalBehavior: existing.relationalBehavior,
+        tags: existing.tags,
+        memories: existing.memories,
+        source: PersonaSource(
+          sources: existing.source.sources,
+          totalMessages: existing.source.totalMessages,
+          personMessages: existing.source.personMessages,
+          mergedMessageKeyHashes: existing.source.mergedMessageKeyHashes,
+          revisions: <SourceRevision>[
+            ...existing.source.revisions,
+            SourceRevision(
+              personaVersion: newVersion,
+              personMessages: existing.source.personMessages,
+              totalMessages: existing.source.totalMessages,
+            ),
+          ],
+          segmentationResolved: existing.source.segmentationResolved,
+        ),
+        notes: existing.notes,
+      );
+
+  Persona _merge(
+    Persona existing,
+    Persona delta,
+    List<Message> trulyNew,
+    Conversation newConversation,
+    int newVersion,
+    bool resolvedNew,
+    LlmBuildOptions options,
+  ) {
+    final int aN = existing.source.personMessages;
+    final int bN = trulyNew.length;
+    final int topN = options.topN;
+
+    final ExpressionStyle expr = _mergeExpression(
+        existing.expressionStyle, delta.expressionStyle, aN, bN, topN);
+    final EmotionalLogic emo =
+        _mergeEmotion(existing.emotionalLogic, delta.emotionalLogic, aN, bN, topN);
+    final RelationalBehavior rel = _mergeRelation(
+        existing.relationalBehavior, delta.relationalBehavior, aN, bN, topN);
+    final Memories mem = _mergeMemories(existing.memories, delta.memories, topN);
+    final List<String> aliases = <String>{
+      ...existing.identity.aliases,
+      ...delta.identity.aliases,
+    }.toList()
+      ..sort();
+    final List<PersonaTag> tags = _mergeTags(existing.tags, delta.tags);
+
+    final int mergedCount = aN + bN;
+    final bool segResolved =
+        existing.source.segmentationResolved && resolvedNew;
+    final Confidence base =
+        segResolved ? _levelFor(mergedCount, options) : Confidence.low;
+
+    final bool identityLow = existing.identity.displayName.isEmpty;
+    final bool exprLow = expr.catchphrases.isEmpty &&
+        expr.emojiUsage.isEmpty &&
+        expr.punctuation.isEmpty;
+    final bool emoLow =
+        emo.comfortPatterns.isEmpty && emo.concernPatterns.isEmpty;
+    final bool relLow = rel.termsForUser.isEmpty;
+    Confidence lvl(bool low) => low ? Confidence.low : base;
+
+    final int newTotal =
+        existing.source.totalMessages + newConversation.messages.length;
+    final Set<String> mergedHashes = <String>{
+      ...existing.source.mergedMessageKeyHashes,
+      for (final Message m in trulyNew) messageKeyHash(m),
+    };
+
+    return Persona(
+      id: existing.id,
+      schemaVersion: kPersonaSchemaVersion,
+      personaVersion: newVersion,
+      generatedAt: _now(options),
+      identity: Identity(
+        displayName: existing.identity.displayName,
+        relationToUser:
+            existing.identity.relationToUser ?? delta.identity.relationToUser,
+        aliases: aliases,
+        confidence: lvl(identityLow),
+      ),
+      hardRules: existing.hardRules,
+      expressionStyle: expr.withConfidence(lvl(exprLow)),
+      emotionalLogic: emo.withConfidence(lvl(emoLow)),
+      relationalBehavior: rel.withConfidence(lvl(relLow)),
+      tags: tags,
+      memories: mem,
+      source: PersonaSource(
+        sources: <DataSource>{
+          ...existing.source.sources,
+          ..._collectSources(newConversation),
+        },
+        totalMessages: newTotal,
+        personMessages: mergedCount,
+        mergedMessageKeyHashes: mergedHashes,
+        revisions: <SourceRevision>[
+          ...existing.source.revisions,
+          SourceRevision(
+            personaVersion: newVersion,
+            personMessages: mergedCount,
+            totalMessages: newTotal,
+          ),
+        ],
+        segmentationResolved: segResolved,
+      ),
+      notes: <String>[
+        if (identityLow) '原材料不足：身份',
+        if (exprLow) '原材料不足：表达风格',
+        if (emoLow) '原材料不足：情感逻辑',
+        if (relLow) '原材料不足：关系行为',
+      ],
+    );
+  }
+
+  ExpressionStyle _mergeExpression(
+    ExpressionStyle a,
+    ExpressionStyle b,
+    int aN,
+    int bN,
+    int topN,
+  ) {
+    final int total = aN + bN;
+    return ExpressionStyle(
+      catchphrases: _mergeTerms(a.catchphrases, b.catchphrases, topN),
+      emojiUsage: _mergeTerms(a.emojiUsage, b.emojiUsage, topN),
+      punctuation: _mergeTerms(a.punctuation, b.punctuation, topN),
+      avgMessageLength: total == 0
+          ? 0
+          : ((a.avgMessageLength * aN + b.avgMessageLength * bN) / total)
+              .round(),
+    );
+  }
+
+  EmotionalLogic _mergeEmotion(
+    EmotionalLogic a,
+    EmotionalLogic b,
+    int aN,
+    int bN,
+    int topN,
+  ) =>
+      EmotionalLogic(
+        positiveRatio: _weighted(a.positiveRatio, aN, b.positiveRatio, bN),
+        negativeRatio: _weighted(a.negativeRatio, aN, b.negativeRatio, bN),
+        comfortPatterns:
+            _mergeTerms(a.comfortPatterns, b.comfortPatterns, topN),
+        concernPatterns:
+            _mergeTerms(a.concernPatterns, b.concernPatterns, topN),
+      );
+
+  RelationalBehavior _mergeRelation(
+    RelationalBehavior a,
+    RelationalBehavior b,
+    int aN,
+    int bN,
+    int topN,
+  ) =>
+      RelationalBehavior(
+        termsForUser: _mergeTerms(a.termsForUser, b.termsForUser, topN),
+        initiationRatio:
+            _weighted(a.initiationRatio, aN, b.initiationRatio, bN),
+        avgResponseGapMinutes: _weighted(
+          a.avgResponseGapMinutes,
+          aN,
+          b.avgResponseGapMinutes,
+          bN,
+        ),
+      );
+
+  Memories _mergeMemories(Memories a, Memories b, int topN) => Memories(
+        timeline: _mergeTimeline(a.timeline, b.timeline),
+        keyEvents: _mergeKeyEvents(a.keyEvents, b.keyEvents, topN),
+        preferences: _mergePreferences(a.preferences, b.preferences, topN),
+      );
+
+  TimelineSpan _mergeTimeline(TimelineSpan a, TimelineSpan b) {
+    final Map<int, int> hours = <int, int>{};
+    for (final MapEntry<int, int> e in a.activeHours.entries) {
+      hours[e.key] = (hours[e.key] ?? 0) + e.value;
+    }
+    for (final MapEntry<int, int> e in b.activeHours.entries) {
+      hours[e.key] = (hours[e.key] ?? 0) + e.value;
+    }
+    final List<int> sortedHours = hours.keys.toList()..sort();
+    return TimelineSpan(
+      start: _minNullable(a.start, b.start),
+      end: _maxNullable(a.end, b.end),
+      messageCount: a.messageCount + b.messageCount,
+      activeHours: <int, int>{
+        for (final int h in sortedHours) h: hours[h]!,
+      },
+    );
+  }
+
+  List<KeyEvent> _mergeKeyEvents(List<KeyEvent> a, List<KeyEvent> b, int topN) {
+    final List<KeyEvent> merged = <KeyEvent>[...a, ...b];
+    final Set<String> seen = <String>{};
+    final List<KeyEvent> deduped = <KeyEvent>[];
+    for (final KeyEvent e in merged) {
+      if (seen.add('${e.at.toUtc().toIso8601String()}|${e.summary}')) {
+        deduped.add(e);
+      }
+    }
+    deduped.sort((KeyEvent x, KeyEvent y) {
+      final int byTime = x.at.compareTo(y.at);
+      return byTime != 0 ? byTime : x.summary.compareTo(y.summary);
+    });
+    return deduped.length > topN ? deduped.sublist(0, topN) : deduped;
+  }
+
+  List<Preference> _mergePreferences(
+    List<Preference> a,
+    List<Preference> b,
+    int topN,
+  ) {
+    final Map<String, Preference> byTerm = <String, Preference>{};
+    for (final Preference p in <Preference>[...a, ...b]) {
+      final Preference? prev = byTerm[p.term];
+      byTerm[p.term] = prev == null
+          ? p
+          : Preference(
+              term: p.term,
+              count: prev.count + p.count,
+              evidence: _mergeEvidence(prev.evidence, p.evidence),
+            );
+    }
+    final List<Preference> ranked = byTerm.values.toList()
+      ..sort((Preference x, Preference y) {
+        final int byCount = y.count.compareTo(x.count);
+        return byCount != 0 ? byCount : x.term.compareTo(y.term);
+      });
+    return ranked.length > topN ? ranked.sublist(0, topN) : ranked;
+  }
+
+  List<PersonaTag> _mergeTags(List<PersonaTag> a, List<PersonaTag> b) {
+    final Map<String, PersonaTag> byLabel = <String, PersonaTag>{};
+    for (final PersonaTag t in <PersonaTag>[...a, ...b]) {
+      final PersonaTag? prev = byLabel[t.label];
+      byLabel[t.label] = prev == null
+          ? t
+          : PersonaTag(
+              label: t.label,
+              evidence: _mergeEvidence(prev.evidence, t.evidence),
+              confidence: t.confidence.index > prev.confidence.index
+                  ? t.confidence
+                  : prev.confidence,
+            );
+    }
+    return byLabel.values.toList()
+      ..sort((PersonaTag x, PersonaTag y) => x.label.compareTo(y.label));
+  }
+
+  Evidence _mergeEvidence(Evidence a, Evidence b) {
+    final List<String> hashes = <String>[...a.messageKeyHashes];
+    final Set<String> seen = <String>{...hashes};
+    for (final String h in b.messageKeyHashes) {
+      if (hashes.length >= mapper.maxHashesPerEvidence) {
+        break;
+      }
+      if (seen.add(h)) {
+        hashes.add(h);
+      }
+    }
+    return Evidence(
+      messageKeyHashes: hashes,
+      occurrences: a.occurrences + b.occurrences,
+      sampleExcerpt: a.sampleExcerpt ?? b.sampleExcerpt,
+    );
+  }
+
+  List<TermStat> _mergeTerms(List<TermStat> a, List<TermStat> b, int topN) {
+    final Map<String, int> counts = <String, int>{};
+    for (final TermStat t in <TermStat>[...a, ...b]) {
+      counts[t.term] = (counts[t.term] ?? 0) + t.count;
+    }
+    final List<MapEntry<String, int>> entries = counts.entries.toList()
+      ..sort((MapEntry<String, int> x, MapEntry<String, int> y) {
+        final int byCount = y.value.compareTo(x.value);
+        return byCount != 0 ? byCount : x.key.compareTo(y.key);
+      });
+    return <TermStat>[
+      for (final MapEntry<String, int> e in entries.take(topN))
+        TermStat(term: e.key, count: e.value),
+    ];
+  }
+
+  double _weighted(double aVal, int aN, double bVal, int bN) {
+    final int total = aN + bN;
+    return total == 0 ? 0 : (aVal * aN + bVal * bN) / total;
+  }
+
+  DateTime? _minNullable(DateTime? a, DateTime? b) {
+    if (a == null) {
+      return b;
+    }
+    if (b == null) {
+      return a;
+    }
+    return a.isBefore(b) ? a : b;
+  }
+
+  DateTime? _maxNullable(DateTime? a, DateTime? b) {
+    if (a == null) {
+      return b;
+    }
+    if (b == null) {
+      return a;
+    }
+    return a.isAfter(b) ? a : b;
+  }
+
+  List<Message> _sortByTimestamp(List<Message> messages) {
+    final List<(int, Message)> indexed = <(int, Message)>[
+      for (int i = 0; i < messages.length; i++) (i, messages[i]),
+    ]..sort(((int, Message) a, (int, Message) b) {
+        final int byTime =
+            a.$2.timestamp.toUtc().compareTo(b.$2.timestamp.toUtc());
+        return byTime != 0 ? byTime : a.$1.compareTo(b.$1);
+      });
+    return <Message>[for (final (int, Message) e in indexed) e.$2];
   }
 
   Future<DistilledPersona?> _generateAndParse(
