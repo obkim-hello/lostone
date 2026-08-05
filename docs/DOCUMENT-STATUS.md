@@ -384,6 +384,8 @@ Spec：⚪ 待创建
 | 2026-08-02 | — | **模块 004 拓宽为"LLM 集成"**并三文档改版 v1.1（文件 PRD/ERD/SPEC-LLM-Persona-Builder → **LLM-Integration**，`git mv` 重命名）：在蒸馏之外**新增对话引擎 ChatEngine**（以 `Persona` 的 system prompt 驱动多轮流式对话——滑窗上下文、聊天时硬规则强制、本地/云端切换、取消/错误分类；对话**无统计兜底**，无模型明确提示）；接入 **flutter_gemma/模块 007**（ADR-005）为本地推理底座与前置依赖；新增**开发者调试台（dev-only harness）**供真机质量评审；PRD 加故事 6 + 功能 2.5/C、ERD 加 §3.5/§4.2.5/§5.4/§6.1 对话设计 + 流式 Runtime、SPEC 加 §2.4 + 边界 5.10–5.15 + 用例 T14–T21 + 对话性能。矩阵/详情/优先级同步。**未改任何源码/pubspec**，仍草稿待批准 | Claude |
 | 2026-08-04 | — | **PR #13 Owner 评审修订**（四项阻塞项）：(🔴1) 删除编造的"Gemma 4 E2B iOS Metal 实测 ~56 tok/s"（ADR-005/ERD-004 §7/SPEC-004 §7）→ 改为「> 5 tokens/s，iOS Metal 具体吞吐以真机基线为准，不预设未实测数值」；(🔴2) 模块 007 封装对象由 legacy `ModelFileManager` 改为**现代 builder API** `installModel().fromNetwork().install()`（旧类降为 legacy facade，核实 v1.5.x 公开 API）；(🔴3) `flutter_gemma` 为 **MIT** 已核实属实（LICENSE：Copyright 2024 Sasha Denisov），保留；(🔴4) PRD-004 版本头 v1.0→v1.1、§7 编号 7.2→7.1。另非阻塞：锁版本 v1.5.0→**v1.5.2**（已核实当前版）。004 三文档升 v1.1.1、007 三文档升 v1.0.1，均仍草稿。范围扩张（ChatEngine/模块 007/ADR-005）待 Owner 明确认可 | Claude |
 
+| 2026-08-04 | — | **新增设计债务登记表** `docs/overview/DESIGN-DEBT.md`，登记模块 007 设备/原生 slice 发现的两处契约缺口（不改契约、待模块 004 设计时定夺）：**DD-001** `flutter_gemma` v1.5.2 自管落盘且不暴露 `filePath`（推理经 `getActiveModel()`），ERD/SPEC-007 §3.4 `ModelHandle.filePath` 生产不可诚实兑现——当前宿主实现用合成路径通过测试；**DD-002** `dart:io`/插件均无可用磁盘余量 API，生产 `ModelStore.freeBytes()`（E2 空间预检）暂无法实现，仅 `InMemoryModelStore` 供宿主测试。已在 ERD-007 §3.4/§4.3 与 ERD-004 §1.2（`LiteRtRuntime` 消费点）以 `⚠️ 契约缺口：见 DD-00x` 反向链接。**未改源码/契约** | Claude |
+
 ---
 
 > 本文档会实时更新，反映最新的文档状态。每次文档状态变更后必须更新此表。

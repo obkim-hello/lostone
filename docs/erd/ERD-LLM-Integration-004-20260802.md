@@ -37,6 +37,7 @@
 - **输出契约不变**：`Persona`（`mobile/lib/models/persona.dart`）与 `PromptTemplate.render()`（`mobile/lib/services/persona/prompt_template.dart`）对外形状不改；蒸馏结果必须映射进现有五层；对话 system prompt 只经现有 `render()`。
 - **不重写模块 003**：统计引擎按原样保留，仅被本模块只读复用（预处理/切分/兜底/编解码/渲染）。
 - **模型就绪归模块 007**：本模块不自造下载器；经 `ModelRepository.getActiveModelHandle()` 拿 `ModelHandle`，用其 `filePath`/`engine`/`backend` 加载。
+  - ⚠️ **前置契约缺口：见 [DD-001](../overview/DESIGN-DEBT.md#dd-001)**。`flutter_gemma` v1.5.2 自管落盘、**不暴露 `filePath`**，推理经 `getActiveModel()` 拿模型对象。本模块设计 `LiteRtRuntime` 时**必须先定夺** `ModelHandle` 契约（改句柄语义 / `filePath` 置空 + 走 `getActiveModel()`），否则会误用一个无法生产兑现的 `filePath`。按 ADR-005，`LiteRtRuntime` 本就用 `getActiveModel/createChat/generate`，多半不需要 `filePath`。
 - **隐私**：默认本地、原文不出设备；云端显式授权；`.persona` 只存消息键哈希、不落原文；日志脱敏。
 - **无 byte 确定性**：LLM 有随机性 → 测试改为契约/结构断言 + mock Runtime + 快照/人工评审（见 §6）。
 - **端侧栈固定 flutter_gemma / LiteRT-LM**（ADR-005）：本地蒸馏与对话经 `flutter_gemma` 的 `getActiveModel/createChat/generate`，运行于 iOS 16+/macOS；质量验收须真机（模拟器仅 CPU 冒烟）。
