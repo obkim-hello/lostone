@@ -189,9 +189,9 @@
 - [ ] 三文档评审
 - [ ] 三文档批准（批准后方可编码）
 - [ ] 编写测试用例（mock Runtime）→ 实现 → 验证
-- [ ] Runtime 抽象层实现（LiteRtRuntime[flutter_gemma] / CloudRuntime / FallbackRuntime）
+- [x] Runtime 抽象层实现（LiteRtRuntime[flutter_gemma] — 切片 4c / CloudRuntime — 切片 4b；统计兜底经 `DefaultLlmPersonaBuilder` 内置，ADR-004）
 - [x] ChatEngine 实现（滑窗上下文 / 流式 / 硬规则强制 / 本地云端切换）— 切片 3（宿主 TDD T14–T20）
-- [ ] 开发者调试台（dev-only）真机质量评审
+- [x] 开发者调试台（dev-only）— 切片 5（`LlmHarnessScreen`：安装 SmolLM→激活→蒸馏→对话，真机人工评审）；T21 真机冒烟待运行
 - [ ] 与模块 007（模型管理，前置依赖）、006（聊天界面）对接
 
 ---
@@ -397,6 +397,7 @@ Spec：⚪ 待创建
 | 2026-08-04 | — | **模块 004 TDD 切片 4a（DD-001 落地：`ModelHandle.filePath` 可选化）**：`ModelHandle.filePath: required String → String?`（DD-001 选项 A——仅自管下载时有值，`flutter_gemma` 插件路径下为 `null`，`LiteRtRuntime` 经 `getActiveModel()` 加载不依赖此字段）；同步 007 `DefaultModelRepository`（构造仍填合成路径，`String→String?` 赋值兼容）与 T12 测试（断言改 null 安全）；DESIGN-DEBT DD-001 状态转「已定夺并落地」。`flutter test`（007）21/21、`flutter analyze` 0 警告（余 1 项既有 test print） | Claude |
 | 2026-08-04 | — | **模块 004 TDD 切片 4b（CloudRuntime 云端运行时）**：`lib/services/llm/cloud_runtime.dart`（`CloudRuntime implements PersonaRuntime`，opt-in）：授权门控——未授权 / 无密钥 → `generate` 返回 `unauthorized`、`generateStream` 抛 `unauthorized`，**绝不调用 transport、绝不发网络**；`CloudTransport` 可注入接缝（provider HTTP 线缆属集成/设备工作，与门控+错误分类解耦）；HTTP 失败经 `CloudHttpException`（statusCode/isNetworkError）归一为分类 `RuntimeError`（401/403→unauthorized、429→rateLimited、其余/网络→network）；`generateStream` 用 `await for` 拦截并重映射上游流错误（非 `yield*`）。宿主 TDD +13 用例（假 transport，覆盖门控/成功/错误分类/流中途错误），`flutter test` 278、`flutter analyze` 0 警告 | Claude |
 | 2026-08-04 | — | **模块 004 TDD 切片 4c（LiteRtRuntime 本地运行时 + flutter_gemma 接缝）**：`lib/services/llm/lite_rt_runtime.dart`（`GemmaEngine` 接缝 + `LiteRtRuntime implements PersonaRuntime`：可用性以 007 契约为准——经注入的 `getActiveModelHandle` 判定，无激活句柄即不可用（DD-001：不依赖 `filePath`）；推理委派引擎，原生层异常经 `await for` 归一为 `modelUnavailable`，不静默失败；全程无网络）+ `flutter_gemma_engine.dart`（`FlutterGemmaEngine` 具体实现，**设备/原生**：`FlutterGemma.hasActiveModel/getActiveModel().createSession()` + `getResponse(Async)`，对齐 v1.5.2 现代门面，宿主/模拟器不可验质量 ADR-005）。宿主 TDD +9 用例（假 `GemmaEngine`，覆盖可用性/generate/stream/异常归一），`flutter test` 287/287、`flutter analyze` 0 警告（余 1 项既有 test print）。**T21（SmolLM 真机冒烟）+ 云端 provider HTTP transport 具体实现留待真机/集成** | Claude |
+| 2026-08-04 | — | **模块 004 TDD 切片 5（开发者调试台 dev-only）**：`lib/screens/dev/llm_harness_screen.dart`（`LlmHarnessScreen`：真机把「安装 [SmolLM 135M 免 token] → `setActive` → 蒸馏示例语料 → 多轮流式对话」串成人工「像不像」评审台，ADR-005 质量验收必须真机）——装配真实 `DefaultModelRepository`（`FlutterGemmaInstaller`/`SecureTokenStore`/`InMemoryModelStore`）+ 本地 `LiteRtRuntime(FlutterGemmaEngine, activeHandle: getActiveModelHandle)`，全程本地原文不出设备；展示 `DefaultPromptTemplate.render()` 的 system prompt 与流式增量；`initGemmaRuntime()` 由屏内惰性注册（不动 `main` 启动路径）。`HomeScreen` 加 `kDebugMode` 入口按钮。**UI 层不入宿主单测**（设备 slice，底层已由切片 3/4 契约测试覆盖）；`flutter analyze` 0 警告、`flutter test` 287/287 不变。T21 真机冒烟待运行 | Claude |
 
 ---
 
