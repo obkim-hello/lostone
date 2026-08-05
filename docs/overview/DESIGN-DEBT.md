@@ -11,9 +11,13 @@
 
 ## DD-001 — `flutter_gemma` 自管存储与「激活模型」，`ModelHandle.filePath` 契约悬空
 
-- **状态**：🟡 待解决（定于**模块 004 设计时**一并定夺）
+- **状态**：🟢 已定夺（2026-08-04，模块 004 设计时选定**选项 A**；代码落地随 `LiteRtRuntime`（设备 slice）一并进行，宿主抽象层不依赖 `filePath`）
 - **发现**：2026-08-04，模块 007 设备/原生 slice 实现时读 `flutter_gemma` v1.5.2 源码。
 - **关联**：ERD/SPEC-Model-Management-007 §3.4（`ModelHandle.filePath`）、§4.3（`ModelStore`）；ERD-LLM-Integration-004 §4.1（`LiteRtRuntime`）；ADR-005。
+
+> **✅ 定夺（2026-08-04，模块 004 设计）**：采用**选项 A** —— `ModelHandle.filePath` 改为**可选**（`String?`，语义：仅当"我们自管下载"时有值，插件路径下为 `null`）；模块 004 的 `PersonaRuntime` 抽象层**完全不依赖** `filePath`，`LiteRtRuntime` 经 `flutter_gemma` 的 `getActiveModel()/createChat()/generate()` 加载与推理（ADR-005），只读 `ModelHandle` 的 `id/format/capabilities/backend/engine`。
+> - **落地时机**：`ModelHandle.filePath: required String → String?` 的代码改动与 `LiteRtRuntime` 一同落在**模块 004 设备/原生 slice**（届时同步 007 的 `ModelHandle`/`DefaultModelRepository`/007 测试）。
+> - **当前状态**：模块 004 宿主抽象层（`PersonaRuntime`/`MockRuntime`/`ChatEngine`/`LlmPersonaBuilder`）**不触碰 `filePath`**，故此定夺不阻塞宿主 TDD；007 现有宿主实现的合成 `filePath` 暂保留、不影响。
 
 **症状**：
 007 的对外契约假设**由我们**管理模型落盘，`getActiveModelHandle()` 返回一个「存在的、可内存映射的绝对文件路径」`filePath`，供模块 004 加载。但 `flutter_gemma` v1.5.2 的真实行为是：

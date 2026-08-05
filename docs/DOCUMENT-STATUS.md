@@ -388,6 +388,9 @@ Spec：⚪ 待创建
 
 | 2026-08-04 | — | ✅ **批准模块 004（LLM 集成）与模块 007（模型管理）三文档**（Project Owner）：PRD/ERD/SPEC 状态转"已批准"、批准日期 2026-08-04；范围扩张（ChatEngine / 模块 007 前置 / ADR-005 / 004 并入原 005）经 Owner 明确认可。矩阵行 004 → ✅/✅/✅、开发状态"开发中"（进入 TDD）；行 007 → ✅/✅/✅、开发状态"开发中"（宿主核心 + 设备 slice 已落地）。DD-001（`ModelHandle.filePath`）随 004 设计定夺 | Project Owner |
 
+| 2026-08-04 | — | **模块 004 定夺 DD-001（选项 A）**：`ModelHandle.filePath` → 可选，`PersonaRuntime` 抽象层不依赖 `filePath`，`LiteRtRuntime` 经 flutter_gemma `getActiveModel()` 加载（代码改动随设备 slice 落地）；更新设计债务登记表 DD-001 状态为🟢已定夺 | Claude |
+| 2026-08-04 | — | **模块 004 TDD 切片 1（Runtime 抽象层）**：`lib/services/llm/persona_runtime.dart`（`PersonaRuntime` 抽象 + `RuntimeSource`/`RuntimeError`/`RuntimeResult`/`RuntimeCapabilities`/`RuntimeException`，ERD-004 §3.4/§4.1）+ `mock_runtime.dart`（`MockRuntime`：固定响应/token 流、prompt 记录、错误注入短路不发起调用、取消即停）。宿主 TDD 12 用例（含 SPEC T18 取消语义），`flutter test` 225/225、`flutter analyze` 0 警告。抽象层不触碰 `filePath`（DD-001） | Claude |
+
 ---
 
 > 本文档会实时更新，反映最新的文档状态。每次文档状态变更后必须更新此表。
