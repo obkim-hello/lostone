@@ -337,7 +337,8 @@ void main() {
       final ModelHandle? handle = await repo.getActiveModelHandle();
       expect(handle, isNotNull);
       expect(handle!.id, smol.id);
-      expect(handle.filePath.isNotEmpty, isTrue);
+      expect(handle.filePath, isNotNull);
+      expect(handle.filePath!.isNotEmpty, isTrue);
       expect(handle.format, ModelFormat.litertlm);
       expect(handle.engine, EngineKind.liteRtLm);
       expect(handle.backend, InferenceBackend.gpuMetal);

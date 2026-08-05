@@ -160,18 +160,21 @@ class ModelHandle {
   /// 创建句柄。
   const ModelHandle({
     required this.id,
-    required this.filePath,
     required this.format,
     required this.capabilities,
     required this.backend,
     required this.engine,
+    this.filePath,
   });
 
   /// 模型标识。
   final String id;
 
-  /// 落盘绝对路径（内存映射加载用）。
-  final String filePath;
+  /// 落盘绝对路径（内存映射加载用）；**可选**（DD-001 选项 A）。
+  ///
+  /// 仅当由本项目自管下载时有值；`flutter_gemma` 自管存储的插件路径下为 `null`，
+  /// 此时 `LiteRtRuntime` 经 `getActiveModel()` 加载，不依赖本字段。
+  final String? filePath;
 
   /// 模型格式（引擎选择依据）。
   final ModelFormat format;

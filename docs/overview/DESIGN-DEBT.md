@@ -11,7 +11,7 @@
 
 ## DD-001 — `flutter_gemma` 自管存储与「激活模型」，`ModelHandle.filePath` 契约悬空
 
-- **状态**：🟢 已定夺（2026-08-04，模块 004 设计时选定**选项 A**；代码落地随 `LiteRtRuntime`（设备 slice）一并进行，宿主抽象层不依赖 `filePath`）
+- **状态**：🟢 已定夺并落地（2026-08-04 选定**选项 A**；代码于模块 004 设备 slice 4a 落地——`ModelHandle.filePath: required String → String?`，007 `DefaultModelRepository`/测试同步，宿主抽象层不依赖 `filePath`）
 - **发现**：2026-08-04，模块 007 设备/原生 slice 实现时读 `flutter_gemma` v1.5.2 源码。
 - **关联**：ERD/SPEC-Model-Management-007 §3.4（`ModelHandle.filePath`）、§4.3（`ModelStore`）；ERD-LLM-Integration-004 §4.1（`LiteRtRuntime`）；ADR-005。
 
