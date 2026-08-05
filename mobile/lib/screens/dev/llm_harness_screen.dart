@@ -38,6 +38,7 @@ class _LlmHarnessScreenState extends State<LlmHarnessScreen> {
   static const List<ModelDescriptor> _choices = <ModelDescriptor>[
     ModelCatalog.smolLm135m,
     ModelCatalog.gemma3_1b,
+    ModelCatalog.gemma4E2b,
   ];
 
   ModelDescriptor _model = ModelCatalog.smolLm135m;

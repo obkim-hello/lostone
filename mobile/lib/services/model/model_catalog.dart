@@ -33,7 +33,7 @@ class ModelCatalog {
     capabilities: <ModelCapability>{ModelCapability.text},
     minTier: DeviceTier.lowEnd,
     sourceUrl:
-        'https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/Gemma3-1B-IT_multi-prefill-seq_q4_ekv2048.litertlm',
+        'https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/gemma3-1b-it-int4.litertlm',
     requiresToken: true,
   );
 
@@ -50,8 +50,7 @@ class ModelCatalog {
     },
     minTier: DeviceTier.highEnd,
     sourceUrl:
-        'https://huggingface.co/litert-community/Gemma-4-E2B-it/resolve/main/Gemma-4-E2B-it.litertlm',
-    requiresToken: true,
+        'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm',
   );
 
   /// 全部条目（默认三档，稳定顺序）。
