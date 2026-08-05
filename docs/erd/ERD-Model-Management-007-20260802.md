@@ -3,7 +3,7 @@
 > 工程需求文档 - 模型管理（端侧 LLM 模型下载 / 存储 / 切换）
 >
 > **版本**：v1.0.1
-> **状态**：📝 草稿
+> **状态**：✅ 已批准（Project Owner，2026-08-04）
 > **作者**：Claude
 > **日期**：2026-08-02
 > **优先级**：P0
@@ -225,7 +225,8 @@ abstract class DeviceCapabilities {      // GPU/内存探测 + 引擎/后端选�
 |------|------|------|------|
 | 2026-08-02 | v1.0（草稿）| 初始草稿（依据 ADR-005、PRD-007、模块 004 契约需求）| Claude |
 | 2026-08-04 | v1.0.1（草稿）| PR #13 评审修订：封装对象由 legacy `ModelFileManager` 改为 builder API `installModel().fromNetwork().install()`；flutter_gemma 锁版本 v1.5.0→v1.5.2 | Claude |
+| 2026-08-04 | v1.0.1（已批准）| ✅ Project Owner 批准三文档；宿主核心 + 设备 slice 已落地；DD-002 记于设计债务登记表 | Project Owner |
 
 ---
 
-> 本文档遵循 Lostone 文档驱动开发规范。当前为**草稿**，待三文档评审批准后方可进入实现阶段。
+> 本文档遵循 Lostone 文档驱动开发规范。状态：✅ 已批准（Project Owner，2026-08-04），进入实现阶段。

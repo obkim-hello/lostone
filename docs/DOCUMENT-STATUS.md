@@ -11,10 +11,10 @@
 | 001 | 项目初始化 | ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | ✅ 已完成 |
 | 002 | 数据导入 | ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | 🚧 开发中 |
 | 003 | Persona 生成 | ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | ✅ 已完成 |
-| 004 | LLM 集成（蒸馏 + 对话引擎 + Runtime 抽象层）| 📝 草稿 | 📝 草稿 | 📝 草稿 | ⚠️ 草稿完成 | 🚫 阻塞 |
+| 004 | LLM 集成（蒸馏 + 对话引擎 + Runtime 抽象层）| ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | 🚧 开发中 |
 | ~~005~~ | 云端 API 集成 → **已并入 004**（Runtime 抽象层统一本地/云端）| — | — | — | — | 🔀 已折叠 |
 | 006 | 聊天界面 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
-| 007 | 模型管理（提前至 Phase 3，004 本地路径前置）| 📝 草稿 | 📝 草稿 | 📝 草稿 | ⚠️ 草稿完成 | 🚫 阻塞 |
+| 007 | 模型管理（提前至 Phase 3，004 本地路径前置）| ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | 🚧 开发中 |
 | 008 | 数据安全 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
 
 ---
@@ -164,19 +164,19 @@
 ### 文档信息
 | 文档类型 | 文件名 | 状态 | 完成时间 | 批准时间 | 文件路径 |
 |----------|--------|------|---------|---------|---------|
-| PRD | PRD-LLM-Integration-004-20260802.md | 📝 草稿 | 2026-08-02 | — | docs/prd/PRD-LLM-Integration-004-20260802.md |
-| ERD | ERD-LLM-Integration-004-20260802.md | 📝 草稿 | 2026-08-02 | — | docs/erd/ERD-LLM-Integration-004-20260802.md |
-| Spec | SPEC-LLM-Integration-004-20260802.md | 📝 草稿 | 2026-08-02 | — | docs/spec/SPEC-LLM-Integration-004-20260802.md |
+| PRD | PRD-LLM-Integration-004-20260802.md | ✅ 已批准 | 2026-08-02 | 2026-08-04 | docs/prd/PRD-LLM-Integration-004-20260802.md |
+| ERD | ERD-LLM-Integration-004-20260802.md | ✅ 已批准 | 2026-08-02 | 2026-08-04 | docs/erd/ERD-LLM-Integration-004-20260802.md |
+| Spec | SPEC-LLM-Integration-004-20260802.md | ✅ 已批准 | 2026-08-02 | 2026-08-04 | docs/spec/SPEC-LLM-Integration-004-20260802.md |
 
 ### 三文档齐全检查
-- ✅ PRD 已创建（草稿）
-- ✅ ERD 已创建（草稿）
-- ✅ Spec 已创建（草稿）
+- ✅ PRD 已批准
+- ✅ ERD 已批准
+- ✅ Spec 已批准
 - ✅ 编号一致（004）
 - ✅ 日期一致（20260802）
 - ✅ 头部关联字段互指正确（PRD↔ERD↔Spec）
-- ⚠️ 状态：**草稿完成，待评审批准**
-- 🚫 **开发状态：阻塞（未批准，禁止编码）**
+- ✅ 状态：**已批准**（Project Owner，2026-08-04）
+- 🚧 **开发状态：开发中（TDD，DD-001 契约随设计定夺）**
 
 ### 范围摘要
 - 模块定位（v1.1 拓宽为"LLM 集成"，两大支柱）：**(A) 蒸馏**——以 LLM 从模块 002 `Conversation` 产出忠实五层 Persona，映射进模块 003 现有 `Persona` 契约；**(B) 对话引擎（ChatEngine）**——以 `Persona` 渲染的 system prompt 驱动多轮流式对话（滑窗上下文、硬规则强制、本地/云端切换）。二者**共享 Runtime 抽象层**（本地 LiteRT 默认 + 云端 API opt-in），原「005 云端 API 集成」已并入本模块。
@@ -201,19 +201,19 @@
 ### 文档信息
 | 文档类型 | 文件名 | 状态 | 完成时间 | 批准时间 | 文件路径 |
 |----------|--------|------|---------|---------|---------|
-| PRD | PRD-Model-Management-007-20260802.md | 📝 草稿 | 2026-08-02 | — | docs/prd/PRD-Model-Management-007-20260802.md |
-| ERD | ERD-Model-Management-007-20260802.md | 📝 草稿 | 2026-08-02 | — | docs/erd/ERD-Model-Management-007-20260802.md |
-| Spec | SPEC-Model-Management-007-20260802.md | 📝 草稿 | 2026-08-02 | — | docs/spec/SPEC-Model-Management-007-20260802.md |
+| PRD | PRD-Model-Management-007-20260802.md | ✅ 已批准 | 2026-08-02 | 2026-08-04 | docs/prd/PRD-Model-Management-007-20260802.md |
+| ERD | ERD-Model-Management-007-20260802.md | ✅ 已批准 | 2026-08-02 | 2026-08-04 | docs/erd/ERD-Model-Management-007-20260802.md |
+| Spec | SPEC-Model-Management-007-20260802.md | ✅ 已批准 | 2026-08-02 | 2026-08-04 | docs/spec/SPEC-Model-Management-007-20260802.md |
 
 ### 三文档齐全检查
-- ✅ PRD 已创建（草稿）
-- ✅ ERD 已创建（草稿）
-- ✅ Spec 已创建（草稿）
+- ✅ PRD 已批准
+- ✅ ERD 已批准
+- ✅ Spec 已批准
 - ✅ 编号一致（007）
 - ✅ 日期一致（20260802）
 - ✅ 头部关联字段互指正确（PRD↔ERD↔Spec）
-- ⚠️ 状态：**草稿完成，待评审批准**
-- 🚫 **开发状态：阻塞（未批准，禁止编码）**
+- ✅ 状态：**已批准**（Project Owner，2026-08-04）
+- 🚧 **开发状态：开发中**（宿主核心 + 设备/原生 slice 已落地；`ModelHandle.filePath` 契约见 DD-001 待 004 定夺）
 
 ### 范围摘要
 - 模块定位：端侧 LLM 模型的**下载 / 存储 / 切换 / 查询**，以**薄封装**隔离 `flutter_gemma` 模型安装 builder API（`installModel().fromNetwork().install()`；旧 `ModelFileManager` 为 legacy facade，ADR-005，不自造下载器）；向模块 004 暴露稳定的 `ModelHandle` / `ModelRepository.getActiveModelHandle()` 契约。
@@ -385,6 +385,8 @@ Spec：⚪ 待创建
 | 2026-08-04 | — | **PR #13 Owner 评审修订**（四项阻塞项）：(🔴1) 删除编造的"Gemma 4 E2B iOS Metal 实测 ~56 tok/s"（ADR-005/ERD-004 §7/SPEC-004 §7）→ 改为「> 5 tokens/s，iOS Metal 具体吞吐以真机基线为准，不预设未实测数值」；(🔴2) 模块 007 封装对象由 legacy `ModelFileManager` 改为**现代 builder API** `installModel().fromNetwork().install()`（旧类降为 legacy facade，核实 v1.5.x 公开 API）；(🔴3) `flutter_gemma` 为 **MIT** 已核实属实（LICENSE：Copyright 2024 Sasha Denisov），保留；(🔴4) PRD-004 版本头 v1.0→v1.1、§7 编号 7.2→7.1。另非阻塞：锁版本 v1.5.0→**v1.5.2**（已核实当前版）。004 三文档升 v1.1.1、007 三文档升 v1.0.1，均仍草稿。范围扩张（ChatEngine/模块 007/ADR-005）待 Owner 明确认可 | Claude |
 
 | 2026-08-04 | — | **新增设计债务登记表** `docs/overview/DESIGN-DEBT.md`，登记模块 007 设备/原生 slice 发现的两处契约缺口（不改契约、待模块 004 设计时定夺）：**DD-001** `flutter_gemma` v1.5.2 自管落盘且不暴露 `filePath`（推理经 `getActiveModel()`），ERD/SPEC-007 §3.4 `ModelHandle.filePath` 生产不可诚实兑现——当前宿主实现用合成路径通过测试；**DD-002** `dart:io`/插件均无可用磁盘余量 API，生产 `ModelStore.freeBytes()`（E2 空间预检）暂无法实现，仅 `InMemoryModelStore` 供宿主测试。已在 ERD-007 §3.4/§4.3 与 ERD-004 §1.2（`LiteRtRuntime` 消费点）以 `⚠️ 契约缺口：见 DD-00x` 反向链接。**未改源码/契约** | Claude |
+
+| 2026-08-04 | — | ✅ **批准模块 004（LLM 集成）与模块 007（模型管理）三文档**（Project Owner）：PRD/ERD/SPEC 状态转"已批准"、批准日期 2026-08-04；范围扩张（ChatEngine / 模块 007 前置 / ADR-005 / 004 并入原 005）经 Owner 明确认可。矩阵行 004 → ✅/✅/✅、开发状态"开发中"（进入 TDD）；行 007 → ✅/✅/✅、开发状态"开发中"（宿主核心 + 设备 slice 已落地）。DD-001（`ModelHandle.filePath`）随 004 设计定夺 | Project Owner |
 
 ---
 
