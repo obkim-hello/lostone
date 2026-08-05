@@ -15,6 +15,7 @@ class ModelCatalog {
     id: 'smollm-135m',
     displayName: 'SmolLM 135M',
     format: ModelFormat.litertlm,
+    family: ModelFamily.general,
     sizeBytes: 105 * 1024 * 1024,
     capabilities: <ModelCapability>{ModelCapability.text},
     minTier: DeviceTier.simulatorCpu,
@@ -27,6 +28,7 @@ class ModelCatalog {
     id: 'gemma3-1b-it-int4',
     displayName: 'Gemma 3 1B (int4)',
     format: ModelFormat.litertlm,
+    family: ModelFamily.gemmaIt,
     sizeBytes: 512 * 1024 * 1024,
     capabilities: <ModelCapability>{ModelCapability.text},
     minTier: DeviceTier.lowEnd,
@@ -40,6 +42,7 @@ class ModelCatalog {
     id: 'gemma4-e2b',
     displayName: 'Gemma 4 E2B',
     format: ModelFormat.litertlm,
+    family: ModelFamily.gemma4,
     sizeBytes: 2472 * 1024 * 1024,
     capabilities: <ModelCapability>{
       ModelCapability.text,

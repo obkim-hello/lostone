@@ -57,6 +57,20 @@ enum EngineKind {
   mediaPipe,
 }
 
+/// 模型架构族（提示/分词/加载差异）；映射到 `flutter_gemma` 的 `ModelType`。
+///
+/// 保持与插件解耦：本层仅描述模型属性，映射在安装器/运行时完成。
+enum ModelFamily {
+  /// Gemma 3 / 3n 指令模型（`ModelType.gemmaIt`）。
+  gemmaIt,
+
+  /// Gemma 4 模型（`ModelType.gemma4`）。
+  gemma4,
+
+  /// 通用族：SmolLM、视觉/推理等（`ModelType.general`）。
+  general,
+}
+
 /// 模型目录条目：一个可下载模型的元数据（ERD §3.1）。
 @immutable
 class ModelDescriptor {
@@ -65,6 +79,7 @@ class ModelDescriptor {
     required this.id,
     required this.displayName,
     required this.format,
+    required this.family,
     required this.sizeBytes,
     required this.capabilities,
     required this.minTier,
@@ -81,6 +96,9 @@ class ModelDescriptor {
 
   /// 模型文件格式。
   final ModelFormat format;
+
+  /// 架构族（映射到引擎 `ModelType`）。
+  final ModelFamily family;
 
   /// 下载大小（字节）。
   final int sizeBytes;
@@ -106,6 +124,7 @@ class ModelDescriptor {
       other.id == id &&
       other.displayName == displayName &&
       other.format == format &&
+      other.family == family &&
       other.sizeBytes == sizeBytes &&
       setEquals(other.capabilities, capabilities) &&
       other.minTier == minTier &&
@@ -118,6 +137,7 @@ class ModelDescriptor {
         id,
         displayName,
         format,
+        family,
         sizeBytes,
         Object.hashAllUnordered(capabilities),
         minTier,

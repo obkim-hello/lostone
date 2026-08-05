@@ -1,0 +1,103 @@
+import 'dart:async';
+
+import 'package:flutter_gemma/flutter_gemma.dart' as gemma;
+
+import '../../models/model_descriptor.dart';
+import '../../models/model_install.dart';
+import 'model_installer.dart';
+
+/// 生产安装器：封装 `flutter_gemma` v1.5.2 的 builder API（ADR-005）。
+///
+/// 将插件的 `installModel().fromNetwork().withProgress().withCancelToken()
+/// .install()` 适配为本模块的 [InstallEvent] 流。进度回调为 0–100 百分比，
+/// 据 [ModelDescriptor.sizeBytes] 折算 `receivedBytes`（近似，非精确字节）。
+///
+/// 注意：`flutter_gemma` 自管模型落盘与「激活模型」，`install()` 成功后会自动
+/// 置为 active。故本安装器只负责「下载 + 进度 + 取消 + 错误归一」，落盘位置由
+/// 插件掌握。使用前须在应用启动调用 `FlutterGemma.initialize(...)`（见
+/// `gemma_bootstrap.dart`）。
+class FlutterGemmaInstaller implements ModelInstaller {
+  /// 创建安装器。
+  FlutterGemmaInstaller();
+
+  final Map<String, gemma.CancelToken> _tokens = <String, gemma.CancelToken>{};
+
+  @override
+  Stream<InstallEvent> install(ModelDescriptor descriptor, {String? hfToken}) {
+    final StreamController<InstallEvent> controller =
+        StreamController<InstallEvent>();
+    final gemma.CancelToken cancelToken = gemma.CancelToken();
+    _tokens[descriptor.id] = cancelToken;
+    final String id = descriptor.id;
+    final int total = descriptor.sizeBytes;
+
+    void emit(ModelState state, {int received = 0, InstallErrorKind? error}) {
+      if (!controller.isClosed) {
+        controller.add(InstallEvent(
+          modelId: id,
+          state: state,
+          receivedBytes: received,
+          totalBytes: total,
+          error: error,
+        ));
+      }
+    }
+
+    controller.onListen = () async {
+      try {
+        emit(ModelState.downloading);
+        await gemma.FlutterGemma.installModel(
+          modelType: _modelType(descriptor.family),
+          fileType: _fileType(descriptor.format),
+        )
+            .fromNetwork(descriptor.sourceUrl, token: hfToken)
+            .withProgress((int percent) {
+          emit(
+            ModelState.downloading,
+            received: (total * percent / 100).round(),
+          );
+        })
+            .withCancelToken(cancelToken)
+            .install();
+        emit(ModelState.verifying, received: total);
+        emit(ModelState.ready, received: total);
+      } on gemma.DownloadCancelledException {
+        emit(ModelState.failed, error: InstallErrorKind.canceled);
+      } on gemma.DownloadException catch (e) {
+        emit(ModelState.failed, error: _mapError(e.error));
+      } on Object {
+        emit(ModelState.failed, error: InstallErrorKind.unknown);
+      } finally {
+        _tokens.remove(id);
+        if (!controller.isClosed) {
+          await controller.close();
+        }
+      }
+    };
+    return controller.stream;
+  }
+
+  @override
+  Future<void> cancel(String modelId) async {
+    _tokens[modelId]?.cancel('用户取消');
+  }
+
+  gemma.ModelType _modelType(ModelFamily family) => switch (family) {
+        ModelFamily.gemmaIt => gemma.ModelType.gemmaIt,
+        ModelFamily.gemma4 => gemma.ModelType.gemma4,
+        ModelFamily.general => gemma.ModelType.general,
+      };
+
+  gemma.ModelFileType _fileType(ModelFormat format) => switch (format) {
+        ModelFormat.litertlm => gemma.ModelFileType.litertlm,
+        ModelFormat.task => gemma.ModelFileType.task,
+      };
+
+  InstallErrorKind _mapError(gemma.DownloadError error) => switch (error) {
+        gemma.UnauthorizedError() ||
+        gemma.ForbiddenError() =>
+          InstallErrorKind.authRequired,
+        gemma.CanceledError() => InstallErrorKind.canceled,
+        _ => InstallErrorKind.network,
+      };
+}
