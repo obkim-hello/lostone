@@ -79,6 +79,9 @@ class PersonaJsonCodec implements PersonaCodec {
       ],
       memories: _memories(_map(root['memories'], 'memories')),
       source: _source(_map(root['source'], 'source'), personaVersion),
+      notes: root['notes'] == null
+          ? const <String>[]
+          : _strings(root['notes'], 'notes'),
     );
   }
 
@@ -173,6 +176,7 @@ class PersonaJsonCodec implements PersonaCodec {
               },
           ],
         },
+        'notes': p.notes,
       };
 
   List<Map<String, dynamic>> _terms(List<TermStat> stats) =>

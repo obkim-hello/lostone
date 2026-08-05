@@ -119,6 +119,7 @@ class Persona {
     required this.tags,
     required this.memories,
     required this.source,
+    this.notes = const <String>[],
   });
 
   /// 稳定标识。**确定性派生**：对来源签名
@@ -160,6 +161,13 @@ class Persona {
   /// 数据来源摘要（数据源、消息数、时间跨度、参与者）。
   final PersonaSource source;
 
+  /// 生成元注记（如「原材料不足：情感逻辑」），自述所指层名。
+  ///
+  /// **不进 system prompt**（`PromptTemplate.render` 不读取），仅供 UI/审计；
+  /// 每次 `build`/`update` 重新计算，不套用 `hardRules` 的「永不覆盖」语义
+  /// （见 [DD-003](../../../docs/overview/DESIGN-DEBT.md)）。
+  final List<String> notes;
+
   @override
   bool operator ==(Object other) =>
       other is Persona &&
@@ -174,7 +182,8 @@ class Persona {
       other.relationalBehavior == relationalBehavior &&
       listEquals(other.tags, tags) &&
       other.memories == memories &&
-      other.source == source;
+      other.source == source &&
+      listEquals(other.notes, notes);
 
   @override
   int get hashCode => Object.hashAll(<Object?>[
@@ -190,5 +199,6 @@ class Persona {
         Object.hashAll(tags),
         memories,
         source,
+        Object.hashAll(notes),
       ]);
 }

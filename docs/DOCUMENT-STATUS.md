@@ -390,6 +390,7 @@ Spec：⚪ 待创建
 
 | 2026-08-04 | — | **模块 004 定夺 DD-001（选项 A）**：`ModelHandle.filePath` → 可选，`PersonaRuntime` 抽象层不依赖 `filePath`，`LiteRtRuntime` 经 flutter_gemma `getActiveModel()` 加载（代码改动随设备 slice 落地）；更新设计债务登记表 DD-001 状态为🟢已定夺 | Claude |
 | 2026-08-04 | — | **模块 004 TDD 切片 1（Runtime 抽象层）**：`lib/services/llm/persona_runtime.dart`（`PersonaRuntime` 抽象 + `RuntimeSource`/`RuntimeError`/`RuntimeResult`/`RuntimeCapabilities`/`RuntimeException`，ERD-004 §3.4/§4.1）+ `mock_runtime.dart`（`MockRuntime`：固定响应/token 流、prompt 记录、错误注入短路不发起调用、取消即停）。宿主 TDD 12 用例（含 SPEC T18 取消语义），`flutter test` 225/225、`flutter analyze` 0 警告。抽象层不触碰 `filePath`（DD-001） | Claude |
+| 2026-08-04 | — | **模块 004 TDD 切片 2a（蒸馏解析 + 映射）**：`lib/services/llm/distilled_persona.dart`（`DistilledPersona` 中间态 + `DistillationParser`：容忍散文/```json 围栏、字段从宽、整体不可解析抛 `DistillationFormatException`，SPEC §5.8）+ `persona_mapper.dart`（`PersonaMapper`：**原文接地**丢弃无支撑结论并据真实消息键哈希造 `Evidence`→落实 T5/§5.9；素材不足层置 low + `notes`→T4/§5.2；`hardRulesOverride` 永不覆盖）。**DD-003 定夺**：模块 003 `Persona` 加**可选** `notes`（`render` 不读、`PersonaJsonCodec` 往返，ERD-004 §4.3 预授权）。宿主 TDD +18 用例（parser 8 + mapper 10，覆盖 T2/T4/T5/T12/T13 映射级），`flutter test` 243/243、`flutter analyze` 0 警告（余 1 项为既有 test print） | Claude |
 
 ---
 

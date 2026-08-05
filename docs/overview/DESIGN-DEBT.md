@@ -52,6 +52,27 @@ E2「下载前预检磁盘空间不足 → `failed(insufficientStorage)`」在�
 
 ---
 
+## DD-003 — 「原材料不足」层级 note 的承载字段（模块 003 `Persona` 加可选 `notes`）
+
+- **状态**：🟢 已定夺（2026-08-04，模块 004 Slice 2 实现时）
+- **发现**：2026-08-04，实现 `PersonaMapper` 时。
+- **关联**：SPEC-LLM-Integration-004 §5.2 / T4（素材不足层 note）、ERD-004 §3.3（`insufficientLayers`）/§4.3（契约兼容：只加可选字段）；ADR-004（模块 003 只读复用）。
+
+**症状**：
+SPEC-004 §5.2 与 T4 要求「素材不足的层标 `原材料不足` note + `confidence.low`」。但模块 003 的层模型（`ExpressionStyle`/`EmotionalLogic`/`RelationalBehavior`/`Identity`）**均无 note 字段**，仅有 `confidence`。现有唯一的「说明类」字符串字段是 `HardRules.safetyNotes`。
+
+**为什么是隐患**：
+若把 note 塞进 `HardRules.safetyNotes`：(1) `PromptTemplate.render()` 会把它渲染进对话 system prompt（「约束：原材料不足…」），污染人格；(2) 增量 `update` 语义是「`hardRules` 永不覆盖」，会导致后续素材补足后旧的「原材料不足」note 永久残留（真 bug）。二者都不可接受。
+
+> **✅ 定夺（2026-08-04）**：按 ERD-004 §4.3 的既定逃生舱「只加**可选**字段、保持 `PersonaJsonCodec` 往返与 `kPersonaSchemaVersion` 前向兼容」，在模块 003 `Persona` 上新增**可选** `List<String> notes`（默认 `const []`）：
+> - 每次 `build`/`update` **重新计算**（不套用「永不覆盖」），故不会残留；
+> - `PromptTemplate.render()` **不读取** `notes`，不进 system prompt，零渲染泄漏；
+> - `PersonaJsonCodec` 编/解码 `notes`（缺省 → `[]`），旧 `.persona` 前向兼容；模块 003 既有 round-trip 测试（`decode(encode(p)) == p`，非 byte-identical）不受影响。
+> - note 文案自述层名（如 `原材料不足：情感逻辑`），满足 T4「对应层含 note」。
+> - **改动面**：仅 `mobile/lib/models/persona.dart`（字段 + `==`/`hashCode`）与 `mobile/lib/services/persona/persona_codec.dart`（encode/decode）；不改层模型、不改 `render()`、不改统计引擎逻辑。此为 ERD-004 §4.3 预授权的加性扩展，不违反 ADR-004「模块 003 不重写」。
+
+---
+
 ## 已解决
 
 （暂无）
