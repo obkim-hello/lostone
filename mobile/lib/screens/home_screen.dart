@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/app_config.dart';
 import '../providers/app_providers.dart';
 import 'dev/llm_harness_screen.dart';
+import 'settings/settings_screen.dart';
 
 /// 应用首页。
 ///
@@ -17,7 +18,19 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AppConfig config = ref.watch(appConfigProvider);
     return Scaffold(
-      appBar: AppBar(title: Text(config.appName)),
+      appBar: AppBar(
+        title: Text(config.appName),
+        actions: <Widget>[
+          IconButton(
+            key: const Key('open-settings'),
+            icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
+            onPressed: () => Navigator.of(context).push<void>(
+              MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+            ),
+          ),
+        ],
+      ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
