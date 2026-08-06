@@ -113,15 +113,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             label: 'Cloud API key',
             isSet: _notifier.hasCloudKey,
             controller: _cloudKeyController,
-            onSave: (String value) async {
+            onSave: (String value) => _guarded(() async {
               await _notifier.setCloudApiKey(value);
               _cloudKeyController.clear();
-              setState(() {});
-            },
-            onClear: () async {
+              if (mounted) {
+                setState(() {});
+              }
+            }),
+            onClear: () => _guarded(() async {
               await _notifier.clearCloudApiKey();
-              setState(() {});
-            },
+              if (mounted) {
+                setState(() {});
+              }
+            }),
           ),
           _PlainField(
             fieldKey: const Key('cloud-endpoint-field'),

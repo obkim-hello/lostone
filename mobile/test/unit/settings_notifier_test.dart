@@ -19,6 +19,17 @@ class _ThrowingSettingsRepository implements SettingsRepository {
   }
 }
 
+class _ThrowingSecureKeyStore implements SecureKeyStore {
+  @override
+  Future<String?> read() async => null;
+
+  @override
+  Future<void> write(String key) async => throw StateError('keychain locked');
+
+  @override
+  Future<void> clear() async => throw StateError('keychain locked');
+}
+
 SettingsNotifier _build({
   SettingsRepository? repository,
   SecureKeyStore? cloudKeyStore,
@@ -184,6 +195,60 @@ void main() {
         notifier.setCloudAuthorized(true),
         throwsA(isA<StateError>()),
       );
+    });
+  });
+
+  group('G3 secret-write failure is not swallowed', () {
+    test('setCloudApiKey rethrows and hasCloudKey stays false', () async {
+      final SettingsNotifier notifier = _build(
+        cloudKeyStore: _ThrowingSecureKeyStore(),
+      );
+      await notifier.loadInitial();
+
+      await expectLater(
+        notifier.setCloudApiKey('sk-secret'),
+        throwsA(isA<StateError>()),
+      );
+      expect(notifier.hasCloudKey, isFalse);
+    });
+
+    test('clearCloudApiKey rethrows and hasCloudKey stays true', () async {
+      final SettingsNotifier notifier = _build(
+        cloudKeyStore: _ThrowingSecureKeyStore(),
+      );
+      await notifier.loadInitial();
+
+      await expectLater(
+        notifier.clearCloudApiKey(),
+        throwsA(isA<StateError>()),
+      );
+    });
+  });
+
+  group('G1 copyWith preserves set fields on unrelated writes', () {
+    test('activeModelId/cloudEndpoint survive a runtime change', () async {
+      final SettingsNotifier notifier = _build();
+      await notifier.loadInitial();
+      await notifier.setActiveModelId('gemma3-1b-it-int4');
+      await notifier.setCloudEndpoint('https://api.example.test/v1');
+
+      await notifier.setRuntime(RuntimeChoice.cloud);
+
+      expect(notifier.state.activeModelId, 'gemma3-1b-it-int4');
+      expect(notifier.state.cloudEndpoint, 'https://api.example.test/v1');
+      expect(notifier.state.runtime, RuntimeChoice.cloud);
+    });
+
+    test('explicit null clears activeModelId while others persist', () async {
+      final SettingsNotifier notifier = _build();
+      await notifier.loadInitial();
+      await notifier.setActiveModelId('gemma3-1b-it-int4');
+      await notifier.setCloudAuthorized(true);
+
+      await notifier.setActiveModelId(null);
+
+      expect(notifier.state.activeModelId, isNull);
+      expect(notifier.state.cloudAuthorized, isTrue);
     });
   });
 }

@@ -20,6 +20,10 @@ class MockInstaller implements ModelInstaller {
   final Map<String, StreamController<InstallEvent>> _controllers =
       <String, StreamController<InstallEvent>>{};
 
+  /// Model ids whose install stream should emit a raw error (not a `failed`
+  /// event) after the planned events, exercising the repository's `onError`.
+  final Set<String> streamErrors = <String>{};
+
   int installCallCount = 0;
 
   @override
@@ -41,6 +45,10 @@ class MockInstaller implements ModelInstaller {
           return;
         }
         controller.add(event);
+      }
+      if (streamErrors.contains(descriptor.id) && !controller.isClosed) {
+        controller.addError(Exception('stream boom'));
+        return;
       }
       final bool terminal = events.isNotEmpty &&
           (events.last.state == ModelState.ready ||
@@ -295,6 +303,26 @@ void main() {
       final List<InstallEvent> events = await repo.install(smol.id).toList();
       expect(events.last.state, ModelState.failed);
       expect(events.last.error, InstallErrorKind.corrupted);
+      expect(await store.exists(smol.id), isFalse);
+    });
+  });
+
+  group('G2 安装流原始错误', () {
+    test('stream onError → failed(unknown)，无半成品', () async {
+      final MockInstaller installer = MockInstaller(
+        (ModelDescriptor d, int a) => <InstallEvent>[
+          _downloading(d.id, d.sizeBytes ~/ 3, d.sizeBytes),
+        ],
+      )..streamErrors.add(smol.id);
+      final InMemoryModelStore store = InMemoryModelStore();
+      final DefaultModelRepository repo =
+          _repo(installer: installer, store: store);
+
+      final List<InstallEvent> events = await repo.install(smol.id).toList();
+
+      expect(events.last.state, ModelState.failed);
+      expect(events.last.error, InstallErrorKind.unknown);
+      expect(repo.stateOf(smol.id), ModelState.failed);
       expect(await store.exists(smol.id), isFalse);
     });
   });

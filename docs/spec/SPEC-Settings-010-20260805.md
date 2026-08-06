@@ -42,7 +42,7 @@ Specifies the interfaces 010 owns — `RuntimeChoice`, `AppSettings`, `SettingsR
 
 ### 2.3 `SettingsRepository.save(AppSettings) → Future<void>`
 - **Input**: an `AppSettings`.
-- **Pre**: store available. **Post**: all four non-secret fields persisted; a subsequent `load()` returns an equal value. **No secret is written** (the type carries none).
+- **Pre**: store available. **Post**: all five non-secret fields (`runtime`, `cloudAuthorized`, `cloudEndpoint`, `activeModelId`, `chatTemperature`) persisted; a subsequent `load()` returns an equal value. **No secret is written** (the type carries none).
 
 ### 2.4 `SecureKeyStore` / `TokenStore` (cloud API key / HF token)
 - `read() → Future<String?>` (null if unset), `write(String)`, `clear()`.
@@ -133,7 +133,7 @@ All host tests use a **fake `ModelRepository`** with deterministic `InstallEvent
 | # | Test | Asserts |
 |---|------|---------|
 | C1 | `load()` empty store | Returns default `AppSettings` (E1). |
-| C2 | Settings round-trip | `save(s)` then `load()` returns a value equal to `s` (all four fields). |
+| C2 | Settings round-trip | `save(s)` then `load()` returns a value equal to `s` (all five non-secret fields). |
 | C3 | `setRuntime` persists + exposes | State + persisted `runtime` updated; `runtimeMode` maps correctly for all three choices. |
 | C4 | `setCloudAuthorized` persists | `cloudAuthorized` toggles and survives reload. |
 | C5 | Secret isolation — cloud key | `setCloudApiKey` writes to fake secure store; Hive map has no `cloud_api_key`; `AppSettings` unchanged; no secret in captured logs (E12). |

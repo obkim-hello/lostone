@@ -15,6 +15,7 @@ import '../services/settings/model_manager_notifier.dart';
 import '../services/settings/secure_key_store.dart';
 import '../services/settings/settings_notifier.dart';
 import '../services/settings/settings_repository.dart';
+import '../utils/app_logger.dart';
 
 /// Non-secret settings persistence, backed by the app's `settings` Hive box
 /// (opened during app initialization). Override in tests.
@@ -70,8 +71,15 @@ final StateNotifierProvider<SettingsNotifier, AppSettings> appSettingsProvider =
         repository: ref.watch(settingsRepositoryProvider),
         cloudKeyStore: ref.watch(cloudKeyStoreProvider),
         hfTokenStore: ref.watch(hfTokenStoreProvider),
+        onSaveError: (Object error) =>
+            AppLogger.error('SettingsNotifier', 'settings save failed: $error'),
       );
-      notifier.loadInitial();
+      notifier.loadInitial().catchError(
+        (Object error) => AppLogger.error(
+          'SettingsNotifier',
+          'settings load failed: $error',
+        ),
+      );
       return notifier;
     });
 

@@ -124,10 +124,23 @@ class _FakeRepo implements ModelRepository {
   Future<void> syncInstalled() async {}
 }
 
-List<Override> _overrides(_FakeRepo repo) {
+class _ThrowingSecureKeyStore implements SecureKeyStore {
+  @override
+  Future<String?> read() async => null;
+
+  @override
+  Future<void> write(String key) async => throw StateError('keychain locked');
+
+  @override
+  Future<void> clear() async => throw StateError('keychain locked');
+}
+
+List<Override> _overrides(_FakeRepo repo, {SecureKeyStore? cloudKeyStore}) {
   return <Override>[
     settingsRepositoryProvider.overrideWithValue(InMemorySettingsRepository()),
-    cloudKeyStoreProvider.overrideWithValue(InMemorySecureKeyStore()),
+    cloudKeyStoreProvider.overrideWithValue(
+      cloudKeyStore ?? InMemorySecureKeyStore(),
+    ),
     hfTokenStoreProvider.overrideWithValue(InMemoryTokenStore()),
     deviceCapabilitiesProvider.overrideWithValue(
       const StaticDeviceCapabilities(tier: DeviceTier.simulatorCpu),
@@ -136,13 +149,18 @@ List<Override> _overrides(_FakeRepo repo) {
   ];
 }
 
-Future<void> _pump(WidgetTester tester, Widget screen, _FakeRepo repo) async {
+Future<void> _pump(
+  WidgetTester tester,
+  Widget screen,
+  _FakeRepo repo, {
+  SecureKeyStore? cloudKeyStore,
+}) async {
   tester.view.physicalSize = const Size(1000, 3000);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
     ProviderScope(
-      overrides: _overrides(repo),
+      overrides: _overrides(repo, cloudKeyStore: cloudKeyStore),
       child: MaterialApp(home: screen),
     ),
   );
@@ -211,6 +229,27 @@ void main() {
         container.read(appSettingsProvider).cloudEndpoint,
         'https://api.example.test/v1',
       );
+    });
+
+    testWidgets('a failed cloud-key save surfaces a SnackBar', (
+      WidgetTester tester,
+    ) async {
+      final _FakeRepo repo = _FakeRepo(catalogList: <ModelDescriptor>[]);
+      await _pump(
+        tester,
+        const SettingsScreen(),
+        repo,
+        cloudKeyStore: _ThrowingSecureKeyStore(),
+      );
+
+      await tester.enterText(
+        find.byKey(const Key('cloud-key-field')),
+        'sk-secret',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Save').first);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Could not save'), findsOneWidget);
     });
   });
 
