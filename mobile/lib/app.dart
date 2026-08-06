@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'models/app_config.dart';
 import 'providers/app_providers.dart';
 import 'screens/home_screen.dart';
+import 'theme/app_theme.dart';
 
 /// Lostone 应用根组件。
 ///
@@ -18,10 +19,7 @@ class LostoneApp extends ConsumerWidget {
     return MaterialApp(
       title: config.appName,
       debugShowCheckedModeBanner: config.isDebug,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6750A4)),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.light(),
       home: const HomeScreen(),
     );
   }

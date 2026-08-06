@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/app_settings.dart';
 import '../../providers/settings_providers.dart';
 import '../../services/settings/settings_notifier.dart';
+import '../../theme/app_theme.dart';
 import 'model_management_screen.dart';
 
 /// App settings: runtime mode, cloud authorization + key, HF token,
@@ -48,6 +49,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
+        padding: const EdgeInsets.only(top: 8, bottom: 32),
         children: <Widget>[
           const _SectionHeader('Runtime'),
           RadioGroup<RuntimeChoice>(
@@ -62,19 +64,40 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 for (final RuntimeChoice choice in RuntimeChoice.values)
                   RadioListTile<RuntimeChoice>(
                     key: Key('runtime-${choice.name}'),
-                    title: Text(_runtimeLabel(choice)),
-                    subtitle: Text(_runtimeSubtitle(choice)),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: AppTheme.gutter,
+                      vertical: 2,
+                    ),
+                    activeColor: AppTheme.accent,
+                    controlAffinity: ListTileControlAffinity.trailing,
+                    title: Text(
+                      _runtimeLabel(choice),
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    subtitle: Text(
+                      _runtimeSubtitle(choice),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                     value: choice,
                   ),
               ],
             ),
           ),
-          const Divider(),
           const _SectionHeader('Cloud'),
           SwitchListTile(
             key: const Key('cloud-authorized'),
-            title: const Text('Authorize cloud inference'),
-            subtitle: const Text('Sends prompts to a cloud API when selected.'),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: AppTheme.gutter,
+              vertical: 2,
+            ),
+            title: Text(
+              'Authorize cloud inference',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            subtitle: Text(
+              'Sends prompts to a cloud API when selected.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
             value: settings.cloudAuthorized,
             onChanged: (bool value) =>
                 _guarded(() => _notifier.setCloudAuthorized(value)),
@@ -94,7 +117,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               setState(() {});
             },
           ),
-          const Divider(),
           const _SectionHeader('Downloads'),
           _SecretField(
             fieldKey: const Key('hf-token-field'),
@@ -107,27 +129,47 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               setState(() {});
             },
           ),
-          const Divider(),
           const _SectionHeader('Advanced'),
-          ListTile(
-            title: const Text('Chat temperature'),
-            subtitle: Slider(
-              key: const Key('temperature-slider'),
-              value: settings.chatTemperature,
-              label: settings.chatTemperature.toStringAsFixed(2),
-              divisions: 20,
-              onChanged: (double value) =>
-                  _guarded(() => _notifier.setChatTemperature(value)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppTheme.gutter,
+              4,
+              AppTheme.gutter,
+              8,
             ),
-            trailing: Text(settings.chatTemperature.toStringAsFixed(2)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: <Widget>[
+                    Text(
+                      'Chat temperature',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    Text(
+                      settings.chatTemperature.toStringAsFixed(2),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+                Slider(
+                  key: const Key('temperature-slider'),
+                  value: settings.chatTemperature,
+                  label: settings.chatTemperature.toStringAsFixed(2),
+                  divisions: 20,
+                  onChanged: (double value) =>
+                      _guarded(() => _notifier.setChatTemperature(value)),
+                ),
+              ],
+            ),
           ),
-          const Divider(),
-          ListTile(
-            key: const Key('open-model-management'),
-            leading: const Icon(Icons.memory),
-            title: const Text('Models'),
-            subtitle: Text(settings.activeModelId ?? 'No model active'),
-            trailing: const Icon(Icons.chevron_right),
+          const _HairLine(),
+          _NavRow(
+            rowKey: const Key('open-model-management'),
+            icon: Icons.memory_outlined,
+            title: 'Models',
+            subtitle: settings.activeModelId ?? 'No model active',
             onTap: () => Navigator.of(context).push<void>(
               MaterialPageRoute<void>(
                 builder: (_) => const ModelManagementScreen(),
@@ -157,6 +199,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 }
 
+/// Uppercase, muted, letter-spaced section label above a group of rows.
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader(this.title);
 
@@ -165,17 +208,93 @@ class _SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      padding: const EdgeInsets.fromLTRB(
+        AppTheme.gutter,
+        24,
+        AppTheme.gutter,
+        10,
+      ),
       child: Text(
-        title,
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-          color: Theme.of(context).colorScheme.primary,
+        title.toUpperCase(),
+        style: const TextStyle(
+          color: AppTheme.muted,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.8,
         ),
       ),
     );
   }
 }
 
+/// A flat, tappable navigation row with a rounded leading glyph and chevron.
+class _NavRow extends StatelessWidget {
+  const _NavRow({
+    required this.rowKey,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final Key rowKey;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      key: rowKey,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppTheme.gutter,
+          vertical: 14,
+        ),
+        child: Row(
+          children: <Widget>[
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppTheme.fill,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppTheme.separator),
+              ),
+              child: Icon(icon, color: AppTheme.ink, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(title, style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: AppTheme.muted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A hairline separator matching the Instagram-style divider weight.
+class _HairLine extends StatelessWidget {
+  const _HairLine();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Divider(height: 1, thickness: 0.5, color: AppTheme.separator);
+  }
+}
+
+/// An obscured secret input with inline Save/Clear actions and a "(set)" hint.
 class _SecretField extends StatelessWidget {
   const _SecretField({
     required this.fieldKey,
@@ -196,12 +315,40 @@ class _SecretField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.gutter,
+        vertical: 4,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(isSet ? '$label (set)' : label),
-          const SizedBox(height: 4),
+          Row(
+            children: <Widget>[
+              Text(label, style: Theme.of(context).textTheme.titleMedium),
+              if (isSet) ...<Widget>[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Text(
+                    'Set',
+                    style: TextStyle(
+                      color: AppTheme.accent,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
           Row(
             children: <Widget>[
               Expanded(
@@ -211,11 +358,27 @@ class _SecretField extends StatelessWidget {
                   obscureText: true,
                   enableSuggestions: false,
                   autocorrect: false,
+                  style: Theme.of(context).textTheme.bodyMedium,
                   decoration: InputDecoration(
+                    isDense: true,
+                    filled: true,
+                    fillColor: AppTheme.fill,
                     hintText: isSet
                         ? 'Enter a new value to replace'
                         : 'Enter $label',
-                    border: const OutlineInputBorder(),
+                    hintStyle: const TextStyle(color: AppTheme.muted),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppTheme.separator),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppTheme.accent),
+                    ),
                   ),
                 ),
               ),
@@ -229,7 +392,7 @@ class _SecretField extends StatelessWidget {
                 child: const Text('Save'),
               ),
               if (onClear != null && isSet) ...<Widget>[
-                const SizedBox(width: 8),
+                const SizedBox(width: 4),
                 TextButton(onPressed: onClear, child: const Text('Clear')),
               ],
             ],
