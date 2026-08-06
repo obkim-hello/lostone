@@ -2,7 +2,7 @@
 
 > 技术规格 - 模型管理（接口级输入输出、边界与测试用例）
 >
-> **版本**：v1.0.1
+> **版本**：v1.0.2
 > **状态**：✅ 已批准（Project Owner，2026-08-04）
 > **作者**：Claude
 > **日期**：2026-08-02
@@ -35,7 +35,7 @@
 ### 2.1 `catalog({DeviceTier? recommendFor}) → List<ModelDescriptor>`
 - **输入**：可选设备档。
 - **输出**：内置目录；给定 `recommendFor` 时按 `canRun` 与 `minTier` 排序/标注推荐。
-- **前置**：无。**后置**：返回非空（至少含 SmolLM/Gemma3-1B/Gemma4-E2B）；不产生副作用。
+- **前置**：无。**后置**：返回非空（至少含 SmolLM/Gemma3-1B/Gemma4-E2B/Gemma4-E4B）；不产生副作用。
 
 ### 2.2 `install(String modelId, {String? hfToken}) → Stream<InstallEvent>`
 - **输入**：目录内 `modelId`；受限模型需 `hfToken`（或已存于 `TokenStore`）。
@@ -60,10 +60,18 @@
 ### 2.7 `installed() / stateOf(modelId)`
 - `installed()`：已安装模型快照。`stateOf`：查询状态；未知模型 → `notInstalled`。
 
+### 2.8 `syncInstalled() → Future<void>`
+- **输入**：无。
+- **前置**：无。**后置**：内存态与插件磁盘真相对账（以底层 `isInstalled` 为准）后 `installed()` 反映真实已安装集合；`refresh` 时调用。幂等。
+
+### 2.9 `deactivate() → Future<void>`
+- **输入**：无。
+- **前置**：无。**后置**：清除激活标识（保留文件）；`getActiveModelHandle() == null`；幂等（无激活时 no-op）。
+
 ---
 
 ## 3. `ModelHandle` 契约（供模块 004）
-- `filePath` 必为存在的可内存映射文件绝对路径。
+- `filePath` 为 `String?`（可空）：仅在「我们自管下载」路径下有值；`flutter_gemma` 路径下为 `null`——模块 004 经 `getActiveModel()` 加载模型而非 `filePath`（交叉引用 [DD-001](../overview/DESIGN-DEBT.md#dd-001)）。
 - `backend` 依 `DeviceCapabilities.preferredBackend()`：真机默认 `gpuMetal`，模拟器/无 GPU → `cpu`。
 - `engine` 依 `preferredEngine(format)`：`.litertlm`→`liteRtLm`；`.task`→`mediaPipe`。
 - 模块 004 只读消费，不得改写。
@@ -92,7 +100,7 @@
 
 | 编号 | 名称 | 类型 | 断言要点 |
 |------|------|------|----------|
-| T1 | 目录非空且含默认模型 | 单元 | `catalog` 含 SmolLM/Gemma3-1B/Gemma4-E2B |
+| T1 | 目录非空且含默认模型 | 单元 | `catalog` 含 SmolLM/Gemma3-1B/Gemma4-E2B/Gemma4-E4B |
 | T2 | 推荐排序 | 单元 | `recommendFor: highEnd` 优先 E2B；`simulatorCpu` 仅 SmolLM 可运行 |
 | T3 | 下载状态机（happy path）| 单元(mock) | 事件序列 `downloading*→verifying→ready`，末态 ready |
 | T4 | 进度单调递增 | 单元(mock) | `receivedBytes` 非递减，末值==`totalBytes` |
@@ -126,7 +134,7 @@
 ## 7. 安全要求
 - 不接触聊天原文；HF token 经 Flutter Secure Storage，日志脱敏。
 - 模型落 app 私有目录；加密/排除备份钩子交模块 008（预留注入点）。
-- 校验下载完整性（大小 + 可选 sha256）防损坏/篡改。
+- 下载完整性由 `flutter_gemma` 内部处理（无 sha256 字段/校验）；来源受信任（目录内置 URL）。
 
 ---
 
@@ -136,6 +144,7 @@
 | 2026-08-02 | v1.0（草稿）| 初始草稿（依据 PRD-007、ERD-007、ADR-005）| Claude |
 | 2026-08-04 | v1.0.1（草稿）| PR #13 评审修订：flutter_gemma 锁版本 v1.5.0→v1.5.2；封装对齐 builder API（legacy `ModelFileManager` facade）| Claude |
 | 2026-08-04 | v1.0.1（已批准）| ✅ Project Owner 批准三文档；宿主核心 + 设备 slice 已落地；DD-002 记于设计债务登记表 | Project Owner |
+| 2026-08-06 | v1.0.2 | 文档-代码对账（post-#16）：新增 §2.8 `syncInstalled()` / §2.9 `deactivate()` 规格；catalog 后置与 T1 补 Gemma4-E4B；§3 `ModelHandle.filePath` 改可空（交叉引用 DD-001）；§7 完整性校验措辞去除 sha256（改由 flutter_gemma 内部处理）| Claude |
 
 ---
 

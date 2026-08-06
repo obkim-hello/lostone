@@ -186,7 +186,7 @@ lostone/
 | **框架** | Flutter 3.38+ |
 | **语言** | Dart 3.11+ |
 | **本地 AI** | Google AI Edge LiteRT |
-| **支持模型** | Gemma 4, Llama 3.2, Qwen 2.5, Phi-3 |
+| **模型目录** | SmolLM2 135M（冒烟）、Gemma 3 1B、Gemma 4 E2B、Gemma 4 E4B（flutter_gemma 引擎另支持 Llama/Qwen/Phi 等）|
 | **云端 API** | OpenAI, Anthropic, Google Gemini |
 | **状态管理** | Riverpod |
 | **本地数据库** | Hive + SQLite |

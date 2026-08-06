@@ -5,6 +5,8 @@ import 'app.dart';
 import 'models/app_config.dart';
 import 'providers/app_providers.dart';
 import 'services/app_initializer.dart';
+import 'services/model/gemma_bootstrap.dart';
+import 'utils/app_logger.dart';
 
 /// 应用入口。
 ///
@@ -13,6 +15,11 @@ import 'services/app_initializer.dart';
 Future<void> main() async {
   try {
     await initializeApp();
+    try {
+      await initGemmaRuntime();
+    } on Object catch (e, s) {
+      AppLogger.error('main', 'initGemmaRuntime failed: $e\n$s');
+    }
     final AppConfig config = getAppConfig();
     runApp(
       ProviderScope(

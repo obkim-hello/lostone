@@ -30,12 +30,18 @@ class ModelManagementScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ModelManagerState state = ref.watch(modelManagerProvider);
+    final Set<String> installedIds = <String>{
+      for (final InstalledModel model in state.installed) model.descriptor.id,
+    };
     return Scaffold(
       appBar: AppBar(title: const Text('Models')),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: <Widget>[
-          for (final ModelDescriptor descriptor in state.catalog)
+          for (final ModelDescriptor descriptor in state.catalog.where(
+            (ModelDescriptor d) =>
+                d.family == ModelFamily.gemma4 || installedIds.contains(d.id),
+          ))
             _ModelTile(descriptor: descriptor, state: state),
         ],
       ),
@@ -63,6 +69,8 @@ class _ModelTile extends ConsumerWidget {
     final InstallFailure? failure = state.lastError?.modelId == descriptor.id
         ? state.lastError
         : null;
+    final bool showUnsupported =
+        !isReady && failure?.kind == InstallErrorKind.unsupportedDevice;
 
     return Container(
       key: Key('model-tile-${descriptor.id}'),
@@ -100,9 +108,16 @@ class _ModelTile extends ConsumerWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${_megabytes(descriptor.sizeBytes)} MB',
+                      _sizeLabel(descriptor.sizeBytes),
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
+                    if (descriptor.description.isNotEmpty) ...<Widget>[
+                      const SizedBox(height: 6),
+                      Text(
+                        descriptor.description,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -110,6 +125,16 @@ class _ModelTile extends ConsumerWidget {
           ),
           if (isDownloading) ...<Widget>[
             const SizedBox(height: 12),
+            Text(
+              _statusLabel(progress),
+              key: Key('status-${descriptor.id}'),
+              style: const TextStyle(
+                color: AppTheme.accent,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
@@ -121,7 +146,8 @@ class _ModelTile extends ConsumerWidget {
               ),
             ),
           ],
-          if (failure != null)
+          if (failure != null &&
+              failure.kind != InstallErrorKind.unsupportedDevice)
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: Text(
@@ -133,6 +159,11 @@ class _ModelTile extends ConsumerWidget {
                   fontWeight: FontWeight.w500,
                 ),
               ),
+            ),
+          if (showUnsupported)
+            _UnsupportedNotice(
+              noticeKey: Key('unsupported-${descriptor.id}'),
+              onUseCloud: () => Navigator.of(context).maybePop(),
             ),
           const SizedBox(height: 12),
           Row(
@@ -149,8 +180,9 @@ class _ModelTile extends ConsumerWidget {
                 Expanded(
                   child: FilledButton(
                     key: Key('install-${descriptor.id}'),
-                    onPressed: () => notifier.install(descriptor.id),
-                    child: const Text('Install'),
+                    onPressed: () =>
+                        notifier.install(descriptor.id, allowOverTier: true),
+                    child: const Text('Download'),
                   ),
                 ),
               if (isReady && !isActive) ...<Widget>[
@@ -159,6 +191,16 @@ class _ModelTile extends ConsumerWidget {
                     key: Key('activate-${descriptor.id}'),
                     onPressed: () => notifier.activate(descriptor.id),
                     child: const Text('Activate'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              if (isReady && isActive) ...<Widget>[
+                Expanded(
+                  child: _OutlinedAction(
+                    actionKey: Key('deactivate-${descriptor.id}'),
+                    label: 'Deactivate',
+                    onPressed: () => notifier.deactivate(),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -225,6 +267,77 @@ class _ModelTile extends ConsumerWidget {
   }
 
   int _megabytes(int bytes) => (bytes / (1024 * 1024)).round();
+
+  String _sizeLabel(int bytes) {
+    final int mb = _megabytes(bytes);
+    if (mb >= 1024) {
+      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB download';
+    }
+    return '$mb MB download';
+  }
+
+  String _statusLabel(InstallProgress? progress) {
+    if (progress?.state == ModelState.verifying) {
+      return 'Verifying…';
+    }
+    final double? fraction = progress?.fraction;
+    if (fraction == null) {
+      return 'Downloading…';
+    }
+    return 'Downloading… ${(fraction * 100).round()}%';
+  }
+}
+
+/// Notice shown when a model is unlikely to run on the current device,
+/// pointing the user to Cloud AI (their own API key) as an alternative.
+class _UnsupportedNotice extends StatelessWidget {
+  const _UnsupportedNotice({required this.noticeKey, required this.onUseCloud});
+
+  final Key noticeKey;
+  final VoidCallback onUseCloud;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      key: noticeKey,
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text(
+            'May not run on this device.',
+            style: TextStyle(
+              color: AppTheme.danger,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 2),
+          const Text(
+            'Try Cloud AI with your own API key instead.',
+            style: TextStyle(color: AppTheme.muted, fontSize: 13),
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: onUseCloud,
+              style: TextButton.styleFrom(
+                foregroundColor: AppTheme.accent,
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+              child: const Text('Use Cloud AI'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// A rounded avatar showing the first letter of a model's display name.

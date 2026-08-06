@@ -2,7 +2,7 @@
 
 > Technical Specification — Settings (interface-level I/O, pre/postconditions, edge cases, test cases)
 >
-> **Version**: v1.0.1 (draft)
+> **Version**: v1.0.3
 > **Status**: ✅ Approved
 > **Author**: Claude
 > **Date**: 2026-08-05
@@ -31,9 +31,9 @@ Specifies the interfaces 010 owns — `RuntimeChoice`, `AppSettings`, `SettingsR
 ## 2. Interface Definitions
 
 ### 2.1 `AppSettings` (immutable value)
-- **Fields**: `runtime: RuntimeChoice` (default `local`), `cloudAuthorized: bool` (default `false`), `activeModelId: String?` (default `null`), `chatTemperature: double` (default `0.7`).
+- **Fields**: `runtime: RuntimeChoice` (default `local`), `cloudAuthorized: bool` (default `false`), `activeModelId: String?` (default `null`), `chatTemperature: double` (default `0.7`), `cloudEndpoint: String?` (default `null`, non-secret cloud API base URL).
 - **Derived**: `runtimeMode → PersonaRuntimeMode` (1:1 map).
-- **Invariant**: contains **no secret** (API key / HF token are never fields). `copyWith` is nullable-aware for `activeModelId` (can set back to `null`). Value equality over all four fields.
+- **Invariant**: contains **no secret** (API key / HF token are never fields). `copyWith` is nullable-aware for `activeModelId` and `cloudEndpoint` (can set back to `null`). Value equality over all five fields.
 
 ### 2.2 `SettingsRepository.load() → Future<AppSettings>`
 - **Input**: none.
@@ -56,14 +56,16 @@ Specifies the interfaces 010 owns — `RuntimeChoice`, `AppSettings`, `SettingsR
 - `setHfToken(String)`: `await hfTokenStore.write(token)` (reuse `SecureTokenStore`).
 - `setActiveModelId(String?)`: `state = state.copyWith(activeModelId:)`; `save`. **Post**: mirror updated (source of truth remains 007 `getActiveModelHandle`).
 - `setChatTemperature(double)`: clamp to a valid range, `copyWith`, `save`.
+- `setCloudEndpoint(String? url)`: `state = state.copyWith(cloudEndpoint:)`; `await repository.save(state)`. **Post**: `state.cloudEndpoint == url`; persisted (non-secret, Hive).
 - **Errors**: a store failure surfaces to the UI (snackbar / save-failed flag) — never swallowed; in-memory state may still reflect intent but the failure is reported.
 
 ### 2.6 `ModelManagerNotifier` (`StateNotifier<ModelManagerState>`)
-- `refresh()`: `state = {catalog: repository.catalog(recommendFor: device.tier()), installed: repository.installed(), activeModelId: (await repository.getActiveModelHandle())?.id, progress: unchanged, lastError: cleared}`.
+- `refresh()`: first `await repository.syncInstalled()` (reconcile in-memory state with the plugin's on-disk truth), then `state = {catalog: repository.catalog(recommendFor: device.tier()), installed: repository.installed(), activeModelId: (await repository.getActiveModelHandle())?.id, progress: unchanged, lastError: cleared}`.
 - `install(modelId, {hfToken, allowOverTier})`: subscribe `repository.install(modelId, hfToken:, allowOverTier:)`; fold each `InstallEvent` into `progress[modelId]`; on `failed`, set `lastError`. On done, `refresh()`. **Pre**: `modelId ∈ catalog` (else `install` throws `ArgumentError`; guarded by catalog-driven UI). **Post**: on `ready`, installed list includes it.
 - `cancel(modelId)`: `repository.cancel(modelId)`; clear `progress[modelId]`; `refresh()`.
-- `delete(modelId)`: `repository.delete(modelId)` (idempotent); if `modelId == activeModelId`, invoke `onActiveChanged(null)`; `refresh()`.
+- `delete(modelId)`: `repository.delete(modelId)` (idempotent); if `modelId == activeModelId`, invoke `onActiveChanged(null)`; clear `progress[modelId]`; `refresh()`.
 - `activate(modelId)`: `repository.setActive(modelId)` (catch `StateError` for non-ready → `lastError`); on success `onActiveChanged(modelId)`; `refresh()`.
+- `deactivate()`: `repository.deactivate()` → `refresh()` → `onActiveChanged(null)`. **Post**: `activeModelId == null` (files retained); idempotent. Corresponds to the UI "Deactivate" button.
 
 ---
 
@@ -71,11 +73,11 @@ Specifies the interfaces 010 owns — `RuntimeChoice`, `AppSettings`, `SettingsR
 
 - `RuntimeChoice ∈ {local, cloud, maxPrivacy}`; maps to `PersonaRuntimeMode ∈ {local, cloud, maxPrivacy}` (identical ordering).
 - `chatTemperature`: double clamped to `[0.0, 1.0]` (default `0.7`); passed to `ChatOptions`/`LlmBuildOptions` downstream.
-- `activeModelId`: an id present in `ModelCatalog` (`smollm2-135m` / `gemma3-1b-it-int4` / `gemma4-e2b`) or `null`.
+- `activeModelId`: an id present in `ModelCatalog` (`smollm2-135m` / `gemma3-1b-it-int4` / `gemma4-e2b` / `gemma4-e4b`) or `null`.
 - `ModelManagerState`: `{catalog: List<ModelDescriptor>, installed: List<InstalledModel>, activeModelId: String?, progress: Map<String, InstallProgress>, lastError: InstallFailure?}`.
 - `InstallProgress`: `{state: ModelState, receivedBytes: int, totalBytes: int}`; percent = `totalBytes == 0 ? null : (receivedBytes*100/totalBytes).round()`.
 - `InstallFailure`: `{modelId: String, kind: InstallErrorKind}`.
-- Hive `settings` box keys: `runtime` (enum name), `cloudAuthorized` (bool), `activeModelId` (String?), `chatTemperature` (double). Secrets: Secure Storage keys `cloud_api_key` (via `SecureKeyStore`), HF token (via `SecureTokenStore`).
+- Hive `settings` box keys: `runtime` (enum name), `cloudAuthorized` (bool), `activeModelId` (String?), `chatTemperature` (double), `cloud_endpoint` (String?, default `null`, non-secret). Secrets: Secure Storage keys `cloud_api_key` (via `SecureKeyStore`), HF token (via `SecureTokenStore`).
 
 ---
 
@@ -100,6 +102,8 @@ Specifies the interfaces 010 owns — `RuntimeChoice`, `AppSettings`, `SettingsR
 | E15 | Corrupted/verification failure | `failed(corrupted)` is a **contract-permitted** exit the UI maps defensively to a distinct retry (re-download) state — but the current `flutter_gemma` installer (post-#14) **never emits it** (it performs no sha256 verification; download success → `ready` directly). Reachable only by a future self-managed installer. |
 | E16 | Unknown modelId to `install` | `ArgumentError` from 007 (catalog-driven UI prevents; defensive mapping to `unknownModel`). |
 | E17 | `save()` failure | Reported to UI (never swallowed); state reflects intent; user can retry save. |
+
+> **v1 reconciliation (post-#16).** E3/E4 (over-tier confirm) are **deferred**: v1 ships `install(..., allowOverTier: true)` **unconditionally**, so the tier gate is not exercised and the confirm dialog is not wired (`_UnsupportedNotice` is failure-triggered only). These cases return when the confirm flow lands.
 
 ---
 
@@ -138,8 +142,8 @@ All host tests use a **fake `ModelRepository`** with deterministic `InstallEvent
 | C8 | Install progress fold | Scripted `downloading(25/50/100) → ready` (the flutter_gemma path, no `verifying`); `progress[id]` percent advances; ends `ready` (F2). A separate case scripts an optional `verifying` frame to prove the UI tolerates the contract-permitted state without breaking. |
 | C9 | Install authRequired | Gated stream emits `failed(authRequired)`; `lastError.kind == authRequired` (E2). |
 | C10 | Install insufficientStorage | `failed(insufficientStorage)` → distinct error (E5). |
-| C11 | Install unsupportedDevice (no confirm) | `!canRun`, `allowOverTier:false` → `failed(unsupportedDevice)` (E3). |
-| C12 | Install over-tier confirmed | `allowOverTier:true` bypasses tier gate; proceeds to `ready` (E4). |
+| C11 | Install unsupportedDevice (no confirm) | `!canRun`, `allowOverTier:false` → `failed(unsupportedDevice)` (E3). **Deferred**: v1 always passes `allowOverTier:true` (see E3/E4 note). |
+| C12 | Install over-tier confirmed | `allowOverTier:true` bypasses tier gate; proceeds to `ready` (E4). **Deferred** with the confirm flow (see E3/E4 note). |
 | C13 | Install network failure | `failed(network)` → distinct retry state (E14). |
 | C14 | Install corrupted (defensive) | Scripted `failed(corrupted)` → distinct retry state; proves defensive handling of the contract-permitted exit even though the shipped flutter_gemma installer never emits it (E15). |
 | C15 | Cancel mid-install | `cancel(id)` → `notInstalled`; `progress[id]` cleared (E6). |
@@ -202,3 +206,4 @@ Mirrors PRD §8:
 | v1.0 | 2026-08-05 | Initial draft (settings interfaces, edge cases, C1–C25 test specs) | Claude |
 | v1.0.1 | 2026-08-05 | PR #16 review — install lifecycle + test cases (E15/C8/C14) reconciled to `downloading → ready`; `verifying`/`corrupted` handled defensively, not advertised | Claude |
 | v1.0.2 | 2026-08-05 | ✅ Approved by Project Owner; status → Approved, development unblocked (TDD) | Project Owner |
+| v1.0.3 | 2026-08-06 | Doc-code reconciliation (post-#16): added `cloudEndpoint`/`cloud_endpoint` + `setCloudEndpoint` spec; `refresh()` calls `syncInstalled()` first; `delete()` clears `progress[modelId]`; added `deactivate()` spec; `gemma4-e4b` in activeModelId domain; E3/E4/C11/C12 marked deferred (v1 ships `allowOverTier: true` unconditionally) | Claude |

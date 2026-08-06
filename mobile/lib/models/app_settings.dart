@@ -35,6 +35,7 @@ class AppSettings {
   const AppSettings({
     this.runtime = RuntimeChoice.local,
     this.cloudAuthorized = false,
+    this.cloudEndpoint,
     this.activeModelId,
     this.chatTemperature = 0.7,
   });
@@ -44,6 +45,10 @@ class AppSettings {
 
   /// Whether the user has opted in to cloud inference (default `false`).
   final bool cloudAuthorized;
+
+  /// Base URL of the OpenAI-compatible cloud endpoint, or `null` to use the
+  /// provider default. Non-secret (the API key lives only in secure storage).
+  final String? cloudEndpoint;
 
   /// Mirror of Module 007's active model id (source of truth remains
   /// `ModelRepository.getActiveModelHandle`); `null` when none is active.
@@ -62,12 +67,16 @@ class AppSettings {
   AppSettings copyWith({
     RuntimeChoice? runtime,
     bool? cloudAuthorized,
+    Object? cloudEndpoint = _unset,
     Object? activeModelId = _unset,
     double? chatTemperature,
   }) {
     return AppSettings(
       runtime: runtime ?? this.runtime,
       cloudAuthorized: cloudAuthorized ?? this.cloudAuthorized,
+      cloudEndpoint: identical(cloudEndpoint, _unset)
+          ? this.cloudEndpoint
+          : cloudEndpoint as String?,
       activeModelId: identical(activeModelId, _unset)
           ? this.activeModelId
           : activeModelId as String?,
@@ -80,15 +89,22 @@ class AppSettings {
       other is AppSettings &&
       other.runtime == runtime &&
       other.cloudAuthorized == cloudAuthorized &&
+      other.cloudEndpoint == cloudEndpoint &&
       other.activeModelId == activeModelId &&
       other.chatTemperature == chatTemperature;
 
   @override
-  int get hashCode =>
-      Object.hash(runtime, cloudAuthorized, activeModelId, chatTemperature);
+  int get hashCode => Object.hash(
+    runtime,
+    cloudAuthorized,
+    cloudEndpoint,
+    activeModelId,
+    chatTemperature,
+  );
 
   @override
   String toString() =>
       'AppSettings(runtime: $runtime, cloudAuthorized: $cloudAuthorized, '
-      'activeModelId: $activeModelId, chatTemperature: $chatTemperature)';
+      'cloudEndpoint: $cloudEndpoint, activeModelId: $activeModelId, '
+      'chatTemperature: $chatTemperature)';
 }

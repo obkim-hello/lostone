@@ -4,6 +4,7 @@ import 'package:flutter_gemma/flutter_gemma.dart' as gemma;
 
 import '../../models/model_descriptor.dart';
 import '../../models/model_install.dart';
+import '../../utils/app_logger.dart';
 import 'model_installer.dart';
 
 /// 生产安装器：封装 `flutter_gemma` v1.5.2 的 builder API（ADR-005）。
@@ -68,8 +69,10 @@ class FlutterGemmaInstaller implements ModelInstaller {
       } on gemma.DownloadCancelledException {
         emit(ModelState.failed, error: InstallErrorKind.canceled);
       } on gemma.DownloadException catch (e) {
+        AppLogger.error('FlutterGemmaInstaller', 'download failed for $id: $e');
         emit(ModelState.failed, error: _mapError(e.error));
-      } on Object {
+      } on Object catch (e, s) {
+        AppLogger.error('FlutterGemmaInstaller', 'install failed for $id: $e\n$s');
         emit(ModelState.failed, error: InstallErrorKind.unknown);
       } finally {
         _tokens.remove(id);
@@ -85,6 +88,62 @@ class FlutterGemmaInstaller implements ModelInstaller {
   Future<void> cancel(String modelId) async {
     _tokens[modelId]?.cancel('用户取消');
   }
+
+  @override
+  Future<bool> isInstalled(ModelDescriptor descriptor) async {
+    try {
+      return await gemma.FlutterGemma.isModelInstalled(_pluginId(descriptor));
+    } on Object catch (e) {
+      AppLogger.error(
+        'FlutterGemmaInstaller',
+        'isInstalled failed for ${descriptor.id}: $e',
+      );
+      return false;
+    }
+  }
+
+  @override
+  Future<void> delete(ModelDescriptor descriptor) async {
+    try {
+      await gemma.FlutterGemma.uninstallModel(_pluginId(descriptor));
+    } on Object catch (e) {
+      AppLogger.error(
+        'FlutterGemmaInstaller',
+        'delete failed for ${descriptor.id}: $e',
+      );
+    }
+  }
+
+  @override
+  Future<void> activate(ModelDescriptor descriptor) async {
+    try {
+      await gemma.FlutterGemma.installModel(
+        modelType: _modelType(descriptor.family),
+        fileType: _fileType(descriptor.format),
+      ).fromNetwork(descriptor.sourceUrl).install();
+    } on Object catch (e, s) {
+      AppLogger.error(
+        'FlutterGemmaInstaller',
+        'activate failed for ${descriptor.id}: $e\n$s',
+      );
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> deactivate() async {
+    try {
+      await gemma.FlutterGemma.clearActiveInferenceIdentity();
+    } on Object catch (e) {
+      AppLogger.error('FlutterGemmaInstaller', 'deactivate failed: $e');
+    }
+  }
+
+  /// The id `flutter_gemma` stores a network model under: for a
+  /// `ModelSource.network(url)` the plugin uses `url`'s last path segment as
+  /// the model filename (see `InferenceModelFile.fromSource`).
+  String _pluginId(ModelDescriptor descriptor) =>
+      Uri.parse(descriptor.sourceUrl).pathSegments.last;
 
   gemma.ModelType _modelType(ModelFamily family) => switch (family) {
         ModelFamily.gemmaIt => gemma.ModelType.gemmaIt,

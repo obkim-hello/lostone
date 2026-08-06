@@ -333,12 +333,16 @@
 - 依赖：007（`ModelRepository` 模型管理）、004（`PersonaRuntimeMode`/云端授权门控）；008 加密为密钥存储承接。
 
 ### 待办
-- [ ] 三文档评审
-- [ ] 三文档批准（批准后方可编码）
-- [ ] 编写测试用例 → 实现 → 验证
-- [ ] `SettingsRepository`（Hive）+ `SecureKeyStore`（Secure Storage）落地
-- [ ] 设置屏 + `ModelManagerNotifier`（消费 007 安装事件流）
-- [ ] 与模块 007（模型管理）/ 004（运行模式）对接
+- [x] 三文档评审
+- [x] 三文档批准（2026-08-05，Project Owner）
+- [x] `SettingsRepository`（Hive）+ `SecureKeyStore`（Secure Storage）落地
+- [x] 设置屏 + `ModelManagerNotifier`（消费 007 安装事件流）+ 模型管理 UI 落地
+- [x] 与模块 007（模型管理）/ 004（运行模式）对接
+- [ ] 编写测试用例 → 实现 → 验证（TDD 进行中，核心已覆盖；下列 v1 延后项待补）
+- [ ] HF token 输入字段（v1 从设置屏延后）
+- [ ] 温度（Advanced）滑块（v1 延后）
+- [ ] 超档安装二次确认对话框（v1 恒传 `allowOverTier: true`，确认流延后）
+- [ ] 真机 UAT（安装 Gemma 3 1B → 激活 → 006/009 读取模式/授权）
 
 ---
 

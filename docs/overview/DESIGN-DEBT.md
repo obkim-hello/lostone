@@ -73,6 +73,62 @@ SPEC-004 §5.2 与 T4 要求「素材不足的层标 `原材料不足` note + `c
 
 ---
 
+## DD-004 — `PersonaRuntime` / loaded model must be app-scoped (keyed by active model), not per-persona chat
+
+- **Status**: 🟡 Open — to be locked down when Module 006 wires `chatSessionProvider` and Module 004's device slice lands `LiteRtRuntime` / `initGemmaRuntime()`.
+- **Discovered**: 2026-08-06, reviewing chat-switching UX against the 004/006 runtime wiring.
+- **Related**: SPEC-Chat-Interface-006 §88 (`chatSessionProvider` constructed **per `personaId`**), §103 (injected `PersonaRuntime`); ERD-Chat-Interface-006 §3.1 / §56 (`initGemmaRuntime()` must complete before the first `chat(...)`); ERD-LLM-Integration-004 §4.1 (`LiteRtRuntime` loads the model at startup via `getActiveModelHandle()`); ADR-005; CLAUDE.md perf targets (memory `< 2GB`, model load `< 3s`).
+
+**Symptom**:
+`chatSessionProvider` is specified as "constructed per `personaId`," and the `PersonaRuntime` (`LiteRtRuntime`, whose init triggers the expensive `initGemmaRuntime()` model load) is injected **into that per-persona provider**. The docs do **not** specify the provider's disposal scope, nor that the loaded model is shared across personas.
+
+**Why it's a hazard**:
+A persona is only a system prompt (`PromptTemplate.render(persona)`) plus its conversation history — **the same active model serves every persona**. If the per-persona provider is `autoDispose`/family-scoped and owns the model load, switching from chat 1 to chat 2 would **unload and reload the model on every switch**: a multi-second stall per switch, memory churn, and possible two-models-resident spikes against the `< 2GB` budget. This is pure waste — `flutter_gemma` holds a single active model; only `createChat()` (cheap) is genuinely per-conversation.
+
+**Resolution direction (confirm at 004 device slice / 006 wiring; don't assume)**:
+- Own the loaded model + engine (`initGemmaRuntime()` / `PersonaRuntime`) at an **app-scoped, `keepAlive` singleton keyed by the active model id** (from 007) — **not** by `personaId`. Reload only when the active model changes (007 activate/delete) or under memory pressure.
+- Keep only the cheap per-conversation state (`createChat` session, history, live bubble) in the per-persona `chatSessionProvider`.
+- Make `initGemmaRuntime()` **idempotent**: no-op if the requested model is already loaded.
+- Net effect: the model loads **once** (first chat, or on model switch in Settings) and is reused → chat switches are instant; one resident model, never two.
+- **Open sub-question (separate, minor)**: the first-ever chat after launch still pays the one-time load — decide whether to surface a "Loading model…" state at chat-open, or fold it into first-token latency.
+
+---
+
+## DD-005 — `deviceCapabilitiesProvider` is a hardcoded `midEnd` stub (no native tier detection)
+
+- **Status**: 🟡 Open — to be resolved when Module 010 / 007 wire native `DeviceCapabilities` (Metal GPU + memory probing) per ADR-005.
+- **Discovered**: 2026-08-06, reviewing the settings model-management UI against ADR-005 device gating.
+- **Related**: `mobile/lib/providers/settings_providers.dart` (`deviceCapabilitiesProvider`); ERD/SPEC-Model-Management-007 §4.3 (`DeviceCapabilities.tier()/canRun()`); ERD/SPEC-Settings-010 §6.1 (over-tier gate); ADR-005.
+
+**Symptom**:
+`deviceCapabilitiesProvider` returns a hardcoded `midEnd` tier — there is no native Metal-GPU-presence or available-memory detection. Every device (real phone, simulator, host) reports `midEnd` regardless of hardware.
+
+**Why it's a hazard**:
+Because all devices report `midEnd`, real low-end devices are **never gated** for the large models (Gemma 4 E2B / E4B): `DeviceCapabilities.canRun()` cannot honestly refuse a model the device cannot run. This is compounded by the settings UI currently always passing `allowOverTier: true` (ERD/SPEC-010 §6.1), so the over-tier logic is effectively bypassed end-to-end: a user on weak hardware can install/activate E2B/E4B and hit OOM/crashes at inference with no upfront guard.
+
+**Resolution direction (don't assume; confirm at native slice)**:
+- Implement a native `DeviceCapabilities` that probes **Metal GPU presence** and **available device memory** to derive a real `DeviceTier` (`lowEnd`/`midEnd`/`highEnd`), per ADR-005.
+- Once real tiers exist, re-enable the over-tier confirm flow (A1) so `canRun == false` actually gates E2B/E4B behind explicit user confirmation instead of `allowOverTier: true` unconditionally.
+
+---
+
+## DD-006 — active model is not persisted/restored across app restarts
+
+- **Status**: 🟡 Open — to be resolved when Module 007 / 010 persist and restore the active-model selection.
+- **Discovered**: 2026-08-06, reviewing model-management restart behavior against `flutter_gemma`'s active-model semantics.
+- **Related**: `mobile/lib/providers/settings_providers.dart`; ERD/SPEC-Model-Management-007 §5.2 (`getActiveModelHandle`); ERD/SPEC-Settings-010 §6.1 (`activeModelId` mirror); DD-001.
+
+**Symptom**:
+The active model is **not** persisted/restored from the plugin across app restarts. After a cold launch, `getActiveModelHandle()` returns `null` (nothing is active) until the user re-activates a model from Settings — even though the model files are still installed on disk. `AppSettings.activeModelId` is a display mirror only; it does not drive re-activation of the plugin's active identity at startup.
+
+**Why it's a hazard**:
+A returning user with a previously-activated model finds chat/distill unavailable after every relaunch (Module 004 falls back with "no active model") until they revisit Settings and re-activate — a silent regression in the core flow with no error surfaced.
+
+**Resolution direction (don't assume; confirm at 007/010 wiring)**:
+- On startup, reconcile the persisted `activeModelId` mirror with the plugin's install state and re-drive `setActive()` (or have 007 restore its active identity), so an installed+previously-active model is active again after a cold launch. Coordinate with DD-001 (plugin owns the active identity).
+
+---
+
 ## 已解决
 
 （暂无）

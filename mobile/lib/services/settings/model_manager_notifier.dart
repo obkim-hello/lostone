@@ -31,6 +31,7 @@ class ModelManagerNotifier extends StateNotifier<ModelManagerState> {
   /// Snapshots catalog (recommended for the current device), installed models,
   /// and the active id; clears [ModelManagerState.lastError].
   Future<void> refresh() async {
+    await _repository.syncInstalled();
     final String? activeId = (await _repository.getActiveModelHandle())?.id;
     state = state.copyWith(
       catalog: _repository.catalog(recommendFor: _device.tier()),
@@ -99,6 +100,10 @@ class ModelManagerNotifier extends StateNotifier<ModelManagerState> {
   Future<void> delete(String modelId) async {
     final String? previousActive = state.activeModelId;
     await _repository.delete(modelId);
+    final Map<String, InstallProgress> next = Map<String, InstallProgress>.of(
+      state.progress,
+    )..remove(modelId);
+    state = state.copyWith(progress: next);
     await refresh();
     if (state.activeModelId != previousActive) {
       _onActiveChanged?.call(state.activeModelId);
@@ -119,6 +124,14 @@ class ModelManagerNotifier extends StateNotifier<ModelManagerState> {
       );
       return;
     }
+    await refresh();
+    _onActiveChanged?.call(state.activeModelId);
+  }
+
+  /// Clears the active model so none is active; installed files are kept.
+  /// Notifies via [onActiveChanged] with `null`.
+  Future<void> deactivate() async {
+    await _repository.deactivate();
     await refresh();
     _onActiveChanged?.call(state.activeModelId);
   }

@@ -33,8 +33,12 @@ abstract class ModelRepository {
   /// 删除模型、回收占用；若为激活模型则激活置空。幂等（SPEC §2.4）。
   Future<void> delete(String modelId);
 
-  /// 将就绪模型设为激活；非就绪抛 [StateError]（SPEC §2.5）。
+  /// 将就绪模型设为激活；非就绪抛 [StateError]。单激活语义：设置新激活即替换
+  /// 旧激活（SPEC §2.5）。
   Future<void> setActive(String modelId);
+
+  /// 清除激活模型，使无模型处于激活态；已安装文件保留。幂等（SPEC §2.5）。
+  Future<void> deactivate();
 
   /// 激活模型的只读句柄；无激活/无就绪返回 null（SPEC §2.6）。
   Future<ModelHandle?> getActiveModelHandle();
@@ -44,6 +48,13 @@ abstract class ModelRepository {
 
   /// 查询模型状态；未知模型返回 [ModelState.notInstalled]（SPEC §2.7）。
   ModelState stateOf(String modelId);
+
+  /// Reconciles installed/active state with the real on-disk model store.
+  ///
+  /// Install/delete state must reflect what is actually downloaded — including
+  /// models installed in a previous launch — not only this session's in-memory
+  /// record. The UI calls this on refresh so button state stays correct.
+  Future<void> syncInstalled();
 }
 
 /// [ModelRepository] 默认实现：协作者注入，宿主可用内存假件测试。
@@ -56,13 +67,13 @@ class DefaultModelRepository implements ModelRepository {
     required DeviceCapabilities device,
     required TokenStore tokenStore,
     DateTime Function()? clock,
-  })  : _catalog = catalog,
-        _installer = installer,
-        _store = store,
-        _device = device,
-        _token = tokenStore,
-        _clock = clock ??
-            (() => DateTime.fromMillisecondsSinceEpoch(0, isUtc: true));
+  }) : _catalog = catalog,
+       _installer = installer,
+       _store = store,
+       _device = device,
+       _token = tokenStore,
+       _clock =
+           clock ?? (() => DateTime.fromMillisecondsSinceEpoch(0, isUtc: true));
 
   final ModelCatalog _catalog;
   final ModelInstaller _installer;
@@ -78,8 +89,7 @@ class DefaultModelRepository implements ModelRepository {
 
   @override
   List<ModelDescriptor> catalog({DeviceTier? recommendFor}) {
-    final List<ModelDescriptor> list =
-        List<ModelDescriptor>.of(_catalog.all);
+    final List<ModelDescriptor> list = List<ModelDescriptor>.of(_catalog.all);
     if (recommendFor == null) {
       return list;
     }
@@ -89,7 +99,11 @@ class DefaultModelRepository implements ModelRepository {
       if (ra != rb) {
         return ra ? -1 : 1;
       }
-      return b.minTier.index.compareTo(a.minTier.index);
+      final int byTier = b.minTier.index.compareTo(a.minTier.index);
+      if (byTier != 0) {
+        return byTier;
+      }
+      return a.sizeBytes.compareTo(b.sizeBytes);
     });
     return list;
   }
@@ -118,16 +132,14 @@ class DefaultModelRepository implements ModelRepository {
     if (existing != null) {
       return existing.controller.stream;
     }
-    final _InstallJob job =
-        _InstallJob(StreamController<InstallEvent>.broadcast());
+    final _InstallJob job = _InstallJob(
+      StreamController<InstallEvent>.broadcast(),
+    );
     _jobs[modelId] = job;
     scheduleMicrotask(() {
-      unawaited(_pump(
-        descriptor,
-        job,
-        hfToken: hfToken,
-        allowOverTier: allowOverTier,
-      ));
+      unawaited(
+        _pump(descriptor, job, hfToken: hfToken, allowOverTier: allowOverTier),
+      );
     });
     return job.controller.stream;
   }
@@ -150,10 +162,44 @@ class DefaultModelRepository implements ModelRepository {
   @override
   Future<void> delete(String modelId) async {
     await cancel(modelId);
+    if (_activeId == modelId) {
+      await _installer.deactivate();
+      _activeId = null;
+    }
+    final ModelDescriptor? descriptor = _catalog.byId(modelId);
+    if (descriptor != null) {
+      await _installer.delete(descriptor);
+    }
     await _store.remove(modelId);
     _installed.remove(modelId);
     _states[modelId] = ModelState.notInstalled;
-    if (_activeId == modelId) {
+  }
+
+  @override
+  Future<void> syncInstalled() async {
+    for (final ModelDescriptor descriptor in _catalog.all) {
+      final String id = descriptor.id;
+      if (_jobs.containsKey(id)) {
+        continue;
+      }
+      final bool present = await _installer.isInstalled(descriptor);
+      if (present) {
+        _states[id] = ModelState.ready;
+        _installed[id] ??= InstalledModel(
+          descriptor: descriptor,
+          filePath: _store.pathFor(id),
+          installedBytes: descriptor.sizeBytes,
+          state: ModelState.ready,
+          installedAt: _clock().toUtc(),
+        );
+      } else {
+        _installed.remove(id);
+        if (_states[id] == ModelState.ready) {
+          _states[id] = ModelState.notInstalled;
+        }
+      }
+    }
+    if (_activeId != null && !_installed.containsKey(_activeId)) {
       _activeId = null;
     }
   }
@@ -163,7 +209,17 @@ class DefaultModelRepository implements ModelRepository {
     if (_states[modelId] != ModelState.ready) {
       throw StateError('模型 $modelId 未就绪，无法激活');
     }
+    final ModelDescriptor? descriptor = _catalog.byId(modelId);
+    if (descriptor != null) {
+      await _installer.activate(descriptor);
+    }
     _activeId = modelId;
+  }
+
+  @override
+  Future<void> deactivate() async {
+    await _installer.deactivate();
+    _activeId = null;
   }
 
   @override
@@ -211,11 +267,8 @@ class DefaultModelRepository implements ModelRepository {
       }
     }
 
-    InstallEvent failure(InstallErrorKind kind) => InstallEvent(
-          modelId: modelId,
-          state: ModelState.failed,
-          error: kind,
-        );
+    InstallEvent failure(InstallErrorKind kind) =>
+        InstallEvent(modelId: modelId, state: ModelState.failed, error: kind);
 
     try {
       if (!_device.canRun(descriptor) && !allowOverTier) {
@@ -242,28 +295,30 @@ class DefaultModelRepository implements ModelRepository {
         return;
       }
 
-      job.sub = _installer.install(descriptor, hfToken: token).listen(
-        (InstallEvent event) {
-          if (event.totalBytes != 0) {
-            lastTotal = event.totalBytes;
-          }
-          finalState = event.state;
-          emit(event);
-        },
-        onError: (Object error) {
-          finalState = ModelState.failed;
-          emit(failure(InstallErrorKind.unknown));
-          if (!job.done.isCompleted) {
-            job.done.complete();
-          }
-        },
-        onDone: () {
-          if (!job.done.isCompleted) {
-            job.done.complete();
-          }
-        },
-        cancelOnError: true,
-      );
+      job.sub = _installer
+          .install(descriptor, hfToken: token)
+          .listen(
+            (InstallEvent event) {
+              if (event.totalBytes != 0) {
+                lastTotal = event.totalBytes;
+              }
+              finalState = event.state;
+              emit(event);
+            },
+            onError: (Object error) {
+              finalState = ModelState.failed;
+              emit(failure(InstallErrorKind.unknown));
+              if (!job.done.isCompleted) {
+                job.done.complete();
+              }
+            },
+            onDone: () {
+              if (!job.done.isCompleted) {
+                job.done.complete();
+              }
+            },
+            cancelOnError: true,
+          );
       await job.done.future;
     } finally {
       try {

@@ -15,12 +15,13 @@ import 'package:lostone/services/settings/settings_repository.dart';
 ModelDescriptor _desc(
   String id, {
   DeviceTier minTier = DeviceTier.simulatorCpu,
+  ModelFamily family = ModelFamily.gemma4,
 }) {
   return ModelDescriptor(
     id: id,
     displayName: id,
     format: ModelFormat.litertlm,
-    family: ModelFamily.general,
+    family: family,
     sizeBytes: 100 * 1024 * 1024,
     capabilities: const <ModelCapability>{ModelCapability.text},
     minTier: minTier,
@@ -88,6 +89,11 @@ class _FakeRepo implements ModelRepository {
   }
 
   @override
+  Future<void> deactivate() async {
+    _active = null;
+  }
+
+  @override
   Future<ModelHandle?> getActiveModelHandle() async {
     final String? id = _active;
     if (id == null) {
@@ -113,6 +119,9 @@ class _FakeRepo implements ModelRepository {
     }
     return _installed[modelId]?.state ?? ModelState.notInstalled;
   }
+
+  @override
+  Future<void> syncInstalled() async {}
 }
 
 List<Override> _overrides(_FakeRepo repo) {
@@ -142,28 +151,30 @@ Future<void> _pump(WidgetTester tester, Widget screen, _FakeRepo repo) async {
 
 void main() {
   group('C25 SettingsScreen states', () {
-    testWidgets('renders runtime choices, obscured secret fields, slider', (
-      WidgetTester tester,
-    ) async {
-      final _FakeRepo repo = _FakeRepo(catalogList: <ModelDescriptor>[]);
-      await _pump(tester, const SettingsScreen(), repo);
+    testWidgets(
+      'renders local/cloud runtimes, obscured key, plain endpoint field',
+      (WidgetTester tester) async {
+        final _FakeRepo repo = _FakeRepo(catalogList: <ModelDescriptor>[]);
+        await _pump(tester, const SettingsScreen(), repo);
 
-      expect(find.byKey(const Key('runtime-local')), findsOneWidget);
-      expect(find.byKey(const Key('runtime-cloud')), findsOneWidget);
-      expect(find.byKey(const Key('runtime-maxPrivacy')), findsOneWidget);
+        expect(find.byKey(const Key('runtime-local')), findsOneWidget);
+        expect(find.byKey(const Key('runtime-cloud')), findsOneWidget);
+        expect(find.byKey(const Key('runtime-maxPrivacy')), findsNothing);
 
-      final TextField cloudField = tester.widget<TextField>(
-        find.byKey(const Key('cloud-key-field')),
-      );
-      final TextField hfField = tester.widget<TextField>(
-        find.byKey(const Key('hf-token-field')),
-      );
-      expect(cloudField.obscureText, isTrue);
-      expect(hfField.obscureText, isTrue);
+        final TextField cloudField = tester.widget<TextField>(
+          find.byKey(const Key('cloud-key-field')),
+        );
+        final TextField endpointField = tester.widget<TextField>(
+          find.byKey(const Key('cloud-endpoint-field')),
+        );
+        expect(cloudField.obscureText, isTrue);
+        expect(endpointField.obscureText, isFalse);
 
-      expect(find.byKey(const Key('temperature-slider')), findsOneWidget);
-      expect(find.byKey(const Key('open-model-management')), findsOneWidget);
-    });
+        expect(find.byKey(const Key('hf-token-field')), findsNothing);
+        expect(find.byKey(const Key('temperature-slider')), findsNothing);
+        expect(find.byKey(const Key('open-model-management')), findsOneWidget);
+      },
+    );
 
     testWidgets('switching runtime persists selection', (
       WidgetTester tester,
@@ -171,13 +182,35 @@ void main() {
       final _FakeRepo repo = _FakeRepo(catalogList: <ModelDescriptor>[]);
       await _pump(tester, const SettingsScreen(), repo);
 
-      await tester.tap(find.byKey(const Key('runtime-maxPrivacy')));
+      await tester.tap(find.byKey(const Key('runtime-cloud')));
       await tester.pumpAndSettle();
 
       final RadioListTile<Object> tile = tester.widget<RadioListTile<Object>>(
-        find.byKey(const Key('runtime-maxPrivacy')),
+        find.byKey(const Key('runtime-cloud')),
       );
-      expect(tile.value.toString(), contains('maxPrivacy'));
+      expect(tile.value.toString(), contains('cloud'));
+    });
+
+    testWidgets('saving cloud endpoint persists to settings', (
+      WidgetTester tester,
+    ) async {
+      final _FakeRepo repo = _FakeRepo(catalogList: <ModelDescriptor>[]);
+      await _pump(tester, const SettingsScreen(), repo);
+
+      await tester.enterText(
+        find.byKey(const Key('cloud-endpoint-field')),
+        'https://api.example.test/v1',
+      );
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      final ProviderContainer container = ProviderScope.containerOf(
+        tester.element(find.byType(SettingsScreen)),
+      );
+      expect(
+        container.read(appSettingsProvider).cloudEndpoint,
+        'https://api.example.test/v1',
+      );
     });
   });
 
@@ -264,6 +297,157 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('delete-dialog')), findsOneWidget);
+    });
+
+    testWidgets('unsupported-device failure shows Cloud AI hint, not proactively', (
+      WidgetTester tester,
+    ) async {
+      final _FakeRepo repo = _FakeRepo(
+        catalogList: <ModelDescriptor>[
+          _desc('gemma-e2b', minTier: DeviceTier.highEnd),
+        ],
+      );
+      await _pump(tester, const ModelManagementScreen(), repo);
+
+      expect(find.byKey(const Key('unsupported-gemma-e2b')), findsNothing);
+
+      repo.scripted['gemma-e2b'] = <InstallEvent>[
+        const InstallEvent(
+          modelId: 'gemma-e2b',
+          state: ModelState.failed,
+          error: InstallErrorKind.unsupportedDevice,
+        ),
+      ];
+      await tester.tap(find.byKey(const Key('install-gemma-e2b')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('unsupported-gemma-e2b')), findsOneWidget);
+      expect(find.text('Use Cloud AI'), findsOneWidget);
+    });
+
+    testWidgets('not-installed model shows a Download button', (
+      WidgetTester tester,
+    ) async {
+      final _FakeRepo repo = _FakeRepo(
+        catalogList: <ModelDescriptor>[_desc('gemma-e2b')],
+      );
+      await _pump(tester, const ModelManagementScreen(), repo);
+
+      expect(find.byKey(const Key('install-gemma-e2b')), findsOneWidget);
+      expect(find.text('Download'), findsOneWidget);
+      expect(find.byKey(const Key('activate-gemma-e2b')), findsNothing);
+      expect(find.byKey(const Key('deactivate-gemma-e2b')), findsNothing);
+    });
+
+    testWidgets('installed non-active shows Activate + Delete, no Deactivate', (
+      WidgetTester tester,
+    ) async {
+      final _FakeRepo repo = _FakeRepo(
+        catalogList: <ModelDescriptor>[_desc('gemma-e2b')],
+      )..seedReady('gemma-e2b');
+      await _pump(tester, const ModelManagementScreen(), repo);
+
+      expect(find.byKey(const Key('activate-gemma-e2b')), findsOneWidget);
+      expect(find.byKey(const Key('delete-gemma-e2b')), findsOneWidget);
+      expect(find.byKey(const Key('deactivate-gemma-e2b')), findsNothing);
+      expect(find.byKey(const Key('install-gemma-e2b')), findsNothing);
+    });
+
+    testWidgets('active model shows Deactivate + Delete; deactivate clears it', (
+      WidgetTester tester,
+    ) async {
+      final _FakeRepo repo = _FakeRepo(
+        catalogList: <ModelDescriptor>[_desc('gemma-e2b')],
+      )..seedReady('gemma-e2b');
+      await _pump(tester, const ModelManagementScreen(), repo);
+
+      await tester.tap(find.byKey(const Key('activate-gemma-e2b')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('deactivate-gemma-e2b')), findsOneWidget);
+      expect(find.byKey(const Key('delete-gemma-e2b')), findsOneWidget);
+      expect(find.byKey(const Key('activate-gemma-e2b')), findsNothing);
+      expect(find.byKey(const Key('active-chip')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('deactivate-gemma-e2b')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('activate-gemma-e2b')), findsOneWidget);
+      expect(find.byKey(const Key('deactivate-gemma-e2b')), findsNothing);
+      expect(find.byKey(const Key('active-chip')), findsNothing);
+    });
+
+    testWidgets('activating one model replaces the previously active one', (
+      WidgetTester tester,
+    ) async {
+      final _FakeRepo repo = _FakeRepo(
+        catalogList: <ModelDescriptor>[_desc('gemma-e2b'), _desc('gemma-1b')],
+      )
+        ..seedReady('gemma-e2b')
+        ..seedReady('gemma-1b');
+      await _pump(tester, const ModelManagementScreen(), repo);
+
+      await tester.tap(find.byKey(const Key('activate-gemma-e2b')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('deactivate-gemma-e2b')), findsOneWidget);
+      expect(find.byKey(const Key('activate-gemma-1b')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('activate-gemma-1b')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('deactivate-gemma-1b')), findsOneWidget);
+      expect(find.byKey(const Key('activate-gemma-e2b')), findsOneWidget);
+      expect(find.byKey(const Key('deactivate-gemma-e2b')), findsNothing);
+    });
+
+    testWidgets('deleting a just-installed active model resets to Download', (
+      WidgetTester tester,
+    ) async {
+      final _FakeRepo repo = _FakeRepo(
+        catalogList: <ModelDescriptor>[_desc('gemma-e2b')],
+      );
+      repo.scripted['gemma-e2b'] = <InstallEvent>[
+        const InstallEvent(
+          modelId: 'gemma-e2b',
+          state: ModelState.ready,
+          receivedBytes: 100,
+          totalBytes: 100,
+        ),
+      ];
+      await _pump(tester, const ModelManagementScreen(), repo);
+
+      await tester.tap(find.byKey(const Key('install-gemma-e2b')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('activate-gemma-e2b')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('deactivate-gemma-e2b')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('delete-gemma-e2b')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('install-gemma-e2b')), findsOneWidget);
+      expect(find.byKey(const Key('deactivate-gemma-e2b')), findsNothing);
+      expect(find.byKey(const Key('delete-gemma-e2b')), findsNothing);
+      expect(find.byKey(const Key('active-chip')), findsNothing);
+    });
+
+    testWidgets('installed model outside the visible catalog stays deletable', (
+      WidgetTester tester,
+    ) async {
+      final _FakeRepo repo = _FakeRepo(
+        catalogList: <ModelDescriptor>[
+          _desc('legacy-general', family: ModelFamily.general),
+        ],
+      )..seedReady('legacy-general');
+      await _pump(tester, const ModelManagementScreen(), repo);
+
+      expect(
+        find.byKey(const Key('model-tile-legacy-general')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('delete-legacy-general')), findsOneWidget);
     });
   });
 

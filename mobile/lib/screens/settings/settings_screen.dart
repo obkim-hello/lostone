@@ -7,8 +7,8 @@ import '../../services/settings/settings_notifier.dart';
 import '../../theme/app_theme.dart';
 import 'model_management_screen.dart';
 
-/// App settings: runtime mode, cloud authorization + key, HF token,
-/// temperature, and an entry to model management (PRD-010).
+/// App settings: runtime mode, cloud authorization (key + endpoint), and an
+/// entry to model management (PRD-010).
 class SettingsScreen extends ConsumerStatefulWidget {
   /// Creates the settings screen.
   const SettingsScreen({super.key});
@@ -19,12 +19,14 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final TextEditingController _cloudKeyController = TextEditingController();
-  final TextEditingController _hfTokenController = TextEditingController();
+  final TextEditingController _cloudEndpointController =
+      TextEditingController();
+  bool _endpointSeeded = false;
 
   @override
   void dispose() {
     _cloudKeyController.dispose();
-    _hfTokenController.dispose();
+    _cloudEndpointController.dispose();
     super.dispose();
   }
 
@@ -46,6 +48,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final AppSettings settings = ref.watch(appSettingsProvider);
+    if (!_endpointSeeded && (settings.cloudEndpoint ?? '').isNotEmpty) {
+      _cloudEndpointController.text = settings.cloudEndpoint!;
+      _endpointSeeded = true;
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
@@ -61,7 +67,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             },
             child: Column(
               children: <Widget>[
-                for (final RuntimeChoice choice in RuntimeChoice.values)
+                for (final RuntimeChoice choice in _visibleRuntimes)
                   RadioListTile<RuntimeChoice>(
                     key: Key('runtime-${choice.name}'),
                     contentPadding: const EdgeInsets.symmetric(
@@ -117,54 +123,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               setState(() {});
             },
           ),
-          const _SectionHeader('Downloads'),
-          _SecretField(
-            fieldKey: const Key('hf-token-field'),
-            label: 'Hugging Face token',
-            isSet: _notifier.hasHfToken,
-            controller: _hfTokenController,
-            onSave: (String value) async {
-              await _notifier.setHfToken(value);
-              _hfTokenController.clear();
-              setState(() {});
-            },
+          _PlainField(
+            fieldKey: const Key('cloud-endpoint-field'),
+            label: 'API endpoint',
+            hint: 'https://api.openai.com/v1',
+            controller: _cloudEndpointController,
+            onSave: (String value) =>
+                _guarded(() => _notifier.setCloudEndpoint(value)),
           ),
-          const _SectionHeader('Advanced'),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppTheme.gutter,
-              4,
-              AppTheme.gutter,
-              8,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: <Widget>[
-                    Text(
-                      'Chat temperature',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    Text(
-                      settings.chatTemperature.toStringAsFixed(2),
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-                Slider(
-                  key: const Key('temperature-slider'),
-                  value: settings.chatTemperature,
-                  label: settings.chatTemperature.toStringAsFixed(2),
-                  divisions: 20,
-                  onChanged: (double value) =>
-                      _guarded(() => _notifier.setChatTemperature(value)),
-                ),
-              ],
-            ),
-          ),
-          const _HairLine(),
+          const _SectionHeader('Models'),
           _NavRow(
             rowKey: const Key('open-model-management'),
             icon: Icons.memory_outlined,
@@ -180,6 +147,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
     );
   }
+
+  static const List<RuntimeChoice> _visibleRuntimes = <RuntimeChoice>[
+    RuntimeChoice.local,
+    RuntimeChoice.cloud,
+  ];
 
   String _runtimeLabel(RuntimeChoice choice) {
     return switch (choice) {
@@ -284,16 +256,6 @@ class _NavRow extends StatelessWidget {
   }
 }
 
-/// A hairline separator matching the Instagram-style divider weight.
-class _HairLine extends StatelessWidget {
-  const _HairLine();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Divider(height: 1, thickness: 0.5, color: AppTheme.separator);
-  }
-}
-
 /// An obscured secret input with inline Save/Clear actions and a "(set)" hint.
 class _SecretField extends StatelessWidget {
   const _SecretField({
@@ -395,6 +357,80 @@ class _SecretField extends StatelessWidget {
                 const SizedBox(width: 4),
                 TextButton(onPressed: onClear, child: const Text('Clear')),
               ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A plain (non-secret) single-line input with an inline Save action, used for
+/// values that should stay visible after entry (e.g. the cloud API endpoint).
+class _PlainField extends StatelessWidget {
+  const _PlainField({
+    required this.fieldKey,
+    required this.label,
+    required this.hint,
+    required this.controller,
+    required this.onSave,
+  });
+
+  final Key fieldKey;
+  final String label;
+  final String hint;
+  final TextEditingController controller;
+  final void Function(String value) onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.gutter,
+        vertical: 4,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(label, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: TextField(
+                  key: fieldKey,
+                  controller: controller,
+                  keyboardType: TextInputType.url,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    filled: true,
+                    fillColor: AppTheme.fill,
+                    hintText: hint,
+                    hintStyle: const TextStyle(color: AppTheme.muted),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppTheme.separator),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppTheme.accent),
+                    ),
+                  ),
+                  onSubmitted: onSave,
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: () => onSave(controller.text),
+                child: const Text('Save'),
+              ),
             ],
           ),
         ],

@@ -63,6 +63,17 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   Future<void> setCloudAuthorized(bool authorized) =>
       _persist(state.copyWith(cloudAuthorized: authorized));
 
+  /// Sets the cloud endpoint base URL (non-secret) and persists it; pass `null`
+  /// or an empty string to fall back to the provider default.
+  Future<void> setCloudEndpoint(String? endpoint) {
+    final String? trimmed = endpoint?.trim();
+    return _persist(
+      state.copyWith(
+        cloudEndpoint: (trimmed == null || trimmed.isEmpty) ? null : trimmed,
+      ),
+    );
+  }
+
   /// Stores the cloud API key in secure storage only (never in [state]/Hive).
   Future<void> setCloudApiKey(String key) async {
     await _cloudKeyStore.write(key);

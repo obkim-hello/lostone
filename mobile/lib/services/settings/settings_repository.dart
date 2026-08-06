@@ -11,7 +11,7 @@ abstract class SettingsRepository {
   /// Returns the stored settings, or a default [AppSettings] if none exist.
   Future<AppSettings> load();
 
-  /// Persists all four non-secret fields; a subsequent [load] returns an equal
+  /// Persists all non-secret fields; a subsequent [load] returns an equal
   /// value.
   Future<void> save(AppSettings settings);
 }
@@ -33,8 +33,9 @@ class InMemorySettingsRepository implements SettingsRepository {
 /// Hive-backed [SettingsRepository] (ERD-010 §4.3).
 ///
 /// Stores one scalar per field in the `settings` box: `runtime` (enum name),
-/// `cloudAuthorized` (bool), `activeModelId` (String?), `chatTemperature`
-/// (double). Missing keys fall back to defaults. Contains no secret fields.
+/// `cloudAuthorized` (bool), `cloudEndpoint` (String?), `activeModelId`
+/// (String?), `chatTemperature` (double). Missing keys fall back to defaults.
+/// Contains no secret fields.
 class HiveSettingsRepository implements SettingsRepository {
   /// Wraps an already-open Hive [box].
   HiveSettingsRepository({required Box<dynamic> box}) : _box = box;
@@ -44,6 +45,7 @@ class HiveSettingsRepository implements SettingsRepository {
 
   static const String _kRuntime = 'runtime';
   static const String _kCloudAuthorized = 'cloudAuthorized';
+  static const String _kCloudEndpoint = 'cloudEndpoint';
   static const String _kActiveModelId = 'activeModelId';
   static const String _kChatTemperature = 'chatTemperature';
 
@@ -57,6 +59,7 @@ class HiveSettingsRepository implements SettingsRepository {
       cloudAuthorized:
           _box.get(_kCloudAuthorized, defaultValue: defaults.cloudAuthorized)
               as bool,
+      cloudEndpoint: _box.get(_kCloudEndpoint) as String?,
       activeModelId: _box.get(_kActiveModelId) as String?,
       chatTemperature:
           (_box.get(_kChatTemperature, defaultValue: defaults.chatTemperature)
@@ -72,6 +75,11 @@ class HiveSettingsRepository implements SettingsRepository {
       _kCloudAuthorized: settings.cloudAuthorized,
       _kChatTemperature: settings.chatTemperature,
     });
+    if (settings.cloudEndpoint == null) {
+      await _box.delete(_kCloudEndpoint);
+    } else {
+      await _box.put(_kCloudEndpoint, settings.cloudEndpoint);
+    }
     if (settings.activeModelId == null) {
       await _box.delete(_kActiveModelId);
     } else {

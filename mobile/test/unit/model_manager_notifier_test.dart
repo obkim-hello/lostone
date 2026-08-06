@@ -108,6 +108,11 @@ class _FakeModelRepository implements ModelRepository {
   }
 
   @override
+  Future<void> deactivate() async {
+    _active = null;
+  }
+
+  @override
   Future<ModelHandle?> getActiveModelHandle() async {
     final String? id = _active;
     if (id == null) {
@@ -136,6 +141,9 @@ class _FakeModelRepository implements ModelRepository {
     }
     return ModelState.notInstalled;
   }
+
+  @override
+  Future<void> syncInstalled() async {}
 }
 
 ModelManagerNotifier _build(
@@ -300,6 +308,25 @@ void main() {
       expect(notifier.state.activeModelId, 'smol-135m');
       expect(mirrored, 'smol-135m');
       expect(notifier.state.lastError, isNull);
+    });
+  });
+
+  group('deactivate clears active model', () {
+    test('clears active, mirrors null, fires onActiveChanged(null)', () async {
+      final _FakeModelRepository repo = _FakeModelRepository()
+        ..seedReady('smol-135m');
+      final List<String?> changes = <String?>[];
+      final ModelManagerNotifier notifier = _build(
+        repo,
+        onActiveChanged: changes.add,
+      );
+      await notifier.activate('smol-135m');
+      expect(notifier.state.activeModelId, 'smol-135m');
+
+      await notifier.deactivate();
+
+      expect(notifier.state.activeModelId, isNull);
+      expect(changes.last, isNull);
     });
   });
 
