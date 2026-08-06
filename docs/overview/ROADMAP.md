@@ -8,7 +8,7 @@
 
 **项目名称**：Lostone  
 **启动日期**：2026年8月  
-**当前阶段**：Phase 1 - 数据输入与解析（模块 002 开发中）；Phase 2 - Persona 生成引擎（模块 003 ✅ 已完成）；Phase 3 - LLM 集成（模块 007 模型管理[提前] + 模块 004 LLM 集成 三文档草稿已就绪，待批准）  
+**当前阶段**：Phase 1 - 数据输入与解析（模块 002 开发中）；Phase 2 - Persona 生成引擎（模块 003 ✅ 已完成）；Phase 3 - LLM 集成（模块 007 模型管理[提前] + 模块 004 LLM 集成 ✅ 已完成，PR #14 merged 2026-08-05）；Phase 4 - UI 实现（模块 006 聊天界面 + 009 人物库与蒸馏 + 010 设置，9 文档草稿完成，待批准）  
 **预计首个版本发布**：2026年11月（12周后）
 
 ---
@@ -20,8 +20,8 @@
 | Phase 0 | 项目初始化 | 第 1 周 | ✅ 完成 | 项目骨架、文档体系 |
 | Phase 1 | 数据输入与解析 | 第 2-3 周 | 🟡 进行中 | 数据解析器、导入流程 |
 | Phase 2 | Persona 生成引擎 | 第 4-5 周 | ✅ 完成（模块 003） | Persona Builder、五层模型 |
-| Phase 3 | LLM 集成 | 第 6-7 周 | 🟡 进行中（模块 007 + 004 文档草稿） | 模型管理[提前]、LLM 蒸馏 + 对话引擎、flutter_gemma/LiteRT + 云端 Runtime |
-| Phase 4 | UI 实现 | 第 8-9 周 | ⚪ 未开始 | Material Design UI |
+| Phase 3 | LLM 集成 | 第 6-7 周 | ✅ 完成（模块 007 + 004，PR #14） | 模型管理[提前]、LLM 蒸馏 + 对话引擎、flutter_gemma/LiteRT + 云端 Runtime |
+| Phase 4 | UI 实现 | 第 8-9 周 | 🟡 进行中（模块 006/009/010 文档草稿） | 聊天界面 + SQLite 聊天历史、人物库与蒸馏、设置（模型管理 UI） |
 | Phase 5 | 数据持久化与安全 | 第 10 周 | ⚪ 未开始 | 加密存储、生物识别 |
 | Phase 6 | 测试与优化 | 第 11 周 | ⚪ 未开始 | 全面测试、性能优化 |
 | Phase 7 | 发布准备 | 第 12 周 | ⚪ 未开始 | App Store 上线 |
@@ -198,7 +198,7 @@
 
 **目标**：实现本地模型 + 云端 API 混合推理
 
-> **文档状态（2026-08-02）**：Phase 3 含**两个模块**三文档草稿，均**待评审批准**（开发状态 🚫 阻塞）。原「模块 005 云端 API 集成」**已折叠并入模块 004** 的 Runtime 抽象层。
+> **文档状态（2026-08-05 更新）**：Phase 3 含**两个模块**，三文档均**已批准**并 **✅ 已完成**（PR #14 merged to `main` 2026-08-05；host TDD 291 passing、`flutter analyze` clean、iOS on-device install verified；ADR-005 on-device quality validation pending, non-blocking）。原「模块 005 云端 API 集成」**已折叠并入模块 004** 的 Runtime 抽象层。
 > - **模块 007（模型管理，提前至 Phase 3）**——作为模块 004 本地默认路径的**前置依赖**（无就绪模型则 004 无法真机验证）；薄封装 flutter_gemma 模型安装 builder API `installModel().fromNetwork().install()`（旧 `ModelFileManager` 为 legacy facade，ADR-005）：
 >   - PRD：[PRD-Model-Management-007-20260802.md](../prd/PRD-Model-Management-007-20260802.md)
 >   - ERD：[ERD-Model-Management-007-20260802.md](../erd/ERD-Model-Management-007-20260802.md)
@@ -263,6 +263,22 @@
 ## Phase 4: UI 实现（第 8-9 周）
 
 **目标**：实现 Material Design 3 UI
+
+> **文档状态（2026-08-05）**：Phase 4 UI **拆分为三个模块**，9 份三文档草稿已完成，均**待评审批准**（开发状态 🚫 阻塞）。聊天历史存储定为 **SQLite**。
+> - **模块 006（聊天界面：对话 + 聊天历史）**——`ChatScreen` 消费模块 004 `ChatEngine` + 模块 007 激活模型 + 模块 009 `PersonaRepository`；新增 SQLite `ChatHistoryRepository`（本模块独有）：
+>   - PRD：[PRD-Chat-Interface-006-20260805.md](../prd/PRD-Chat-Interface-006-20260805.md)
+>   - ERD：[ERD-Chat-Interface-006-20260805.md](../erd/ERD-Chat-Interface-006-20260805.md)
+>   - Spec：[SPEC-Chat-Interface-006-20260805.md](../spec/SPEC-Chat-Interface-006-20260805.md)
+> - **模块 009（人物库与蒸馏）**——新增 `PersonaRepository`（Persona 持久化，填补"仅内存无落盘"缺口）+ 人物库屏 + 蒸馏流程屏驱动模块 004 `LlmPersonaBuilder`：
+>   - PRD：[PRD-Persona-Library-009-20260805.md](../prd/PRD-Persona-Library-009-20260805.md)
+>   - ERD：[ERD-Persona-Library-009-20260805.md](../erd/ERD-Persona-Library-009-20260805.md)
+>   - Spec：[SPEC-Persona-Library-009-20260805.md](../spec/SPEC-Persona-Library-009-20260805.md)
+> - **模块 010（设置）**——模块 007 模型管理正式 UI（取代 004 dev harness）+ 运行模式（`RuntimeChoice`）+ 云端授权：
+>   - PRD：[PRD-Settings-010-20260805.md](../prd/PRD-Settings-010-20260805.md)
+>   - ERD：[ERD-Settings-010-20260805.md](../erd/ERD-Settings-010-20260805.md)
+>   - Spec：[SPEC-Settings-010-20260805.md](../spec/SPEC-Settings-010-20260805.md)
+>
+> **范围定案**：不重写模块 003/004/007（只读复用其契约）；持久化默认明文，模块 008 经注入接缝（`PersonaBytesTransform` / `DatabaseFactory` / `SecureKeyStore`）承接加密；system prompt 仍**仅**由 `PromptTemplate.render()` 产生（对话无统计兜底，对齐 004 SPEC §2.4）。
 
 ### 关键任务
 
@@ -499,6 +515,10 @@
 ---
 
 ## 更新日志
+
+### 2026-08-05
+- Phase 3（模块 007 模型管理 + 模块 004 LLM 集成）✅ 完成（PR #14 merged to `main`；host TDD 291 passing、analyze clean、iOS on-device install verified；ADR-005 on-device quality validation pending, non-blocking）
+- **Phase 4 UI 拆分为三个模块**并出 9 份三文档草稿（待批准）：模块 006 聊天界面（对话 + **SQLite 聊天历史** `ChatHistoryRepository`）、模块 009 人物库与蒸馏（新增 `PersonaRepository` 持久化 + 库 + 蒸馏流程）、模块 010 设置（模型管理正式 UI + 运行模式 + 云端授权）；Phase 4 转「进行中（文档草稿）」。聊天历史存储定为 SQLite；不重写 003/004/007，008 经注入接缝承接加密
 
 ### 2026-08-02
 - 同步实际进度：Phase 0 标记完成；Phase 1（数据导入/模块 002）转「进行中」；Phase 2（Persona 生成引擎/模块 003）三文档草稿就绪，标记「进行中（文档草稿）」，待批准

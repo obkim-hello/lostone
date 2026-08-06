@@ -8,6 +8,8 @@
 > **日期**：2026-08-02
 > **优先级**：P0
 
+> **⚠️ 勘误（2026-08-06，post-#14）**：本文 §输出/E6/T3/T8 的 `verifying` 状态与 `sha256`/`failed(corrupted)` 校验用例已**过时**。PR #14 移除了 sha256 校验（从未真正执行），交付的 `FlutterGemmaInstaller` 事件序列为 `downloading → ready`（无 `verifying`），失败仅 `canceled | network | unknownModel | authRequired | insufficientStorage | unsupportedDevice | unknown`，**从不产 `failed(corrupted)`**。`verifying`/`corrupted` 仍为合法枚举出口（供未来自管下载器）但当前不产出，故 E6/T8 在当前实现下不可达（仅作防御性契约测试）。以 `flutter_gemma_installer.dart` 源码为准。模块 010 已按此现实对齐。
+
 ---
 
 ## 📋 文档信息

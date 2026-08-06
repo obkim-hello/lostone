@@ -8,6 +8,8 @@
 > **日期**：2026-08-02
 > **优先级**：P0（模块 004 本地默认路径的前置依赖）
 
+> **⚠️ 勘误（2026-08-06，post-#14）**：本文中的**完整性/sha256 校验**与 `verifying` 状态描述已**过时**。PR #14 移除了 sha256 校验（因从未真正执行），交付的 `FlutterGemmaInstaller` 仅产出 `downloading → ready` / `failed(canceled | network | unknownModel | authRequired | insufficientStorage | unsupportedDevice | unknown)`，**从不发 `ModelState.verifying` 或 `InstallErrorKind.corrupted`**（完整性校验由 `flutter_gemma` 在下载内部完成，本层不持文件路径、不自算哈希）。二者仍为状态机的**合法出口**（供未来自管下载器上报），但当前安装器不产出。以实际源码（`flutter_gemma_installer.dart` 文档注释）为准；`model_install.dart` 枚举 docstring 的迁移箭头 `… → verifying → ready` 同属待清理陈述。模块 010 已按此现实对齐。
+
 ---
 
 ## 📋 文档信息
