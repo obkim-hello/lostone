@@ -149,6 +149,7 @@ class DefaultModelRepository implements ModelRepository {
 
   @override
   Future<void> delete(String modelId) async {
+    await cancel(modelId);
     await _store.remove(modelId);
     _installed.remove(modelId);
     _states[modelId] = ModelState.notInstalled;
@@ -251,7 +252,7 @@ class DefaultModelRepository implements ModelRepository {
         },
         onError: (Object error) {
           finalState = ModelState.failed;
-          emit(failure(InstallErrorKind.network));
+          emit(failure(InstallErrorKind.unknown));
           if (!job.done.isCompleted) {
             job.done.complete();
           }
@@ -265,30 +266,33 @@ class DefaultModelRepository implements ModelRepository {
       );
       await job.done.future;
     } finally {
-      if (job.canceled) {
-        await _store.remove(modelId);
-        finalState = ModelState.notInstalled;
-        emit(InstallEvent(modelId: modelId, state: ModelState.notInstalled));
-      } else if (finalState == ModelState.ready) {
-        final int bytes = lastTotal != 0 ? lastTotal : descriptor.sizeBytes;
-        await _store.put(modelId, bytes);
-        _installed[modelId] = InstalledModel(
-          descriptor: descriptor,
-          filePath: _store.pathFor(modelId),
-          installedBytes: bytes,
-          state: ModelState.ready,
-          installedAt: _clock().toUtc(),
-        );
-      } else if (finalState == ModelState.failed) {
-        await _store.remove(modelId);
+      try {
+        if (job.canceled) {
+          finalState = ModelState.notInstalled;
+          await _store.remove(modelId);
+          emit(InstallEvent(modelId: modelId, state: ModelState.notInstalled));
+        } else if (finalState == ModelState.ready) {
+          final int bytes = lastTotal != 0 ? lastTotal : descriptor.sizeBytes;
+          await _store.put(modelId, bytes);
+          _installed[modelId] = InstalledModel(
+            descriptor: descriptor,
+            filePath: _store.pathFor(modelId),
+            installedBytes: bytes,
+            state: ModelState.ready,
+            installedAt: _clock().toUtc(),
+          );
+        } else if (finalState == ModelState.failed) {
+          await _store.remove(modelId);
+        }
+      } finally {
+        _states[modelId] = finalState;
+        _jobs.remove(modelId);
+        await job.sub?.cancel();
+        if (!job.controller.isClosed) {
+          await job.controller.close();
+        }
+        job.markFinished();
       }
-      _states[modelId] = finalState;
-      await job.sub?.cancel();
-      _jobs.remove(modelId);
-      if (!job.controller.isClosed) {
-        await job.controller.close();
-      }
-      job.markFinished();
     }
   }
 }

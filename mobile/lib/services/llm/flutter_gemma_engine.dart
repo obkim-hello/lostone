@@ -41,8 +41,10 @@ class FlutterGemmaEngine implements GemmaEngine {
         await session.close();
       }
     } on Object catch (e, s) {
-      debugPrint('[FlutterGemmaEngine] complete 失败：$e');
-      debugPrintStack(stackTrace: s, maxFrames: 8);
+      if (kDebugMode) {
+        debugPrint('[FlutterGemmaEngine] complete 失败：$e');
+        debugPrintStack(stackTrace: s, maxFrames: 8);
+      }
       rethrow;
     }
   }
@@ -63,8 +65,10 @@ class FlutterGemmaEngine implements GemmaEngine {
       await session.addQueryChunk(Message.text(text: prompt, isUser: true));
       yield* session.getResponseAsync();
     } on Object catch (e, s) {
-      debugPrint('[FlutterGemmaEngine] stream 失败：$e');
-      debugPrintStack(stackTrace: s, maxFrames: 8);
+      if (kDebugMode) {
+        debugPrint('[FlutterGemmaEngine] stream 失败：$e');
+        debugPrintStack(stackTrace: s, maxFrames: 8);
+      }
       rethrow;
     } finally {
       await session.close();

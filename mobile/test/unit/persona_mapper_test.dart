@@ -116,6 +116,54 @@ void main() {
       expect(prefs, isNot(contains('登月计划')));
     });
 
+    test('原文不含的性格标签被丢弃，且不进 system prompt', () {
+      final List<Message> person = <Message>[
+        _msg('今天加班到很晚', minute: 1),
+        _msg('明天还要早起', minute: 2),
+      ];
+      const DistilledPersona d = DistilledPersona(
+        displayName: '爸爸',
+        tags: <String>['乐观开朗', '坚强'],
+      );
+
+      final Persona p = _map(d, person);
+
+      expect(p.tags, isEmpty);
+      final String system = const DefaultPromptTemplate().render(p);
+      expect(system, isNot(contains('乐观开朗')));
+      expect(system, isNot(contains('坚强')));
+    });
+
+    test('接地成功的性格标签保留并附证据', () {
+      final List<Message> person = <Message>[
+        _msg('我很乐观开朗的', minute: 1),
+        _msg('别担心啦', minute: 2),
+      ];
+      final Persona p = _map(
+        const DistilledPersona(
+          displayName: '爸爸',
+          tags: <String>['乐观开朗'],
+        ),
+        person,
+      );
+      expect(p.tags.map((PersonaTag t) => t.label), contains('乐观开朗'));
+      final PersonaTag tag =
+          p.tags.firstWhere((PersonaTag t) => t.label == '乐观开朗');
+      expect(tag.evidence.occurrences, greaterThan(0));
+    });
+
+    test('身份素材不足时 relationToUser 置空（不臆断关系）', () {
+      final Persona p = _map(
+        const DistilledPersona(
+          relationToUser: '父亲',
+          catchphrases: <String>['嗯'],
+        ),
+        <Message>[_msg('嗯')],
+      );
+      expect(p.identity.relationToUser, isNull);
+      expect(p.notes, contains('原材料不足：身份'));
+    });
+
     test('接地词的计数与证据来自真实匹配', () {
       final List<Message> person = <Message>[
         _msg('晚安', minute: 1),

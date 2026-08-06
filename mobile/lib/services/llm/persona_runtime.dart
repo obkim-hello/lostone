@@ -17,8 +17,12 @@ enum RuntimeSource {
 /// 用于让上层（Builder 决定是否兜底、ChatEngine 转 `ChatDelta.error`）
 /// 精确区分失败原因，绝不静默失败。
 enum RuntimeError {
-  /// 无就绪模型 / 最大隐私（`maxPrivacy`）：本地不可用。
+  /// 无就绪模型 / 最大隐私（`maxPrivacy`）：本地不可用（模型未加载）。
   modelUnavailable,
+
+  /// 模型已加载但推理中途失败（OOM / 原生崩溃 / 分词错误）：区别于
+  /// [modelUnavailable]，避免把真实推理故障误判为"无模型"而误导兜底/掩盖缺陷。
+  inferenceFailed,
 
   /// 云端未授权（`cloudAuthorized == false`）：不发起任何网络调用。
   unauthorized,

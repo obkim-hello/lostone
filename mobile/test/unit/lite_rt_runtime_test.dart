@@ -103,11 +103,11 @@ void main() {
       expect(e.completeCalls, 0);
     });
 
-    test('原生异常 → failure(modelUnavailable)，不抛出', () async {
+    test('原生异常 → failure(inferenceFailed)，不抛出', () async {
       final _FakeEngine e = _FakeEngine(throwOnComplete: true);
       final RuntimeResult r =
           await _runtime(e, handle: _handle()).generate('在吗');
-      expect(r.error, RuntimeError.modelUnavailable);
+      expect(r.error, RuntimeError.inferenceFailed);
     });
   });
 
@@ -129,7 +129,7 @@ void main() {
       expect(e.streamCalls, 0);
     });
 
-    test('原生流异常 → 归一为 modelUnavailable', () async {
+    test('原生流异常 → 归一为 inferenceFailed', () async {
       final _FakeEngine e = _FakeEngine(
         tokens: const <String>['最'],
         throwOnStream: true,
@@ -138,7 +138,7 @@ void main() {
         _runtime(e, handle: _handle()).generateStream('在吗'),
         emitsInOrder(<dynamic>[
           '最',
-          emitsError(const RuntimeException(RuntimeError.modelUnavailable)),
+          emitsError(const RuntimeException(RuntimeError.inferenceFailed)),
         ]),
       );
     });

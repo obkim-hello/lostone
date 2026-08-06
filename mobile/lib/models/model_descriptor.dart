@@ -85,7 +85,6 @@ class ModelDescriptor {
     required this.minTier,
     required this.sourceUrl,
     this.requiresToken = false,
-    this.sha256,
   });
 
   /// 稳定标识（如 `gemma3-1b-it-int4`）。
@@ -115,9 +114,6 @@ class ModelDescriptor {
   /// 是否需要 Hugging Face token。
   final bool requiresToken;
 
-  /// 完整性校验哈希（SHA-256 十六进制，可选）。
-  final String? sha256;
-
   @override
   bool operator ==(Object other) =>
       other is ModelDescriptor &&
@@ -129,8 +125,7 @@ class ModelDescriptor {
       setEquals(other.capabilities, capabilities) &&
       other.minTier == minTier &&
       other.sourceUrl == sourceUrl &&
-      other.requiresToken == requiresToken &&
-      other.sha256 == sha256;
+      other.requiresToken == requiresToken;
 
   @override
   int get hashCode => Object.hash(
@@ -143,6 +138,5 @@ class ModelDescriptor {
         minTier,
         sourceUrl,
         requiresToken,
-        sha256,
       );
 }

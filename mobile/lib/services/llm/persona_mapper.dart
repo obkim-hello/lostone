@@ -20,8 +20,10 @@ const Map<String, String> _kLayerLabels = <String, String>{
 ///
 /// **原文接地（grounding）**：每个词/短语/例句必须在目标人物**原文**中出现
 /// （`content.contains`）才保留，并据此构造 `Evidence`（消息键哈希 + 短示例）；
-/// 无原文支撑者一律丢弃——落实 SPEC-004 §5.9/T5「不得编造事实」。抽象性格
-/// 标签不逐字接地（本就非引用），但接地成功者附证据、失败者置 `occurrences=0`。
+/// 无原文支撑者一律丢弃——落实 SPEC-004 §5.9/T5「不得编造事实」。性格标签
+/// 同样须原文接地：命中者附 `Evidence` 保留，无支撑者一律丢弃，否则模型臆造
+/// 的标签会经 `render()` 进入 system prompt。`relationToUser` 属推断字段，仅在
+/// 身份层素材充足时保留，不足时置空（连带 `原材料不足：身份` note）。
 ///
 /// 素材不足（该层接地后为空，或 [DistilledPersona.insufficientLayers] 标注）
 /// 的层 `confidence` 置 `low` 并在 `Persona.notes` 追加「原材料不足：<层名>」
@@ -98,7 +100,7 @@ class PersonaMapper {
 
     final Identity identity = Identity(
       displayName: identityShort ? defaultDisplayName : distilled.displayName!,
-      relationToUser: distilled.relationToUser,
+      relationToUser: identityLow ? null : distilled.relationToUser,
       aliases: _groundedAliases(distilled.aliases, personMessages),
       confidence: levelFor(identityLow),
     );
@@ -254,10 +256,13 @@ class PersonaMapper {
         continue;
       }
       final Evidence? ev = _evidenceFor(label, corpus);
+      if (ev == null) {
+        continue;
+      }
       out.add(PersonaTag(
         label: label,
-        evidence: ev ?? const Evidence(),
-        confidence: ev == null ? Confidence.low : Confidence.medium,
+        evidence: ev,
+        confidence: Confidence.medium,
       ));
     }
     return out;

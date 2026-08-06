@@ -76,7 +76,7 @@ class LiteRtRuntime implements PersonaRuntime {
       return RuntimeResult.ok(text, source: RuntimeSource.liteRt);
     } on Object {
       return const RuntimeResult.failure(
-        RuntimeError.modelUnavailable,
+        RuntimeError.inferenceFailed,
         source: RuntimeSource.liteRt,
       );
     }
@@ -103,7 +103,7 @@ class LiteRtRuntime implements PersonaRuntime {
     } on RuntimeException {
       rethrow;
     } on Object {
-      throw const RuntimeException(RuntimeError.modelUnavailable);
+      throw const RuntimeException(RuntimeError.inferenceFailed);
     }
   }
 }

@@ -16,6 +16,7 @@ class MockRuntime implements PersonaRuntime {
     this.available = true,
     this.source = RuntimeSource.liteRt,
     this.error,
+    this.failAfterTokens,
     RuntimeCapabilities? capabilities,
   })  : _tokens = tokens ??
             (response.isEmpty ? const <String>[] : <String>[response]),
@@ -36,6 +37,12 @@ class MockRuntime implements PersonaRuntime {
 
   /// 注入的分类错误；非空则生成失败（且不记录 prompt / 不产出）。
   final RuntimeError? error;
+
+  /// 流式生成先产出前 N 个 token、再抛 [error]（模拟推理中途失败）。
+  ///
+  /// 仅 [error] 非空时生效：`null` 保持"开流即抛"（前置失败）；非空则先记录
+  /// prompt 并逐 token 产出至该数量后抛 [RuntimeException]。
+  final int? failAfterTokens;
 
   @override
   final RuntimeCapabilities capabilities;
@@ -63,14 +70,20 @@ class MockRuntime implements PersonaRuntime {
     double temperature = 0.7,
     int? maxNewTokens,
   }) async* {
-    if (error != null) {
+    if (error != null && failAfterTokens == null) {
       throw RuntimeException(error!);
     }
     receivedPrompts.add(prompt);
     final int limit = maxNewTokens ?? _tokens.length;
     for (int i = 0; i < _tokens.length && i < limit; i++) {
+      if (error != null && i == failAfterTokens) {
+        throw RuntimeException(error!);
+      }
       await Future<void>.delayed(Duration.zero);
       yield _tokens[i];
+    }
+    if (error != null) {
+      throw RuntimeException(error!);
     }
   }
 }

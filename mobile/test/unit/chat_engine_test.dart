@@ -130,15 +130,14 @@ void main() {
           .where((ChatDelta d) => !d.done && !d.isError)
           .map((ChatDelta d) => d.textDelta)
           .join();
-      expect(text, isNot(contains('我还活着')));
-      expect(text, contains(guard.safeReply));
+      expect(text, equals(guard.safeReply));
       expect(deltas.last.done, isTrue);
     });
 
-    test('自称 AI 被拦截', () async {
+    test('自称 AI 被拦截（越界短语跨 token，缓冲不泄露前缀）', () async {
       final Persona persona = _persona();
       final MockRuntime runtime = MockRuntime(
-        tokens: const <String>['其实', '我是AI', '啦'],
+        tokens: const <String>['其实', '我', '是', 'AI', '啦'],
       );
       const DefaultChatEngine engine = DefaultChatEngine();
       const HardRuleGuard guard = HardRuleGuard();
@@ -151,8 +150,8 @@ void main() {
           .where((ChatDelta d) => !d.done && !d.isError)
           .map((ChatDelta d) => d.textDelta)
           .join();
-      expect(text, isNot(contains('我是AI')));
-      expect(text, contains(guard.safeReply));
+      expect(text, isNot(contains('我是')));
+      expect(text, equals(guard.safeReply));
     });
   });
 
@@ -224,6 +223,24 @@ void main() {
       expect(deltas, hasLength(1));
       expect(deltas.single.error, RuntimeError.emptyInput);
       expect(runtime.receivedPrompts, isEmpty);
+    });
+
+    test('T21: 流式中途失败 → error(inferenceFailed) 收尾，不静默', () async {
+      final Persona persona = _persona();
+      final MockRuntime runtime = MockRuntime(
+        tokens: const <String>['你好', '呀'],
+        error: RuntimeError.inferenceFailed,
+        failAfterTokens: 1,
+      );
+      const DefaultChatEngine engine = DefaultChatEngine();
+
+      final List<ChatDelta> deltas = await _collect(
+        engine.chat(persona, const <ChatTurn>[], '在吗', runtime: runtime),
+      );
+
+      expect(runtime.receivedPrompts, hasLength(1));
+      expect(deltas.last.isError, isTrue);
+      expect(deltas.last.error, RuntimeError.inferenceFailed);
     });
   });
 

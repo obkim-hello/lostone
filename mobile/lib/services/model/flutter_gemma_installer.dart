@@ -16,6 +16,11 @@ import 'model_installer.dart';
 /// 置为 active。故本安装器只负责「下载 + 进度 + 取消 + 错误归一」，落盘位置由
 /// 插件掌握。使用前须在应用启动调用 `FlutterGemma.initialize(...)`（见
 /// `gemma_bootstrap.dart`）。
+///
+/// 完整性校验由 `flutter_gemma` 在下载内部完成，本层不持有文件路径、不自算
+/// 哈希，故**不**发 [ModelState.verifying]（下载成功即 [ModelState.ready]），
+/// 以免宣称未实际执行的校验。[ModelState.verifying]/[InstallErrorKind.corrupted]
+/// 仍是状态机的合法出口，供自管下载的安装器上报、由仓库统一处理。
 class FlutterGemmaInstaller implements ModelInstaller {
   /// 创建安装器。
   FlutterGemmaInstaller();
@@ -59,7 +64,6 @@ class FlutterGemmaInstaller implements ModelInstaller {
         })
             .withCancelToken(cancelToken)
             .install();
-        emit(ModelState.verifying, received: total);
         emit(ModelState.ready, received: total);
       } on gemma.DownloadCancelledException {
         emit(ModelState.failed, error: InstallErrorKind.canceled);
