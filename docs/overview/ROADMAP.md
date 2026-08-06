@@ -21,7 +21,7 @@
 | Phase 1 | 数据输入与解析 | 第 2-3 周 | 🟡 进行中 | 数据解析器、导入流程 |
 | Phase 2 | Persona 生成引擎 | 第 4-5 周 | ✅ 完成（模块 003） | Persona Builder、五层模型 |
 | Phase 3 | LLM 集成 | 第 6-7 周 | ✅ 完成（模块 007 + 004，PR #14） | 模型管理[提前]、LLM 蒸馏 + 对话引擎、flutter_gemma/LiteRT + 云端 Runtime |
-| Phase 4 | UI 实现 | 第 8-9 周 | 🟡 进行中（模块 006/009/010 文档草稿） | 聊天界面 + SQLite 聊天历史、人物库与蒸馏、设置（模型管理 UI） |
+| Phase 4 | UI 实现 | 第 8-9 周 | 🟡 进行中（模块 010 ✅ 已批准·开发中；006/009 文档草稿） | 聊天界面 + SQLite 聊天历史、人物库与蒸馏、设置（模型管理 UI） |
 | Phase 5 | 数据持久化与安全 | 第 10 周 | ⚪ 未开始 | 加密存储、生物识别 |
 | Phase 6 | 测试与优化 | 第 11 周 | ⚪ 未开始 | 全面测试、性能优化 |
 | Phase 7 | 发布准备 | 第 12 周 | ⚪ 未开始 | App Store 上线 |
@@ -264,7 +264,7 @@
 
 **目标**：实现 Material Design 3 UI
 
-> **文档状态（2026-08-05）**：Phase 4 UI **拆分为三个模块**，9 份三文档草稿已完成，均**待评审批准**（开发状态 🚫 阻塞）。聊天历史存储定为 **SQLite**。
+> **文档状态（2026-08-05）**：Phase 4 UI **拆分为三个模块**，9 份三文档草稿已完成。**模块 010（设置）已批准**（v1.0.2，2026-08-05，Project Owner）并进入 TDD 开发（分支 `feature/PRD-010-settings`）；模块 006/009 仍**待评审批准**（开发状态 🚫 阻塞）。聊天历史存储定为 **SQLite**。
 > - **模块 006（聊天界面：对话 + 聊天历史）**——`ChatScreen` 消费模块 004 `ChatEngine` + 模块 007 激活模型 + 模块 009 `PersonaRepository`；新增 SQLite `ChatHistoryRepository`（本模块独有）：
 >   - PRD：[PRD-Chat-Interface-006-20260805.md](../prd/PRD-Chat-Interface-006-20260805.md)
 >   - ERD：[ERD-Chat-Interface-006-20260805.md](../erd/ERD-Chat-Interface-006-20260805.md)
@@ -519,6 +519,8 @@
 ### 2026-08-05
 - Phase 3（模块 007 模型管理 + 模块 004 LLM 集成）✅ 完成（PR #14 merged to `main`；host TDD 291 passing、analyze clean、iOS on-device install verified；ADR-005 on-device quality validation pending, non-blocking）
 - **Phase 4 UI 拆分为三个模块**并出 9 份三文档草稿（待批准）：模块 006 聊天界面（对话 + **SQLite 聊天历史** `ChatHistoryRepository`）、模块 009 人物库与蒸馏（新增 `PersonaRepository` 持久化 + 库 + 蒸馏流程）、模块 010 设置（模型管理正式 UI + 运行模式 + 云端授权）；Phase 4 转「进行中（文档草稿）」。聊天历史存储定为 SQLite；不重写 003/004/007，008 经注入接缝承接加密
+- PR #16 评审修订（Phase 4 九文档同升 v1.0.1）：模块 010 安装状态与 post-#14 真实流程对齐（`downloading → ready`，`verifying`/`corrupted` 仅防御性处理）；ERD-006 §3.4 Settings→ChatOptions 绑定接缝 + ERD-010 `cloudKeyStoreProvider` 云端 key 读路径
+- ✅ **批准模块 010（设置）三文档**（v1.0.2，Project Owner）：解除阻塞、进入 TDD（分支 `feature/PRD-010-settings`）；依赖 007/004 均已完成，可独立于 006/009 开发
 
 ### 2026-08-02
 - 同步实际进度：Phase 0 标记完成；Phase 1（数据导入/模块 002）转「进行中」；Phase 2（Persona 生成引擎/模块 003）三文档草稿就绪，标记「进行中（文档草稿）」，待批准

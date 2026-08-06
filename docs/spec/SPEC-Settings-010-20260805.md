@@ -3,7 +3,7 @@
 > Technical Specification — Settings (interface-level I/O, pre/postconditions, edge cases, test cases)
 >
 > **Version**: v1.0.1 (draft)
-> **Status**: 📝 Draft (pending review)
+> **Status**: ✅ Approved
 > **Author**: Claude
 > **Date**: 2026-08-05
 > **Priority**: P1
@@ -201,3 +201,4 @@ Mirrors PRD §8:
 |---------|------|--------|--------|
 | v1.0 | 2026-08-05 | Initial draft (settings interfaces, edge cases, C1–C25 test specs) | Claude |
 | v1.0.1 | 2026-08-05 | PR #16 review — install lifecycle + test cases (E15/C8/C14) reconciled to `downloading → ready`; `verifying`/`corrupted` handled defensively, not advertised | Claude |
+| v1.0.2 | 2026-08-05 | ✅ Approved by Project Owner; status → Approved, development unblocked (TDD) | Project Owner |
