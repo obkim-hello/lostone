@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# macOS SwiftPM generated lockfile (per-machine, macOS not the active target)
+/macos/Runner.xcworkspace/xcshareddata/swiftpm/

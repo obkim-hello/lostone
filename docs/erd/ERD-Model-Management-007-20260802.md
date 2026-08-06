@@ -3,7 +3,7 @@
 > 工程需求文档 - 模型管理（端侧 LLM 模型下载 / 存储 / 切换）
 >
 > **版本**：v1.0.1
-> **状态**：📝 草稿
+> **状态**：✅ 已批准（Project Owner，2026-08-04）
 > **作者**：Claude
 > **日期**：2026-08-02
 > **优先级**：P0
@@ -98,6 +98,8 @@
 | backend | `InferenceBackend` | `gpu(metal)` / `cpu` |
 | engine | `EngineKind` | `liteRtLm` / `mediaPipe` |
 
+> ⚠️ **契约缺口：见 [DD-001](../overview/DESIGN-DEBT.md#dd-001)**。`flutter_gemma` v1.5.2 自管模型落盘并不暴露原始文件路径（推理经 `getActiveModel()` 拿模型对象而非 `filePath`）。本表 `filePath` 字段在生产路径下无法诚实兑现，**定于模块 004 设计时定夺**（改句柄语义 / 置空 + 走 `getActiveModel()`）。当前宿主实现用合成路径通过测试。
+
 ### 3.5 `DeviceTier` / `InferenceBackend`
 `DeviceTier`：`simulatorCpu` / `lowEnd` / `midEnd` / `highEnd`。`InferenceBackend`：`gpuMetal` / `cpu`。
 
@@ -143,6 +145,9 @@ abstract class ModelStore {              // 落盘位置/占用/删除；注入�
   Future<int> usedBytes();
   Future<void> remove(String modelId);
 }
+// ⚠️ 契约缺口：见 DD-002（../overview/DESIGN-DEBT.md#dd-002）。
+//    空间预检所需的「可用磁盘余量」无 dart:io / 插件 API；生产 ModelStore
+//    尚不能诚实实现 freeBytes()，仅 InMemoryModelStore 供宿主测试。
 abstract class DeviceCapabilities {      // GPU/内存探测 + 引擎/后端选择
   DeviceTier tier();
   InferenceBackend preferredBackend();
@@ -220,7 +225,8 @@ abstract class DeviceCapabilities {      // GPU/内存探测 + 引擎/后端选�
 |------|------|------|------|
 | 2026-08-02 | v1.0（草稿）| 初始草稿（依据 ADR-005、PRD-007、模块 004 契约需求）| Claude |
 | 2026-08-04 | v1.0.1（草稿）| PR #13 评审修订：封装对象由 legacy `ModelFileManager` 改为 builder API `installModel().fromNetwork().install()`；flutter_gemma 锁版本 v1.5.0→v1.5.2 | Claude |
+| 2026-08-04 | v1.0.1（已批准）| ✅ Project Owner 批准三文档；宿主核心 + 设备 slice 已落地；DD-002 记于设计债务登记表 | Project Owner |
 
 ---
 
-> 本文档遵循 Lostone 文档驱动开发规范。当前为**草稿**，待三文档评审批准后方可进入实现阶段。
+> 本文档遵循 Lostone 文档驱动开发规范。状态：✅ 已批准（Project Owner，2026-08-04），进入实现阶段。

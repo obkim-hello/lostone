@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/app_config.dart';
 import '../providers/app_providers.dart';
+import 'dev/llm_harness_screen.dart';
 
 /// 应用首页。
 ///
@@ -27,6 +29,17 @@ class HomeScreen extends ConsumerWidget {
             const SizedBox(height: 8),
             Text('environment: ${config.environment}'),
             Text('version: ${config.version}'),
+            if (kDebugMode) ...<Widget>[
+              const SizedBox(height: 24),
+              OutlinedButton(
+                onPressed: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const LlmHarnessScreen(),
+                  ),
+                ),
+                child: const Text('LLM 联调（dev）'),
+              ),
+            ],
           ],
         ),
       ),

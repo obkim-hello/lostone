@@ -27,7 +27,7 @@
 
 ## 📚 项目状态
 
-**当前阶段**：Phase 1 - 数据导入（模块 002 开发中）｜ Phase 2 - Persona 生成（模块 003 ✅ 已完成）｜ Phase 3 - LLM 集成（模块 007 模型管理 + 模块 004 LLM 集成，文档草稿待批准）
+**当前阶段**：Phase 1 - 数据导入（模块 002 开发中）｜ Phase 2 - Persona 生成（模块 003 ✅ 已完成）｜ Phase 3 - LLM 集成（模块 007 模型管理 ✅ 三文档已批准·宿主核心+设备 slice 已落地 ｜ 模块 004 LLM 集成 ✅ 三文档已批准·TDD 开发中）
 
 **已完成**：
 - ✅ 项目文档体系建立
@@ -39,8 +39,8 @@
 **进行中**：
 - 🚧 模块 002（数据导入）——三文档已批准（v1.0）；核心切片**已完成**（模型 + WeChatParser CSV/TXT/HTML 流式 + WeFlowParser（真实微信 WeFlow 导出 JSON/CSV/TXT/HTML 四格式）+ InstagramParser + WeiboParser（direct_messages API v2 JSON）+ IMessageParser（chat.db 只读，含 attributedBody 回退）+ PhotoExifParser（EXIF/GPS）+ MediaStore 分层字节落地（ERD §4.4）+ 预处理 + 导入编排 + Apple 时间转换 + Riverpod 导入状态层，测试 122/122、analyze 0 警告，四轮代理评审并修复 SPEC 合规缺口）；ERD §3.4 文件范围内的解析器全部落地，10 万条流式吞吐已宿主验证（ERD §7.3）；原生存储装配、导入 UI（Phase 4）、5GB 设备内存采样、微博/WeFlow 契约 Owner 终审分阶段推进
 - ✅ 模块 003（Persona 生成，Phase 2）——三文档**已批准**（PRD/ERD/Spec v1.0.4，编号 003，2026-08-02），纯 Dart、离线、无 LLM 的确定性五层 Persona 生成引擎（记忆提取 + 性格分析 + Builder 版本/增量 + `.persona` 序列化 + Prompt 渲染），输入锚定模块 002 `Conversation`；**已完成 TDD 实现**（65 用例通过，模块覆盖率 95.3%，`flutter analyze` 0 警告）
-- 📝 模块 007（模型管理，Phase 3，**提前**）——三文档**草稿已就绪**（PRD/ERD/Spec，编号 007，2026-08-02），**待评审批准**（🚫 阻塞）。端侧模型下载/存储/切换，薄封装 **flutter_gemma** 模型安装 builder API（`installModel().fromNetwork().install()`；旧 `ModelFileManager` 为 legacy facade，ADR-005，不自造下载器），向模块 004 暴露 `ModelHandle`/`getActiveModelHandle()`；作为模块 004 本地默认路径的**前置依赖**（无就绪模型则 004 无法真机验证）
-- 📝 模块 004（LLM 集成：蒸馏 + 对话引擎 + Runtime 抽象层，Phase 3）——三文档**草稿已就绪**（PRD/ERD/Spec v1.1.1，编号 004，2026-08-02），**待评审批准**（🚫 阻塞）。两大支柱：**(A) LLM 蒸馏**产出忠实五层人格并映射进模块 003 现有 `Persona` 契约（**输出契约不变**、不重写 003）；**(B) 对话引擎 ChatEngine**——以 `Persona` 的 system prompt 驱动多轮流式对话（滑窗上下文、硬规则强制、本地/云端切换）。默认本地 LiteRT（经 flutter_gemma/ADR-005）、云端 API 显式授权 opt-in；统计引擎（003）降级为预处理 + 离线兜底（依据 ADR-004）。原「模块 005 云端 API 集成」已折叠并入本模块
+- 🚧 模块 007（模型管理，Phase 3，**提前**）——三文档**已批准**（PRD/ERD/Spec，编号 007，2026-08-02，批准 2026-08-04）。端侧模型下载/存储/切换，薄封装 **flutter_gemma** v1.5.2 模型安装 builder API（`installModel().fromNetwork().install()`；旧 `ModelFileManager` 为 legacy facade，ADR-005，不自造下载器），向模块 004 暴露 `ModelHandle`/`getActiveModelHandle()`；作为模块 004 本地默认路径的**前置依赖**。**已落地**：宿主可测核心（`ModelRepository`/`ModelInstaller`/`ModelStore`/`DeviceCapabilities` 状态机 E1–E11、21 用例）+ 设备/原生 slice（`FlutterGemmaInstaller`/`SecureTokenStore`/iOS entitlements/Podfile 静态链接）。契约缺口 DD-001/DD-002 记于[设计债务登记表](docs/overview/DESIGN-DEBT.md)，随模块 004 设计定夺
+- 🚧 模块 004（LLM 集成：蒸馏 + 对话引擎 + Runtime 抽象层，Phase 3）——三文档**已批准**（PRD/ERD/Spec v1.1.1，编号 004，2026-08-02，批准 2026-08-04），**TDD 开发中**。两大支柱：**(A) LLM 蒸馏**产出忠实五层人格并映射进模块 003 现有 `Persona` 契约（**输出契约不变**、不重写 003）；**(B) 对话引擎 ChatEngine**——以 `Persona` 的 system prompt 驱动多轮流式对话（滑窗上下文、硬规则强制、本地/云端切换）。默认本地 LiteRT（经 flutter_gemma/ADR-005）、云端 API 显式授权 opt-in；统计引擎（003）降级为预处理 + 离线兜底（依据 ADR-004）。原「模块 005 云端 API 集成」已折叠并入本模块
 
 **查看详细进度**：[开发路线图](docs/overview/ROADMAP.md) · [文档状态](docs/DOCUMENT-STATUS.md)
 
@@ -165,8 +165,8 @@ lostone/
 | 001 - 项目初始化 | [PRD](docs/prd/PRD-Project-Setup-001-20260801.md) | [ERD](docs/erd/ERD-Flutter-Setup-001-20260801.md) | [Spec](docs/spec/SPEC-Project-Config-001-20260801.md) | ✅ 已完成（v1.1） |
 | 002 - 数据导入 | [PRD](docs/prd/PRD-Data-Import-002-20260801.md) | [ERD](docs/erd/ERD-Data-Parsers-002-20260801.md) | [Spec](docs/spec/SPEC-Data-Parser-002-20260801.md) | ✅ 已批准 · 🚧 开发中 |
 | 003 - Persona 生成 | [PRD](docs/prd/PRD-Persona-Generation-003-20260802.md) | [ERD](docs/erd/ERD-Persona-Engine-003-20260802.md) | [Spec](docs/spec/SPEC-Persona-Builder-003-20260802.md) | ✅ 已批准（v1.0.4）· ✅ 已完成 |
-| 004 - LLM 集成（蒸馏 + 对话引擎） | [PRD](docs/prd/PRD-LLM-Integration-004-20260802.md) | [ERD](docs/erd/ERD-LLM-Integration-004-20260802.md) | [Spec](docs/spec/SPEC-LLM-Integration-004-20260802.md) | 📝 草稿（v1.1.1）· 待批准 |
-| 007 - 模型管理（提前至 Phase 3） | [PRD](docs/prd/PRD-Model-Management-007-20260802.md) | [ERD](docs/erd/ERD-Model-Management-007-20260802.md) | [Spec](docs/spec/SPEC-Model-Management-007-20260802.md) | 📝 草稿（v1.0.1）· 待批准 |
+| 004 - LLM 集成（蒸馏 + 对话引擎） | [PRD](docs/prd/PRD-LLM-Integration-004-20260802.md) | [ERD](docs/erd/ERD-LLM-Integration-004-20260802.md) | [Spec](docs/spec/SPEC-LLM-Integration-004-20260802.md) | ✅ 已批准（v1.1.1）· TDD 开发中 |
+| 007 - 模型管理（提前至 Phase 3） | [PRD](docs/prd/PRD-Model-Management-007-20260802.md) | [ERD](docs/erd/ERD-Model-Management-007-20260802.md) | [Spec](docs/spec/SPEC-Model-Management-007-20260802.md) | ✅ 已批准（v1.0.1）· 宿主核心+设备 slice 已落地 |
 | ... | ... | ... | ... | ... |
 
 **查看完整状态**：[DOCUMENT-STATUS.md](docs/DOCUMENT-STATUS.md)

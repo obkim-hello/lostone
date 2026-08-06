@@ -3,7 +3,7 @@
 > 工程需求文档 - LLM 集成（LLM 蒸馏人格 + 对话引擎，含 Runtime 抽象层）
 >
 > **版本**：v1.1.1
-> **状态**：📝 草稿
+> **状态**：✅ 已批准（Project Owner，2026-08-04）
 > **作者**：Claude
 > **日期**：2026-08-02
 > **优先级**：P0
@@ -37,6 +37,7 @@
 - **输出契约不变**：`Persona`（`mobile/lib/models/persona.dart`）与 `PromptTemplate.render()`（`mobile/lib/services/persona/prompt_template.dart`）对外形状不改；蒸馏结果必须映射进现有五层；对话 system prompt 只经现有 `render()`。
 - **不重写模块 003**：统计引擎按原样保留，仅被本模块只读复用（预处理/切分/兜底/编解码/渲染）。
 - **模型就绪归模块 007**：本模块不自造下载器；经 `ModelRepository.getActiveModelHandle()` 拿 `ModelHandle`，用其 `filePath`/`engine`/`backend` 加载。
+  - ⚠️ **前置契约缺口：见 [DD-001](../overview/DESIGN-DEBT.md#dd-001)**。`flutter_gemma` v1.5.2 自管落盘、**不暴露 `filePath`**，推理经 `getActiveModel()` 拿模型对象。本模块设计 `LiteRtRuntime` 时**必须先定夺** `ModelHandle` 契约（改句柄语义 / `filePath` 置空 + 走 `getActiveModel()`），否则会误用一个无法生产兑现的 `filePath`。按 ADR-005，`LiteRtRuntime` 本就用 `getActiveModel/createChat/generate`，多半不需要 `filePath`。
 - **隐私**：默认本地、原文不出设备；云端显式授权；`.persona` 只存消息键哈希、不落原文；日志脱敏。
 - **无 byte 确定性**：LLM 有随机性 → 测试改为契约/结构断言 + mock Runtime + 快照/人工评审（见 §6）。
 - **端侧栈固定 flutter_gemma / LiteRT-LM**（ADR-005）：本地蒸馏与对话经 `flutter_gemma` 的 `getActiveModel/createChat/generate`，运行于 iOS 16+/macOS；质量验收须真机（模拟器仅 CPU 冒烟）。
@@ -319,7 +320,8 @@ abstract class ChatEngine {
 | 2026-08-02 | v1.0（草稿）| 初始草稿（依据 HANDOFF-004、ADR-004、模块 003 契约）| Claude |
 | 2026-08-02 | v1.1（草稿）| 更名"LLM 集成"；新增 ChatEngine（数据结构 §3.5、接口 §4.2.5、流程 §5.4、测试 §6.1）+ 流式 Runtime；接入 flutter_gemma/模块 007（ADR-005）；文件重命名 | Claude |
 | 2026-08-04 | v1.1.1（草稿）| PR #13 评审修订：删除 §7 未实测的 iOS Metal 吞吐数字（改为真机基线为准）；flutter_gemma 锁版本 v1.5.0→v1.5.2 | Claude |
+| 2026-08-04 | v1.1.1（已批准）| ✅ Project Owner 批准三文档，进入 TDD 实现；DD-001（ModelHandle.filePath）随本模块设计定夺 | Project Owner |
 
 ---
 
-> 本文档遵循 Lostone 项目的文档驱动开发规范。当前为**草稿**，待三文档评审批准后方可进入实现阶段。
+> 本文档遵循 Lostone 项目的文档驱动开发规范。状态：✅ 已批准（Project Owner，2026-08-04），进入实现阶段。

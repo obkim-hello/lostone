@@ -11,10 +11,10 @@
 | 001 | 项目初始化 | ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | ✅ 已完成 |
 | 002 | 数据导入 | ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | 🚧 开发中 |
 | 003 | Persona 生成 | ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | ✅ 已完成 |
-| 004 | LLM 集成（蒸馏 + 对话引擎 + Runtime 抽象层）| 📝 草稿 | 📝 草稿 | 📝 草稿 | ⚠️ 草稿完成 | 🚫 阻塞 |
+| 004 | LLM 集成（蒸馏 + 对话引擎 + Runtime 抽象层）| ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | 🚧 开发中 |
 | ~~005~~ | 云端 API 集成 → **已并入 004**（Runtime 抽象层统一本地/云端）| — | — | — | — | 🔀 已折叠 |
 | 006 | 聊天界面 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
-| 007 | 模型管理（提前至 Phase 3，004 本地路径前置）| 📝 草稿 | 📝 草稿 | 📝 草稿 | ⚠️ 草稿完成 | 🚫 阻塞 |
+| 007 | 模型管理（提前至 Phase 3，004 本地路径前置）| ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | 🚧 开发中 |
 | 008 | 数据安全 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
 
 ---
@@ -164,19 +164,19 @@
 ### 文档信息
 | 文档类型 | 文件名 | 状态 | 完成时间 | 批准时间 | 文件路径 |
 |----------|--------|------|---------|---------|---------|
-| PRD | PRD-LLM-Integration-004-20260802.md | 📝 草稿 | 2026-08-02 | — | docs/prd/PRD-LLM-Integration-004-20260802.md |
-| ERD | ERD-LLM-Integration-004-20260802.md | 📝 草稿 | 2026-08-02 | — | docs/erd/ERD-LLM-Integration-004-20260802.md |
-| Spec | SPEC-LLM-Integration-004-20260802.md | 📝 草稿 | 2026-08-02 | — | docs/spec/SPEC-LLM-Integration-004-20260802.md |
+| PRD | PRD-LLM-Integration-004-20260802.md | ✅ 已批准 | 2026-08-02 | 2026-08-04 | docs/prd/PRD-LLM-Integration-004-20260802.md |
+| ERD | ERD-LLM-Integration-004-20260802.md | ✅ 已批准 | 2026-08-02 | 2026-08-04 | docs/erd/ERD-LLM-Integration-004-20260802.md |
+| Spec | SPEC-LLM-Integration-004-20260802.md | ✅ 已批准 | 2026-08-02 | 2026-08-04 | docs/spec/SPEC-LLM-Integration-004-20260802.md |
 
 ### 三文档齐全检查
-- ✅ PRD 已创建（草稿）
-- ✅ ERD 已创建（草稿）
-- ✅ Spec 已创建（草稿）
+- ✅ PRD 已批准
+- ✅ ERD 已批准
+- ✅ Spec 已批准
 - ✅ 编号一致（004）
 - ✅ 日期一致（20260802）
 - ✅ 头部关联字段互指正确（PRD↔ERD↔Spec）
-- ⚠️ 状态：**草稿完成，待评审批准**
-- 🚫 **开发状态：阻塞（未批准，禁止编码）**
+- ✅ 状态：**已批准**（Project Owner，2026-08-04）
+- 🚧 **开发状态：开发中（TDD，DD-001 契约随设计定夺）**
 
 ### 范围摘要
 - 模块定位（v1.1 拓宽为"LLM 集成"，两大支柱）：**(A) 蒸馏**——以 LLM 从模块 002 `Conversation` 产出忠实五层 Persona，映射进模块 003 现有 `Persona` 契约；**(B) 对话引擎（ChatEngine）**——以 `Persona` 渲染的 system prompt 驱动多轮流式对话（滑窗上下文、硬规则强制、本地/云端切换）。二者**共享 Runtime 抽象层**（本地 LiteRT 默认 + 云端 API opt-in），原「005 云端 API 集成」已并入本模块。
@@ -189,9 +189,9 @@
 - [ ] 三文档评审
 - [ ] 三文档批准（批准后方可编码）
 - [ ] 编写测试用例（mock Runtime）→ 实现 → 验证
-- [ ] Runtime 抽象层实现（LiteRtRuntime[flutter_gemma] / CloudRuntime / FallbackRuntime）
-- [ ] ChatEngine 实现（滑窗上下文 / 流式 / 硬规则强制 / 本地云端切换）
-- [ ] 开发者调试台（dev-only）真机质量评审
+- [x] Runtime 抽象层实现（LiteRtRuntime[flutter_gemma] — 切片 4c / CloudRuntime — 切片 4b；统计兜底经 `DefaultLlmPersonaBuilder` 内置，ADR-004）
+- [x] ChatEngine 实现（滑窗上下文 / 流式 / 硬规则强制 / 本地云端切换）— 切片 3（宿主 TDD T14–T20）
+- [x] 开发者调试台（dev-only）— 切片 5（`LlmHarnessScreen`：安装 SmolLM→激活→蒸馏→对话，真机人工评审）；T21 真机冒烟待运行
 - [ ] 与模块 007（模型管理，前置依赖）、006（聊天界面）对接
 
 ---
@@ -201,19 +201,19 @@
 ### 文档信息
 | 文档类型 | 文件名 | 状态 | 完成时间 | 批准时间 | 文件路径 |
 |----------|--------|------|---------|---------|---------|
-| PRD | PRD-Model-Management-007-20260802.md | 📝 草稿 | 2026-08-02 | — | docs/prd/PRD-Model-Management-007-20260802.md |
-| ERD | ERD-Model-Management-007-20260802.md | 📝 草稿 | 2026-08-02 | — | docs/erd/ERD-Model-Management-007-20260802.md |
-| Spec | SPEC-Model-Management-007-20260802.md | 📝 草稿 | 2026-08-02 | — | docs/spec/SPEC-Model-Management-007-20260802.md |
+| PRD | PRD-Model-Management-007-20260802.md | ✅ 已批准 | 2026-08-02 | 2026-08-04 | docs/prd/PRD-Model-Management-007-20260802.md |
+| ERD | ERD-Model-Management-007-20260802.md | ✅ 已批准 | 2026-08-02 | 2026-08-04 | docs/erd/ERD-Model-Management-007-20260802.md |
+| Spec | SPEC-Model-Management-007-20260802.md | ✅ 已批准 | 2026-08-02 | 2026-08-04 | docs/spec/SPEC-Model-Management-007-20260802.md |
 
 ### 三文档齐全检查
-- ✅ PRD 已创建（草稿）
-- ✅ ERD 已创建（草稿）
-- ✅ Spec 已创建（草稿）
+- ✅ PRD 已批准
+- ✅ ERD 已批准
+- ✅ Spec 已批准
 - ✅ 编号一致（007）
 - ✅ 日期一致（20260802）
 - ✅ 头部关联字段互指正确（PRD↔ERD↔Spec）
-- ⚠️ 状态：**草稿完成，待评审批准**
-- 🚫 **开发状态：阻塞（未批准，禁止编码）**
+- ✅ 状态：**已批准**（Project Owner，2026-08-04）
+- 🚧 **开发状态：开发中**（宿主核心 + 设备/原生 slice 已落地；`ModelHandle.filePath` 契约见 DD-001 待 004 定夺）
 
 ### 范围摘要
 - 模块定位：端侧 LLM 模型的**下载 / 存储 / 切换 / 查询**，以**薄封装**隔离 `flutter_gemma` 模型安装 builder API（`installModel().fromNetwork().install()`；旧 `ModelFileManager` 为 legacy facade，ADR-005，不自造下载器）；向模块 004 暴露稳定的 `ModelHandle` / `ModelRepository.getActiveModelHandle()` 契约。
@@ -383,6 +383,25 @@ Spec：⚪ 待创建
 | 2026-08-02 | — | **模块 007（模型管理）提前至 Phase 3** 并创建三文档草稿（PRD/ERD/SPEC-Model-Management-007，编号 007、日期 20260802、互相交叉引用）：作为模块 004 本地默认路径的**前置依赖**（无就绪模型则 004 无法真机验证）；以薄封装隔离 flutter_gemma `ModelFileManager`（不自造下载器），暴露 `ModelHandle`/`getActiveModelHandle()` 契约；含 ModelCatalog/下载状态机+断点续传/存储/激活切换/设备能力探测/HF token；不含推理（004）与正式 UI（Phase 4）。矩阵行 007 → 📝/📝/📝、⚠️草稿完成、🚫阻塞；优先级列表 007 置于 004 之前；同步 README、ROADMAP。**未改任何源码/pubspec**，待评审批准后方可编码 | Claude |
 | 2026-08-02 | — | **模块 004 拓宽为"LLM 集成"**并三文档改版 v1.1（文件 PRD/ERD/SPEC-LLM-Persona-Builder → **LLM-Integration**，`git mv` 重命名）：在蒸馏之外**新增对话引擎 ChatEngine**（以 `Persona` 的 system prompt 驱动多轮流式对话——滑窗上下文、聊天时硬规则强制、本地/云端切换、取消/错误分类；对话**无统计兜底**，无模型明确提示）；接入 **flutter_gemma/模块 007**（ADR-005）为本地推理底座与前置依赖；新增**开发者调试台（dev-only harness）**供真机质量评审；PRD 加故事 6 + 功能 2.5/C、ERD 加 §3.5/§4.2.5/§5.4/§6.1 对话设计 + 流式 Runtime、SPEC 加 §2.4 + 边界 5.10–5.15 + 用例 T14–T21 + 对话性能。矩阵/详情/优先级同步。**未改任何源码/pubspec**，仍草稿待批准 | Claude |
 | 2026-08-04 | — | **PR #13 Owner 评审修订**（四项阻塞项）：(🔴1) 删除编造的"Gemma 4 E2B iOS Metal 实测 ~56 tok/s"（ADR-005/ERD-004 §7/SPEC-004 §7）→ 改为「> 5 tokens/s，iOS Metal 具体吞吐以真机基线为准，不预设未实测数值」；(🔴2) 模块 007 封装对象由 legacy `ModelFileManager` 改为**现代 builder API** `installModel().fromNetwork().install()`（旧类降为 legacy facade，核实 v1.5.x 公开 API）；(🔴3) `flutter_gemma` 为 **MIT** 已核实属实（LICENSE：Copyright 2024 Sasha Denisov），保留；(🔴4) PRD-004 版本头 v1.0→v1.1、§7 编号 7.2→7.1。另非阻塞：锁版本 v1.5.0→**v1.5.2**（已核实当前版）。004 三文档升 v1.1.1、007 三文档升 v1.0.1，均仍草稿。范围扩张（ChatEngine/模块 007/ADR-005）待 Owner 明确认可 | Claude |
+
+| 2026-08-04 | — | **新增设计债务登记表** `docs/overview/DESIGN-DEBT.md`，登记模块 007 设备/原生 slice 发现的两处契约缺口（不改契约、待模块 004 设计时定夺）：**DD-001** `flutter_gemma` v1.5.2 自管落盘且不暴露 `filePath`（推理经 `getActiveModel()`），ERD/SPEC-007 §3.4 `ModelHandle.filePath` 生产不可诚实兑现——当前宿主实现用合成路径通过测试；**DD-002** `dart:io`/插件均无可用磁盘余量 API，生产 `ModelStore.freeBytes()`（E2 空间预检）暂无法实现，仅 `InMemoryModelStore` 供宿主测试。已在 ERD-007 §3.4/§4.3 与 ERD-004 §1.2（`LiteRtRuntime` 消费点）以 `⚠️ 契约缺口：见 DD-00x` 反向链接。**未改源码/契约** | Claude |
+
+| 2026-08-04 | — | ✅ **批准模块 004（LLM 集成）与模块 007（模型管理）三文档**（Project Owner）：PRD/ERD/SPEC 状态转"已批准"、批准日期 2026-08-04；范围扩张（ChatEngine / 模块 007 前置 / ADR-005 / 004 并入原 005）经 Owner 明确认可。矩阵行 004 → ✅/✅/✅、开发状态"开发中"（进入 TDD）；行 007 → ✅/✅/✅、开发状态"开发中"（宿主核心 + 设备 slice 已落地）。DD-001（`ModelHandle.filePath`）随 004 设计定夺 | Project Owner |
+
+| 2026-08-04 | — | **模块 004 定夺 DD-001（选项 A）**：`ModelHandle.filePath` → 可选，`PersonaRuntime` 抽象层不依赖 `filePath`，`LiteRtRuntime` 经 flutter_gemma `getActiveModel()` 加载（代码改动随设备 slice 落地）；更新设计债务登记表 DD-001 状态为🟢已定夺 | Claude |
+| 2026-08-04 | — | **模块 004 TDD 切片 1（Runtime 抽象层）**：`lib/services/llm/persona_runtime.dart`（`PersonaRuntime` 抽象 + `RuntimeSource`/`RuntimeError`/`RuntimeResult`/`RuntimeCapabilities`/`RuntimeException`，ERD-004 §3.4/§4.1）+ `mock_runtime.dart`（`MockRuntime`：固定响应/token 流、prompt 记录、错误注入短路不发起调用、取消即停）。宿主 TDD 12 用例（含 SPEC T18 取消语义），`flutter test` 225/225、`flutter analyze` 0 警告。抽象层不触碰 `filePath`（DD-001） | Claude |
+| 2026-08-04 | — | **模块 004 TDD 切片 2a（蒸馏解析 + 映射）**：`lib/services/llm/distilled_persona.dart`（`DistilledPersona` 中间态 + `DistillationParser`：容忍散文/```json 围栏、字段从宽、整体不可解析抛 `DistillationFormatException`，SPEC §5.8）+ `persona_mapper.dart`（`PersonaMapper`：**原文接地**丢弃无支撑结论并据真实消息键哈希造 `Evidence`→落实 T5/§5.9；素材不足层置 low + `notes`→T4/§5.2；`hardRulesOverride` 永不覆盖）。**DD-003 定夺**：模块 003 `Persona` 加**可选** `notes`（`render` 不读、`PersonaJsonCodec` 往返，ERD-004 §4.3 预授权）。宿主 TDD +18 用例（parser 8 + mapper 10，覆盖 T2/T4/T5/T12/T13 映射级），`flutter test` 243/243、`flutter analyze` 0 警告（余 1 项为既有 test print） | Claude |
+| 2026-08-04 | — | **模块 004 TDD 切片 2b（build 编排 + 兜底）**：`lib/services/llm/prompt_composer.dart`（`PromptComposer`：analyzer+builder 合一蒸馏 prompt，硬约束「仅用原文/不编造/素材不足归 `insufficientLayers`」，超长语料按 `maxChunkMessages` 分块）+ `fallback_runtime.dart`（`FallbackRuntime`：不推理，`generate` 恒 `modelUnavailable`/`source: fallback`，对话流经错误通道抛异常）+ `llm_persona_builder.dart`（`PersonaRuntimeMode`/`LlmBuildOptions`/`LlmPersonaBuilder` 抽象 + `DefaultLlmPersonaBuilder.build`：切分去重→分块 prompt→注入式 runtime 生成→解析→原文接地映射；空语料/`maxPrivacy`/云端未授权/生成解析失败→模块 003 统计兜底并 `notes` 标注；id 与统计引擎一致；分块数经 `onLog` 暴露不静默截断；非文本计入 `totalMessages` 不入蒸馏语料）。**update（T8/T9）留待切片 2c**（抽象暂只含 build，不发抛异常桩）。宿主 TDD +9 用例（MockRuntime，覆盖 T1/T3/T5/T6/T7/T10/T11 及解析失败兜底），`flutter test` 252/252、`flutter analyze` 0 警告（余 1 项为既有 test print） | Claude |
+| 2026-08-04 | — | **模块 004 TDD 切片 2c（增量 update + 结构合并）**：`llm_persona_builder.dart` 补 `LlmPersonaBuilder.update` + `DefaultLlmPersonaBuilder.update`：`schemaVersion` 不符抛 `PersonaSchemaException`；键哈希去重求实质新增，全命中→幂等（仅版本/修订，五层不变，T8）；有新增→仅对新素材重蒸馏得增量 Persona 再与既有**结构合并**（词表计数累加 topN、比率按量加权、记忆/时间线/证据合并、别名并集、标签按标签并合），`hardRules` **永不覆盖**（T9），合并后按合并后列表重算逐层置信与 `notes`。因 `.persona` 只存哈希不可复现旧原文，旧结论经证据/计数保留而非重蒸馏。合并助手为模块 003 逻辑的忠实复刻（不改动模块 003）。宿主 TDD +4 用例（T8/T9 + 实质新增合并 + schema 守卫），`flutter test` 256/256、`flutter analyze` 0 警告（余 1 项为既有 test print） | Claude |
+| 2026-08-04 | — | **模块 004 TDD 切片 3（ChatEngine 对话引擎）**：`lib/services/llm/chat_types.dart`（`ChatRole`/`ChatTurn`/`ChatOptions`/`ChatDelta`/`ChatSession`，ERD-004 §3.5）+ `hard_rule_guard.dart`（`HardRuleGuard`：**仅输出后置校验**，因 `render()` 已注入 hardRules；`lookback` 回退缓冲使越界短语在拼接完整前滞留、外泄前截获；屏蔽 `mustNeverClaim`+`forbiddenTopics`+自称 AI 标志）+ `chat_engine.dart`（`ChatEngine` 抽象 + `DefaultChatEngine`：system prompt **仅**由 `PromptTemplate.render` 产生；滑窗保留最近 `maxContextTurns` 轮并 `onLog` 记录裁剪数；`generateStream` 流式增量；越界拦截改发安全回复；空消息→`emptyInput`、`maxPrivacy`/无模型→`modelUnavailable`、云端未授权→`unauthorized`，**均无兜底无网络调用**；取消订阅即停无异常）。**对话无统计兜底**（对齐 SPEC §2.4）。宿主 TDD +9 用例（T14–T20，MockRuntime），`flutter test` 265/265、`flutter analyze` 0 警告（余 1 项为既有 test print） | Claude |
+| 2026-08-04 | — | **模块 004 TDD 切片 4a（DD-001 落地：`ModelHandle.filePath` 可选化）**：`ModelHandle.filePath: required String → String?`（DD-001 选项 A——仅自管下载时有值，`flutter_gemma` 插件路径下为 `null`，`LiteRtRuntime` 经 `getActiveModel()` 加载不依赖此字段）；同步 007 `DefaultModelRepository`（构造仍填合成路径，`String→String?` 赋值兼容）与 T12 测试（断言改 null 安全）；DESIGN-DEBT DD-001 状态转「已定夺并落地」。`flutter test`（007）21/21、`flutter analyze` 0 警告（余 1 项既有 test print） | Claude |
+| 2026-08-04 | — | **模块 004 TDD 切片 4b（CloudRuntime 云端运行时）**：`lib/services/llm/cloud_runtime.dart`（`CloudRuntime implements PersonaRuntime`，opt-in）：授权门控——未授权 / 无密钥 → `generate` 返回 `unauthorized`、`generateStream` 抛 `unauthorized`，**绝不调用 transport、绝不发网络**；`CloudTransport` 可注入接缝（provider HTTP 线缆属集成/设备工作，与门控+错误分类解耦）；HTTP 失败经 `CloudHttpException`（statusCode/isNetworkError）归一为分类 `RuntimeError`（401/403→unauthorized、429→rateLimited、其余/网络→network）；`generateStream` 用 `await for` 拦截并重映射上游流错误（非 `yield*`）。宿主 TDD +13 用例（假 transport，覆盖门控/成功/错误分类/流中途错误），`flutter test` 278、`flutter analyze` 0 警告 | Claude |
+| 2026-08-04 | — | **模块 004 TDD 切片 4c（LiteRtRuntime 本地运行时 + flutter_gemma 接缝）**：`lib/services/llm/lite_rt_runtime.dart`（`GemmaEngine` 接缝 + `LiteRtRuntime implements PersonaRuntime`：可用性以 007 契约为准——经注入的 `getActiveModelHandle` 判定，无激活句柄即不可用（DD-001：不依赖 `filePath`）；推理委派引擎，原生层异常经 `await for` 归一为 `modelUnavailable`，不静默失败；全程无网络）+ `flutter_gemma_engine.dart`（`FlutterGemmaEngine` 具体实现，**设备/原生**：`FlutterGemma.hasActiveModel/getActiveModel().createSession()` + `getResponse(Async)`，对齐 v1.5.2 现代门面，宿主/模拟器不可验质量 ADR-005）。宿主 TDD +9 用例（假 `GemmaEngine`，覆盖可用性/generate/stream/异常归一），`flutter test` 287/287、`flutter analyze` 0 警告（余 1 项既有 test print）。**T21（SmolLM 真机冒烟）+ 云端 provider HTTP transport 具体实现留待真机/集成** | Claude |
+| 2026-08-04 | — | **模块 004 TDD 切片 5（开发者调试台 dev-only）**：`lib/screens/dev/llm_harness_screen.dart`（`LlmHarnessScreen`：真机把「安装 [SmolLM 135M 免 token] → `setActive` → 蒸馏示例语料 → 多轮流式对话」串成人工「像不像」评审台，ADR-005 质量验收必须真机）——装配真实 `DefaultModelRepository`（`FlutterGemmaInstaller`/`SecureTokenStore`/`InMemoryModelStore`）+ 本地 `LiteRtRuntime(FlutterGemmaEngine, activeHandle: getActiveModelHandle)`，全程本地原文不出设备；展示 `DefaultPromptTemplate.render()` 的 system prompt 与流式增量；`initGemmaRuntime()` 由屏内惰性注册（不动 `main` 启动路径）。`HomeScreen` 加 `kDebugMode` 入口按钮。**UI 层不入宿主单测**（设备 slice，底层已由切片 3/4 契约测试覆盖）；`flutter analyze` 0 警告、`flutter test` 287/287 不变。T21 真机冒烟待运行 | Claude |
+| 2026-08-04 | — | **切片 5 冒烟修复**：真机/模拟器安装 SmolLM 报 `failed·network`，日志实为 **HTTP 404**——目录 `smolLm135m` 指向的 `litert-community/SmolLM-135M-Instruct/…SmolLM-135M-Instruct.litertlm` 该仓库**无 `.litertlm`**（仅 `.task/.tflite`）。改指免 token 且确有 `.litertlm` 的 `litert-community/SmolLM2-135M-Instruct/…SmolLM2_135M_Instruct.litertlm`（id `smollm2-135m`、136MB、格式仍 litertlm 走已注册的 LiteRT-LM 引擎，无需 MediaPipe 插件）。另修 `FlutterGemmaInstaller._mapError` 掩盖真因的缺陷：`NotFoundError`→`unknownModel`（原并入 network 误导排查）、补全 `RateLimited/Server→network`、`Unknown→unknown`（sealed 全覆盖）。`flutter analyze` 0 警告、`flutter test` 287/287 | Claude |
+| 2026-08-04 | — | **T21 冒烟通过（iOS 模拟器）**：SmolLM2-135M `.litertlm` 下载→激活→LiteRT-LM 引擎初始化（~3s）→生成全链路跑通；实测 TTFT ~0.5–0.8s、解码 ~26–37 tok/s（>5 tok/s 达标；模拟器 `backend=gpu`，135M < 256MB Metal 上限故可跑，1B/E2B 仍须真机，符合 ADR-005）。**蒸馏因 135M 无法产出结构化格式，解析两次失败→诚实回落模块 003 统计兜底**（ADR-004 预期行为）：本冒烟验证「安装/激活/推理/流式/守卫」管道，**非蒸馏质量**；质量验收仍待真机 Gemma 3 1B。真机（物理设备）冒烟与云端 provider HTTP transport 仍待办 | Claude |
+| 2026-08-04 | — | **调试台增强（为真机蒸馏质量评审）**：`LlmHarnessScreen` 加**模型选择器**（SmolLM2 135M / Gemma 3 1B / Gemma 4 E2B）+ **HF token 输入框**（受限模型显示，经 `install(hfToken:)` 直传，未存盘），使真机可下载大模型做「像不像」评审（135M 只能触发统计兜底，非质量档）。另修两处调试台缺陷：`_send` 曾把本轮用户消息**既加入 history 又作为 userMessage 传入** → prompt 出现「对方：X / 对方：X」重复，改为传入加入前的 history 快照；对话回复剥除泄漏的控制 token（`<end_of_turn>` 等，SmolLM2 general 模板产物）。UI 层仍不入宿主单测；`flutter analyze` 0 警告 | Claude |
+| 2026-08-04 | — | **目录 URL 修正（经 HF API 核对真实文件）**：`gemma3_1b` 原指 `Gemma3-1B-IT_multi-prefill-seq_q4_ekv2048.litertlm`（仓库**无此文件**，实为 ekv4096）→ 改指通用跨端 `gemma3-1b-it-int4.litertlm`（`litert-community/Gemma3-1B-IT`，`gated: auto` 故仍 `requiresToken`）。`gemma4E2b` 原指不存在的 `litert-community/Gemma-4-E2B-it` → 改指真实 `litert-community/gemma-4-E2B-it-litert-lm/…/gemma-4-E2B-it.litertlm`（`gated: False`，**去掉 `requiresToken`**，免 token）。SoC 专用变体（`_qualcomm_*`/`_intel_*`/`_Google_Tensor_G5`/`-web`）不适用 iOS，一律选通用文件。调试台 `_choices` 补入 E2B（免 token，最省事的高质量档）。`flutter analyze` 0 警告、模型管理单测 21/21 | Claude |
 
 ---
 
