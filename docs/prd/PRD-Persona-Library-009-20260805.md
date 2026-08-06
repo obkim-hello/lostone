@@ -2,7 +2,7 @@
 
 > Product Requirements Document — Persona Library & Distill (persona persistence, library screen, and the distill/creation flow)
 >
-> **Version**: v1.0 (draft)
+> **Version**: v1.0.1 (draft)
 > **Status**: 📝 Draft (pending review)
 > **Author**: Claude
 > **Date**: 2026-08-05
@@ -294,3 +294,4 @@ Module 009 turns "creating and keeping a persona" into a production surface. It 
 | Version | Date | Change | Author |
 |---------|------|--------|--------|
 | v1.0 | 2026-08-05 | Initial draft (persona persistence + library + distill flow; 3-module Phase-4 split) | Claude |
+| v1.0.1 | 2026-08-05 | PR #16 review round — trio version bump; no PRD-body change (seam change is ERD-009) | Claude |

@@ -2,7 +2,7 @@
 
 > Technical Specification — Chat Interface (streaming conversation + SQLite chat history)
 >
-> **Version**: v1.0 (draft)
+> **Version**: v1.0.1 (draft)
 > **Status**: 📝 Draft (pending review)
 > **Author**: Claude
 > **Date**: 2026-08-05
@@ -289,6 +289,7 @@ Mirrors PRD §8.
 | Date | Version | Change | Author |
 |------|---------|--------|--------|
 | 2026-08-05 | v1.0 (draft) | Initial draft — `ChatHistoryRepository` + `ChatSessionNotifier` contracts, edge cases, behaviors, and enumerated test specs (C1..C34) against the approved 006 PRD, ERD-006, and pinned 004/007/009/003 contracts | Claude |
+| 2026-08-05 | v1.0.1 (draft) | PR #16 review round — trio version bump; no spec-body change (seam change is ERD-006 §3.4) | Claude |
 
 ---
 

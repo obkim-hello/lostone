@@ -2,7 +2,7 @@
 
 > Engineering Requirements Document — Chat Interface (streaming conversation + SQLite chat history)
 >
-> **Version**: v1.0 (draft)
+> **Version**: v1.0.1 (draft)
 > **Status**: 📝 Draft (pending review)
 > **Author**: Claude
 > **Date**: 2026-08-05
@@ -16,7 +16,7 @@
 | **ERD ID** | ERD-006 |
 | **Related PRD** | PRD-Chat-Interface-006-20260805.md |
 | **Related Spec** | SPEC-Chat-Interface-006-20260805.md |
-| **Depends on** | Module 004 (`ChatEngine`, `PersonaRuntime`, `ChatTurn`/`ChatOptions`/`ChatDelta`/`ChatSession`, `PersonaRuntimeMode`, `RuntimeError`), Module 007 (`ModelRepository` — active handle / `stateOf` / `installed`), Module 009 (`PersonaRepository.load`), Module 003 (`Persona` + `PromptTemplate`, read-only) |
+| **Depends on** | Module 004 (`ChatEngine`, `PersonaRuntime`, `ChatTurn`/`ChatOptions`/`ChatDelta`/`ChatSession`, `PersonaRuntimeMode`, `RuntimeError`), Module 007 (`ModelRepository` — active handle / `stateOf` / `installed`), Module 009 (`PersonaRepository.load`), Module 010 (`appSettingsProvider` + `cloudKeyStoreProvider` — mode/auth/key read-path, §3.4), Module 003 (`Persona` + `PromptTemplate`, read-only) |
 | **Related decisions** | ADR-002 (hybrid model strategy), ADR-004 (LLM distillation; conversation has no statistical fallback), ADR-005 (flutter_gemma / LiteRT-LM) |
 
 > **Module map (Phase 4 UI).** This ERD engineers only the **conversation surface + its history store**. Persona persistence/library/distill flow is Module 009; model-management UI, runtime/mode selection, and cloud authorization live in Module 010; encryption at rest / backup exclusion is Module 008. This module *consumes* a `Persona` from 009, *reads* model readiness from 007, and *drives* 004's `ChatEngine`. It **owns** the new `ChatHistoryRepository` (SQLite).
@@ -132,7 +132,22 @@
 | reuses | 003 | `Persona` + layers, `PromptTemplate` (indirectly via 004) | Read-only; no field additions. |
 | provides | — | `ChatHistoryRepository`, `chatSessionProvider`, `ChatScreen` | Owned & exported by 006. |
 | seam | 008 | injected `DatabaseFactory` + db path | Encryption / backup exclusion swaps the backend, contract unchanged. |
+| consumes | 010 | `appSettingsProvider` (`runtime`/`cloudAuthorized`/`chatTemperature`) + cloud-key provider | Read-only; folded into `ChatOptions` + `PersonaRuntime` selection (§3.4). |
 | routes to | 010 | model install/activate flow | Reached from the "no model" CTA via imperative `Navigator`. |
+
+### 3.4 Settings → `ChatOptions`/runtime binding (seam with 010)
+
+`ChatSessionNotifier` does **not** hardcode `ChatOptions`. At session start (and on relevant settings changes) `chatSessionProvider` **watches 010's `appSettingsProvider`** and folds it into the engine call:
+
+| `AppSettings` field (010) | Folds into | Effect |
+|---------------------------|------------|--------|
+| `runtime` (`PersonaRuntimeMode`) | `ChatOptions.mode` **and** selects which injected `PersonaRuntime` is passed to `ChatEngine.chat` (local `LiteRtRuntime` vs `CloudRuntime`; `maxPrivacy` → local-only, no cloud) | Runtime + mode agree; no divergent source of truth. |
+| `cloudAuthorized` (bool) | `ChatOptions.cloudAuthorized` | Cloud gate; `CloudRuntime` still enforces it independently (defense in depth). |
+| `chatTemperature` (double) | `ChatOptions.temperature` | User-tuned decoding temperature. |
+
+**Fail-safe default:** if `appSettingsProvider` is unread/unavailable, `ChatOptions()` defaults apply (`mode = local`, `cloudAuthorized = false`) — the closed cloud gate means nothing leaks. `maxContextTurns` and `maxNewTokens` remain 006-owned defaults (not user settings in v1).
+
+**Cloud API-key read-path (seam with 010/004).** When `runtime == cloud` and `cloudAuthorized == true`, the notifier obtains the key **from 010's `SecureKeyStore` via the provider 010 exposes** (never from `AppSettings`/Hive) and passes it to the injected `CloudRuntime` (`apiKey`) at chat time. If the key is absent, the runtime's gate returns `RuntimeError.unauthorized` → surfaced as the cloud-unauthorized banner (§6). 006 never persists, caches, or logs the key. (009 uses the identical read-path at distill time.)
 
 ---
 
@@ -411,6 +426,7 @@ See SPEC §7 for enumerated cases (C1..Cn).
 | Date | Version | Change | Author |
 |------|---------|--------|--------|
 | 2026-08-05 | v1.0 (draft) | Initial draft — chat screen + `ChatSessionNotifier` + `ChatHistoryRepository` (SQLite) engineered against the approved 006 PRD and pinned 004/007/009/003 contracts | Claude |
+| 2026-08-05 | v1.0.1 (draft) | PR #16 review — added §3.4 Settings→`ChatOptions`/runtime binding seam + cloud API-key read-path; listed Module 010 in "Depends on" | Claude |
 
 ---
 

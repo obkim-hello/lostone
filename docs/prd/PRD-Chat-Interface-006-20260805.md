@@ -2,7 +2,7 @@
 
 > Product Requirements Document — Chat Interface (streaming conversation with a saved persona + chat history persistence)
 >
-> **Version**: v1.0 (draft)
+> **Version**: v1.0.1 (draft)
 > **Status**: 📝 Draft (pending review)
 > **Author**: Claude
 > **Date**: 2026-08-05
@@ -256,3 +256,4 @@ Chat history persistence does not exist today (there is no database wiring in th
 | Version | Date | Change | Author |
 |---------|------|--------|--------|
 | v1.0 | 2026-08-05 | Initial draft (narrowed to chat + history after the 3-module split) | Claude |
+| v1.0.1 | 2026-08-05 | PR #16 review round — trio version bump; no PRD-body change (seam change is ERD-006 §3.4) | Claude |

@@ -2,7 +2,7 @@
 
 > Technical Specification — Settings (interface-level I/O, pre/postconditions, edge cases, test cases)
 >
-> **Version**: v1.0 (draft)
+> **Version**: v1.0.1 (draft)
 > **Status**: 📝 Draft (pending review)
 > **Author**: Claude
 > **Date**: 2026-08-05
@@ -97,7 +97,7 @@ Specifies the interfaces 010 owns — `RuntimeChoice`, `AppSettings`, `SettingsR
 | E12 | Secret never in Hive/logs | Setting a cloud key / HF token writes only to the secure store; the Hive map contains no secret; logs show no secret. |
 | E13 | Max-privacy selected | `runtime == maxPrivacy` persisted + exposed; 006/009 read it (distill → statistical fallback; chat → disabled state). 010 records only. |
 | E14 | Network drop mid-download | 007 emits `failed(network)`; distinct state with retry; partial cleaned by 007. |
-| E15 | Corrupted/verification failure | 007 emits `failed(corrupted)`; distinct state with retry (re-download). |
+| E15 | Corrupted/verification failure | `failed(corrupted)` is a **contract-permitted** exit the UI maps defensively to a distinct retry (re-download) state — but the current `flutter_gemma` installer (post-#14) **never emits it** (it performs no sha256 verification; download success → `ready` directly). Reachable only by a future self-managed installer. |
 | E16 | Unknown modelId to `install` | `ArgumentError` from 007 (catalog-driven UI prevents; defensive mapping to `unknownModel`). |
 | E17 | `save()` failure | Reported to UI (never swallowed); state reflects intent; user can retry save. |
 
@@ -107,7 +107,7 @@ Specifies the interfaces 010 owns — `RuntimeChoice`, `AppSettings`, `SettingsR
 
 - **Defaults & local-first**: fresh install → `AppSettings()` = local / not authorized / no active / 0.7. No cloud call is possible without opt-in + key.
 - **Single source of truth**: 006 and 009 read mode/auth/temperature via `appSettingsProvider`; `activeModelId` in settings is a mirror — model readiness authority is `ModelRepository.getActiveModelHandle()`.
-- **Install lifecycle**: `notInstalled → downloading(progress) → verifying → ready`, or `→ failed(kind)`; the UI reflects exactly the states/errors 007 emits (no invented states).
+- **Install lifecycle**: `notInstalled → downloading(progress) → ready`, or `→ failed(kind)`; the current `flutter_gemma` installer skips `verifying` (no sha256 check post-#14). `verifying`/`failed(corrupted)` remain contract-permitted `ModelState`/`InstallErrorKind` exits — the UI handles them defensively but must **not** render a verifying spinner or "verification failed" error as an expected step, since 007's shipped installer never produces them. The UI reflects exactly the states/errors 007 actually emits (no invented states); contract-permitted-but-unemitted exits are handled, not advertised.
 - **No silent failures**: every `InstallErrorKind` maps to a distinct, actionable UI state (§4, ERD §6.3); `setActive` and store failures are surfaced.
 - **Secret isolation**: secrets flow only to Secure Storage; they are never part of `AppSettings`, never persisted to Hive, never logged.
 - **Reuse**: 007 and 004 are consumed unmodified; 010 adds only UI + settings.
@@ -135,13 +135,13 @@ All host tests use a **fake `ModelRepository`** with deterministic `InstallEvent
 | C5 | Secret isolation — cloud key | `setCloudApiKey` writes to fake secure store; Hive map has no `cloud_api_key`; `AppSettings` unchanged; no secret in captured logs (E12). |
 | C6 | Secret isolation — HF token | `setHfToken` writes to `SecureTokenStore` fake only; not in Hive; not logged. |
 | C7 | Clear cloud key | `clearCloudApiKey` → `read() == null`; derived `hasCloudKey == false` (E11). |
-| C8 | Install progress fold | Scripted `downloading(25/50/100) → verifying → ready`; `progress[id]` percent advances; ends `ready` (F2). |
+| C8 | Install progress fold | Scripted `downloading(25/50/100) → ready` (the flutter_gemma path, no `verifying`); `progress[id]` percent advances; ends `ready` (F2). A separate case scripts an optional `verifying` frame to prove the UI tolerates the contract-permitted state without breaking. |
 | C9 | Install authRequired | Gated stream emits `failed(authRequired)`; `lastError.kind == authRequired` (E2). |
 | C10 | Install insufficientStorage | `failed(insufficientStorage)` → distinct error (E5). |
 | C11 | Install unsupportedDevice (no confirm) | `!canRun`, `allowOverTier:false` → `failed(unsupportedDevice)` (E3). |
 | C12 | Install over-tier confirmed | `allowOverTier:true` bypasses tier gate; proceeds to `ready` (E4). |
 | C13 | Install network failure | `failed(network)` → distinct retry state (E14). |
-| C14 | Install corrupted | `failed(corrupted)` → distinct retry state (E15). |
+| C14 | Install corrupted (defensive) | Scripted `failed(corrupted)` → distinct retry state; proves defensive handling of the contract-permitted exit even though the shipped flutter_gemma installer never emits it (E15). |
 | C15 | Cancel mid-install | `cancel(id)` → `notInstalled`; `progress[id]` cleared (E6). |
 | C16 | Activate ready model | `activate(id)` → active; `activeModelId` mirror + `onActiveChanged(id)` fired (E8, F3). |
 | C17 | Activate non-ready model | `setActive` `StateError` caught → `lastError`; active unchanged (E9). |
@@ -200,3 +200,4 @@ Mirrors PRD §8:
 | Version | Date | Change | Author |
 |---------|------|--------|--------|
 | v1.0 | 2026-08-05 | Initial draft (settings interfaces, edge cases, C1–C25 test specs) | Claude |
+| v1.0.1 | 2026-08-05 | PR #16 review — install lifecycle + test cases (E15/C8/C14) reconciled to `downloading → ready`; `verifying`/`corrupted` handled defensively, not advertised | Claude |

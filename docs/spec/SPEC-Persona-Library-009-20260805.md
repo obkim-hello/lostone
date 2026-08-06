@@ -2,7 +2,7 @@
 
 > Technical Specification — Persona Library & Distill (persona persistence, library screen, and the distill/creation flow)
 >
-> **Version**: v1.0 (draft)
+> **Version**: v1.0.1 (draft)
 > **Status**: 📝 Draft (pending review)
 > **Author**: Claude
 > **Date**: 2026-08-05
@@ -189,3 +189,4 @@ This spec defines the exact interfaces, pre/postconditions, edge cases, behavior
 | Version | Date | Change | Author |
 |---------|------|--------|--------|
 | v1.0 | 2026-08-05 | Initial draft (PersonaRepository + PersonaSummary + notifiers; edge cases, behaviors, C1–C21 test specs) | Claude |
+| v1.0.1 | 2026-08-05 | PR #16 review round — trio version bump; no spec-body change (seam change is ERD-009) | Claude |

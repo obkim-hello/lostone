@@ -8,6 +8,8 @@
 > **日期**：2026-08-02
 > **优先级**：P0
 
+> **⚠️ 勘误（2026-08-06，post-#14）**：本文 §4/§7 的 `sha256` 字段、`… → verifying → ready` 状态迁移与「可选 sha256 校验」描述已**过时**。PR #14 移除了 sha256 校验（从未真正执行），交付的 `FlutterGemmaInstaller` 仅产出 `downloading → ready` / `failed(kind)`，**从不发 `verifying` 或 `failed(corrupted)`**。二者仍为状态机合法出口（供未来自管下载器），当前安装器不产出。以 `flutter_gemma_installer.dart` 源码文档注释为准。模块 010 已按此现实对齐。
+
 ---
 
 ## 📋 文档信息

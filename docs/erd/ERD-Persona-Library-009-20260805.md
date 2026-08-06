@@ -2,7 +2,7 @@
 
 > Engineering Requirements Document — Persona Library & Distill (persona persistence, library screen, and the distill/creation flow)
 >
-> **Version**: v1.0 (draft)
+> **Version**: v1.0.1 (draft)
 > **Status**: 📝 Draft (pending review)
 > **Author**: Claude
 > **Date**: 2026-08-05
@@ -84,8 +84,10 @@ PersonaRepository (this module)
 | 003 | `Persona`, layers, `PersonaJsonCodec`, `PersonaSchemaException` | Persisted shape + codec (read-only) |
 | 004 | `LlmPersonaBuilder.build`, `LlmBuildOptions`, `PersonaRuntime`, `PersonaRuntimeMode` | Distillation (reused) |
 | 007 | `ModelRepository.getActiveModelHandle()` | Model readiness for distill |
-| 010 | model install/activate + mode/auth UI | Readiness-gate route target |
+| 010 | `appSettingsProvider` (`runtimeMode`/`cloudAuthorized`) + `cloudKeyStoreProvider`; model install/activate route | Mode/gate for distill + cloud-key read-path (below); readiness-gate route target |
 | 008 (future) | encrypting `PersonaBytesTransform` + backup exclusion | Drops into the seam |
+
+**Settings → distill runtime binding (seam with 010).** `DistillNotifier` selects the `PersonaRuntime` + `LlmBuildOptions.mode` from 010's `appSettingsProvider` (`runtimeMode` → local `LiteRtRuntime` vs `CloudRuntime`; `cloudAuthorized` → cloud gate; `maxPrivacy` → local-only). When `runtimeMode == cloud` && `cloudAuthorized`, it reads the key at build time via 010's `cloudKeyStoreProvider` (`await ref.read(cloudKeyStoreProvider).read()`) and passes it to the injected `CloudRuntime.apiKey` — never into state, `.persona` bytes, or logs (identical read-path to 006 §3.4). Absent key / unauthorized → 004's gate falls back to the labeled statistical engine (§3, honest `notes`). Fail-safe: unread settings → local defaults.
 
 ---
 
@@ -289,3 +291,4 @@ final StateNotifierProvider<DistillNotifier, DistillState>
 | Version | Date | Change | Author |
 |---------|------|--------|--------|
 | v1.0 | 2026-08-05 | Initial draft (PersonaRepository + library + distill flow; 008 encryption seam + filesystem test seam; two StateNotifiers) | Claude |
+| v1.0.1 | 2026-08-05 | PR #16 review — added Settings→distill runtime binding seam (`cloudKeyStoreProvider` read-path, aligns with ERD-006 §3.4) | Claude |
