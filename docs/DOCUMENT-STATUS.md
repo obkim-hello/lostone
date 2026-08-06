@@ -11,10 +11,10 @@
 | 001 | 项目初始化 | ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | ✅ 已完成 |
 | 002 | 数据导入 | ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | 🚧 开发中 |
 | 003 | Persona 生成 | ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | ✅ 已完成 |
-| 004 | LLM 集成（蒸馏 + 对话引擎 + Runtime 抽象层）| ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | 🚧 开发中 |
+| 004 | LLM 集成（蒸馏 + 对话引擎 + Runtime 抽象层）| ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | ✅ 已完成 |
 | ~~005~~ | 云端 API 集成 → **已并入 004**（Runtime 抽象层统一本地/云端）| — | — | — | — | 🔀 已折叠 |
 | 006 | 聊天界面 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
-| 007 | 模型管理（提前至 Phase 3，004 本地路径前置）| ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | 🚧 开发中 |
+| 007 | 模型管理（提前至 Phase 3，004 本地路径前置）| ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | ✅ 已完成 |
 | 008 | 数据安全 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
 
 ---
@@ -176,7 +176,7 @@
 - ✅ 日期一致（20260802）
 - ✅ 头部关联字段互指正确（PRD↔ERD↔Spec）
 - ✅ 状态：**已批准**（Project Owner，2026-08-04）
-- 🚧 **开发状态：开发中（TDD，DD-001 契约随设计定夺）**
+- ✅ **开发状态：已完成**（PR #14 merged to `main` on 2026-08-05; host TDD suite 291 passing, `flutter analyze` clean; iOS on-device signing/install verified. Remaining: on-device persona-quality pass + T21 real-device smoke, tracked as ADR-005 validation, not blocking.）
 
 ### 范围摘要
 - 模块定位（v1.1 拓宽为"LLM 集成"，两大支柱）：**(A) 蒸馏**——以 LLM 从模块 002 `Conversation` 产出忠实五层 Persona，映射进模块 003 现有 `Persona` 契约；**(B) 对话引擎（ChatEngine）**——以 `Persona` 渲染的 system prompt 驱动多轮流式对话（滑窗上下文、硬规则强制、本地/云端切换）。二者**共享 Runtime 抽象层**（本地 LiteRT 默认 + 云端 API opt-in），原「005 云端 API 集成」已并入本模块。
@@ -186,13 +186,14 @@
 - 测试策略变更：LLM 非确定性 → 由 byte-identical 确定性断言改为**契约/结构断言 + mock Runtime + 快照/人工评审**；质量验收须真机（模拟器仅 CPU 冒烟，ADR-005）。
 
 ### 待办
-- [ ] 三文档评审
-- [ ] 三文档批准（批准后方可编码）
-- [ ] 编写测试用例（mock Runtime）→ 实现 → 验证
+- [x] 三文档评审
+- [x] 三文档批准（批准后方可编码）
+- [x] 编写测试用例（mock Runtime）→ 实现 → 验证
 - [x] Runtime 抽象层实现（LiteRtRuntime[flutter_gemma] — 切片 4c / CloudRuntime — 切片 4b；统计兜底经 `DefaultLlmPersonaBuilder` 内置，ADR-004）
 - [x] ChatEngine 实现（滑窗上下文 / 流式 / 硬规则强制 / 本地云端切换）— 切片 3（宿主 TDD T14–T20）
-- [x] 开发者调试台（dev-only）— 切片 5（`LlmHarnessScreen`：安装 SmolLM→激活→蒸馏→对话，真机人工评审）；T21 真机冒烟待运行
-- [ ] 与模块 007（模型管理，前置依赖）、006（聊天界面）对接
+- [x] 开发者调试台（dev-only）— 切片 5（`LlmHarnessScreen`：安装 SmolLM→激活→蒸馏→对话，真机人工评审）
+- [x] 与模块 007（模型管理，前置依赖）对接；模块 006（聊天界面）留待其自身开发
+- [ ] On-device quality validation (distill → chat → judge "像不像本人") + T21 real-device smoke — ADR-005, non-blocking
 
 ---
 
@@ -213,7 +214,7 @@
 - ✅ 日期一致（20260802）
 - ✅ 头部关联字段互指正确（PRD↔ERD↔Spec）
 - ✅ 状态：**已批准**（Project Owner，2026-08-04）
-- 🚧 **开发状态：开发中**（宿主核心 + 设备/原生 slice 已落地；`ModelHandle.filePath` 契约见 DD-001 待 004 定夺）
+- ✅ **开发状态：已完成**（PR #14 merged to `main` on 2026-08-05; host TDD suite green, `flutter analyze` clean; `ModelHandle.filePath` contract with module 004 settled per DD-001. Remaining: staged real-device download validation, non-blocking.）
 
 ### 范围摘要
 - 模块定位：端侧 LLM 模型的**下载 / 存储 / 切换 / 查询**，以**薄封装**隔离 `flutter_gemma` 模型安装 builder API（`installModel().fromNetwork().install()`；旧 `ModelFileManager` 为 legacy facade，ADR-005，不自造下载器）；向模块 004 暴露稳定的 `ModelHandle` / `ModelRepository.getActiveModelHandle()` 契约。
@@ -224,12 +225,13 @@
 - 测试策略：宿主 mock 下载器 + 内存文件系统做状态机/契约断言（>80%）；SmolLM 135M 冒烟；真机 Gemma 3 1B 分阶段。
 
 ### 待办
-- [ ] 三文档评审
-- [ ] 三文档批准（批准后方可编码）
-- [ ] 编写测试用例（mock 下载/文件系统）→ 实现 → 验证
-- [ ] `ModelRepository` / `ModelInstaller`（flutter_gemma 封装）/ `ModelStore` / `DeviceCapabilities` 实现
-- [ ] iOS 平台装配（entitlements / Info.plist / Podfile 静态链接）+ 真机验证（分阶段）
-- [ ] 与模块 004（消费 `ModelHandle`）对接
+- [x] 三文档评审
+- [x] 三文档批准（批准后方可编码）
+- [x] 编写测试用例（mock 下载/文件系统）→ 实现 → 验证
+- [x] `ModelRepository` / `ModelInstaller`（flutter_gemma 封装）/ `ModelStore` / `DeviceCapabilities` 实现
+- [x] iOS 平台装配（entitlements / Info.plist / Podfile 静态链接）
+- [x] 与模块 004（消费 `ModelHandle`）对接
+- [ ] Staged real-device download validation (SmolLM smoke → Gemma 3 1B) — non-blocking
 
 ---
 
@@ -402,6 +404,8 @@ Spec：⚪ 待创建
 | 2026-08-04 | — | **T21 冒烟通过（iOS 模拟器）**：SmolLM2-135M `.litertlm` 下载→激活→LiteRT-LM 引擎初始化（~3s）→生成全链路跑通；实测 TTFT ~0.5–0.8s、解码 ~26–37 tok/s（>5 tok/s 达标；模拟器 `backend=gpu`，135M < 256MB Metal 上限故可跑，1B/E2B 仍须真机，符合 ADR-005）。**蒸馏因 135M 无法产出结构化格式，解析两次失败→诚实回落模块 003 统计兜底**（ADR-004 预期行为）：本冒烟验证「安装/激活/推理/流式/守卫」管道，**非蒸馏质量**；质量验收仍待真机 Gemma 3 1B。真机（物理设备）冒烟与云端 provider HTTP transport 仍待办 | Claude |
 | 2026-08-04 | — | **调试台增强（为真机蒸馏质量评审）**：`LlmHarnessScreen` 加**模型选择器**（SmolLM2 135M / Gemma 3 1B / Gemma 4 E2B）+ **HF token 输入框**（受限模型显示，经 `install(hfToken:)` 直传，未存盘），使真机可下载大模型做「像不像」评审（135M 只能触发统计兜底，非质量档）。另修两处调试台缺陷：`_send` 曾把本轮用户消息**既加入 history 又作为 userMessage 传入** → prompt 出现「对方：X / 对方：X」重复，改为传入加入前的 history 快照；对话回复剥除泄漏的控制 token（`<end_of_turn>` 等，SmolLM2 general 模板产物）。UI 层仍不入宿主单测；`flutter analyze` 0 警告 | Claude |
 | 2026-08-04 | — | **目录 URL 修正（经 HF API 核对真实文件）**：`gemma3_1b` 原指 `Gemma3-1B-IT_multi-prefill-seq_q4_ekv2048.litertlm`（仓库**无此文件**，实为 ekv4096）→ 改指通用跨端 `gemma3-1b-it-int4.litertlm`（`litert-community/Gemma3-1B-IT`，`gated: auto` 故仍 `requiresToken`）。`gemma4E2b` 原指不存在的 `litert-community/Gemma-4-E2B-it` → 改指真实 `litert-community/gemma-4-E2B-it-litert-lm/…/gemma-4-E2B-it.litertlm`（`gated: False`，**去掉 `requiresToken`**，免 token）。SoC 专用变体（`_qualcomm_*`/`_intel_*`/`_Google_Tensor_G5`/`-web`）不适用 iOS，一律选通用文件。调试台 `_choices` 补入 E2B（免 token，最省事的高质量档）。`flutter analyze` 0 警告、模型管理单测 21/21 | Claude |
+| 2026-08-05 | — | **PR #14 merged to `main`**: review-comment fixes + install-stream dedup race fix (`model_repository.dart` `_pump` finally now removes the job before closing the broadcast controller); `persona_mapper` grounding tightened; `RuntimeError.inferenceFailed` normalization; `lite_rt_runtime` error mapping. Host TDD suite **291 passing**, `flutter analyze` clean. iOS SPM platform bumped to 16.0 via `AppFrameworkInfo.plist` `MinimumOSVersion`; on-device signing/install verified on a physical iPhone with the paid Apple Developer team (signing/bundle-ID churn kept local, off the PR). | Claude |
+| 2026-08-05 | — | **Modules 004 & 007 closed out**: DOCUMENT-STATUS matrix + detail status set to ✅ 已完成, checklists reconciled. Root `README.md` module table synced. Only non-blocking follow-up remaining is ADR-005 on-device persona-quality validation (distill → chat → judge "像不像本人" on Gemma 3 1B) + T21 physical-device smoke. | Claude |
 
 ---
 
