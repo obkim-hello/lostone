@@ -13,9 +13,11 @@
 | 003 | Persona 生成 | ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | ✅ 已完成 |
 | 004 | LLM 集成（蒸馏 + 对话引擎 + Runtime 抽象层）| ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | ✅ 已完成 |
 | ~~005~~ | 云端 API 集成 → **已并入 004**（Runtime 抽象层统一本地/云端）| — | — | — | — | 🔀 已折叠 |
-| 006 | 聊天界面 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
+| 006 | 聊天界面（对话 + 聊天历史 SQLite，Phase 4）| 📝 草稿 | 📝 草稿 | 📝 草稿 | ⚠️ 草稿完成 | 🚫 阻塞 |
 | 007 | 模型管理（提前至 Phase 3，004 本地路径前置）| ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | ✅ 已完成 |
 | 008 | 数据安全 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
+| 009 | 人物库与蒸馏（Persona 持久化 + 库 + 蒸馏流程，Phase 4）| 📝 草稿 | 📝 草稿 | 📝 草稿 | ⚠️ 草稿完成 | 🚫 阻塞 |
+| 010 | 设置（模型管理 UI + 运行模式 + 云端授权，Phase 4）| 📝 草稿 | 📝 草稿 | 📝 草稿 | ⚠️ 草稿完成 | 🚫 阻塞 |
 
 ---
 
@@ -235,6 +237,111 @@
 
 ---
 
+## 📋 模块 006 详细状态
+
+### 文档信息
+| 文档类型 | 文件名 | 状态 | 完成时间 | 批准时间 | 文件路径 |
+|----------|--------|------|---------|---------|---------|
+| PRD | PRD-Chat-Interface-006-20260805.md | 📝 草稿 | 2026-08-05 | — | docs/prd/PRD-Chat-Interface-006-20260805.md |
+| ERD | ERD-Chat-Interface-006-20260805.md | 📝 草稿 | 2026-08-05 | — | docs/erd/ERD-Chat-Interface-006-20260805.md |
+| Spec | SPEC-Chat-Interface-006-20260805.md | 📝 草稿 | 2026-08-05 | — | docs/spec/SPEC-Chat-Interface-006-20260805.md |
+
+### 三文档齐全检查
+- ✅ PRD 已创建（草稿）
+- ✅ ERD 已创建（草稿）
+- ✅ Spec 已创建（草稿）
+- ✅ 编号一致（006）
+- ✅ 日期一致（20260805）
+- ✅ 头部关联字段互指正确（PRD↔ERD↔Spec）
+- ⚠️ 状态：草稿，**待评审批准**
+- 🚫 **开发状态：阻塞**（待三文档批准 + 依赖模块 009 `PersonaRepository`）
+
+### 范围摘要
+- 模块定位（Phase 4）：正式**聊天界面**——`ChatScreen` 消费模块 004 `ChatEngine`（流式对话 / 硬规则强制 / 本地云端切换）与模块 007 `getActiveModelHandle()`，以模块 009 `PersonaRepository` 载入 `Persona`；**新增 SQLite 聊天历史**（`ChatHistoryRepository`，本模块独有）持久化多会话消息。
+- 关键组件：`ChatScreen` 组件树、`ChatSessionNotifier`（会话状态 + 流式增量 + 错误映射）、`ChatHistoryRepository`（SQLite，`sqflite_common_ffi` 宿主接缝，008 加密 `DatabaseFactory` 注入点）。
+- 关键约束：system prompt **仅**由 `PromptTemplate.render()` 产生（对齐 004 SPEC §2.4，对话无统计兜底）；每类 `RuntimeError`/守卫拦截映射为 `ChatStatus` 错误态；无模型/最大隐私/未授权明确提示不静默。
+- 依赖：004（ChatEngine/Runtime）、007（激活模型）、009（`PersonaRepository` 载入 Persona）、003（`Persona` 契约）；008 加密为预留注入点。
+
+### 待办
+- [ ] 三文档评审
+- [ ] 三文档批准（批准后方可编码）
+- [ ] 编写测试用例（C1–C34）→ 实现 → 验证
+- [ ] `ChatHistoryRepository` SQLite 落地（宿主 `sqflite_common_ffi`）
+- [ ] `ChatScreen` + `ChatSessionNotifier`（流式 / 错误映射）
+- [ ] 与模块 009（`PersonaRepository`）对接
+
+---
+
+## 📋 模块 009 详细状态
+
+### 文档信息
+| 文档类型 | 文件名 | 状态 | 完成时间 | 批准时间 | 文件路径 |
+|----------|--------|------|---------|---------|---------|
+| PRD | PRD-Persona-Library-009-20260805.md | 📝 草稿 | 2026-08-05 | — | docs/prd/PRD-Persona-Library-009-20260805.md |
+| ERD | ERD-Persona-Library-009-20260805.md | 📝 草稿 | 2026-08-05 | — | docs/erd/ERD-Persona-Library-009-20260805.md |
+| Spec | SPEC-Persona-Library-009-20260805.md | 📝 草稿 | 2026-08-05 | — | docs/spec/SPEC-Persona-Library-009-20260805.md |
+
+### 三文档齐全检查
+- ✅ PRD 已创建（草稿）
+- ✅ ERD 已创建（草稿）
+- ✅ Spec 已创建（草稿）
+- ✅ 编号一致（009）
+- ✅ 日期一致（20260805）
+- ✅ 头部关联字段互指正确（PRD↔ERD↔Spec）
+- ⚠️ 状态：草稿，**待评审批准**
+- 🚫 **开发状态：阻塞**（待三文档批准）
+
+### 范围摘要
+- 模块定位（Phase 4）：**Persona 持久化 + 人物库 + 蒸馏流程**——填补当前"仅内存 `PersonaJsonCodec`、无落盘"的缺口。新增 `PersonaRepository`（由注入的 `PersonaCodec` + `PersonaDirectory`〔宿主用 `MemoryPersonaDirectory`〕+ `PersonaBytesTransform`〔008 加密接缝〕组合）；人物库屏（列表/删除/打开）；蒸馏流程屏（驱动模块 004 `LlmPersonaBuilder`）。
+- 关键组件：`PersonaRepository`（读时派生 `PersonaSummary`）、`PersonaLibraryNotifier`、`DistillNotifier`；新增 `PersonaStoreException`。
+- 关键约束：不重写模块 003/004（只读复用 `Persona` 契约与 `LlmPersonaBuilder`）；持久化默认明文，008 经 `PersonaBytesTransform` 注入加密；`PersonaRepository` 为模块 006 的 Persona 载入来源（共享契约）。
+- 依赖：003（`Persona`/`PersonaCodec`）、004（`LlmPersonaBuilder` 蒸馏）、002（`Conversation` 输入）；008 加密为预留注入点。
+
+### 待办
+- [ ] 三文档评审
+- [ ] 三文档批准（批准后方可编码）
+- [ ] 编写测试用例（C1–C21）→ 实现 → 验证
+- [ ] `PersonaRepository` + `PersonaDirectory`（宿主内存实现）落地
+- [ ] 人物库屏 + 蒸馏流程屏（`PersonaLibraryNotifier`/`DistillNotifier`）
+- [ ] 与模块 006（Persona 载入）/ 004（蒸馏）对接
+
+---
+
+## 📋 模块 010 详细状态
+
+### 文档信息
+| 文档类型 | 文件名 | 状态 | 完成时间 | 批准时间 | 文件路径 |
+|----------|--------|------|---------|---------|---------|
+| PRD | PRD-Settings-010-20260805.md | 📝 草稿 | 2026-08-05 | — | docs/prd/PRD-Settings-010-20260805.md |
+| ERD | ERD-Settings-010-20260805.md | 📝 草稿 | 2026-08-05 | — | docs/erd/ERD-Settings-010-20260805.md |
+| Spec | SPEC-Settings-010-20260805.md | 📝 草稿 | 2026-08-05 | — | docs/spec/SPEC-Settings-010-20260805.md |
+
+### 三文档齐全检查
+- ✅ PRD 已创建（草稿）
+- ✅ ERD 已创建（草稿）
+- ✅ Spec 已创建（草稿）
+- ✅ 编号一致（010）
+- ✅ 日期一致（20260805）
+- ✅ 头部关联字段互指正确（PRD↔ERD↔Spec）
+- ⚠️ 状态：草稿，**待评审批准**
+- 🚫 **开发状态：阻塞**（待三文档批准）
+
+### 范围摘要
+- 模块定位（Phase 4）：**设置界面**——模块 007 的**模型管理正式 UI**（目录/下载进度/激活/删除，取代 004 dev-only harness）+ 运行模式选择（本地/云端 `RuntimeChoice`）+ 云端 API Key 授权。新增 `AppSettings`/`RuntimeChoice`/`SettingsRepository`/`SecureKeyStore`。
+- 关键组件：`SettingsNotifier`（运行模式 / 温度 / 隐私档）+ `ModelManagerNotifier`（消费 007 `ModelRepository` 安装事件流）；非敏感设置经 Hive，密钥经 Flutter Secure Storage。
+- 关键约束：honors 真实 `InstallErrorKind` 枚举成员；不自造下载器（薄 UI on 007）；标记 DD-002（`freeBytes()` 生产不可实现）+ `InMemoryModelStore`→磁盘落地缺口，待 007 补齐。
+- 依赖：007（`ModelRepository` 模型管理）、004（`PersonaRuntimeMode`/云端授权门控）；008 加密为密钥存储承接。
+
+### 待办
+- [ ] 三文档评审
+- [ ] 三文档批准（批准后方可编码）
+- [ ] 编写测试用例 → 实现 → 验证
+- [ ] `SettingsRepository`（Hive）+ `SecureKeyStore`（Secure Storage）落地
+- [ ] 设置屏 + `ModelManagerNotifier`（消费 007 安装事件流）
+- [ ] 与模块 007（模型管理）/ 004（运行模式）对接
+
+---
+
 ## 📝 状态标识说明
 
 ### 文档状态
@@ -333,8 +440,10 @@ Spec：⚪ 待创建
 3. **模块 003**：Persona 生成（Phase 2）
 4. **模块 007**：模型管理（Phase 3，**提前**——004 本地路径前置依赖）
 5. **模块 004**：LLM 集成（蒸馏 + 对话引擎 + Runtime 抽象层，已并入原「云端 API 集成」）（Phase 3）
-6. **模块 006**：聊天界面（Phase 4）
-7. **模块 008**：数据安全（Phase 5）
+6. **模块 006**：聊天界面（对话 + 聊天历史 SQLite）（Phase 4）
+7. **模块 009**：人物库与蒸馏（Persona 持久化 + 库 + 蒸馏流程）（Phase 4）
+8. **模块 010**：设置（模型管理 UI + 运行模式 + 云端授权）（Phase 4）
+9. **模块 008**：数据安全（Phase 5）
 
 ---
 
@@ -406,6 +515,7 @@ Spec：⚪ 待创建
 | 2026-08-04 | — | **目录 URL 修正（经 HF API 核对真实文件）**：`gemma3_1b` 原指 `Gemma3-1B-IT_multi-prefill-seq_q4_ekv2048.litertlm`（仓库**无此文件**，实为 ekv4096）→ 改指通用跨端 `gemma3-1b-it-int4.litertlm`（`litert-community/Gemma3-1B-IT`，`gated: auto` 故仍 `requiresToken`）。`gemma4E2b` 原指不存在的 `litert-community/Gemma-4-E2B-it` → 改指真实 `litert-community/gemma-4-E2B-it-litert-lm/…/gemma-4-E2B-it.litertlm`（`gated: False`，**去掉 `requiresToken`**，免 token）。SoC 专用变体（`_qualcomm_*`/`_intel_*`/`_Google_Tensor_G5`/`-web`）不适用 iOS，一律选通用文件。调试台 `_choices` 补入 E2B（免 token，最省事的高质量档）。`flutter analyze` 0 警告、模型管理单测 21/21 | Claude |
 | 2026-08-05 | — | **PR #14 merged to `main`**: review-comment fixes + install-stream dedup race fix (`model_repository.dart` `_pump` finally now removes the job before closing the broadcast controller); `persona_mapper` grounding tightened; `RuntimeError.inferenceFailed` normalization; `lite_rt_runtime` error mapping. Host TDD suite **291 passing**, `flutter analyze` clean. iOS SPM platform bumped to 16.0 via `AppFrameworkInfo.plist` `MinimumOSVersion`; on-device signing/install verified on a physical iPhone with the paid Apple Developer team (signing/bundle-ID churn kept local, off the PR). | Claude |
 | 2026-08-05 | — | **Modules 004 & 007 closed out**: DOCUMENT-STATUS matrix + detail status set to ✅ 已完成, checklists reconciled. Root `README.md` module table synced. Only non-blocking follow-up remaining is ADR-005 on-device persona-quality validation (distill → chat → judge "像不像本人" on Gemma 3 1B) + T21 physical-device smoke. | Claude |
+| 2026-08-05 | — | **Phase 4 UI split into 3 modules — 9 draft docs created** (PRD/ERD/Spec ×3, 编号 006/009/010, 日期 20260805, 交叉引用互指): **006 聊天界面**（`ChatScreen` on 004 `ChatEngine` + 新增 SQLite `ChatHistoryRepository` 聊天历史；system prompt 仅 `PromptTemplate.render()`，对话无统计兜底；`sqflite_common_ffi` 宿主接缝 + 008 加密 `DatabaseFactory` 注入点；C1–C34）；**009 人物库与蒸馏**（新增 `PersonaRepository` = `PersonaCodec`+`PersonaDirectory`〔`MemoryPersonaDirectory` 宿主〕+`PersonaBytesTransform`〔008 接缝〕填补"仅内存无落盘"缺口 + 人物库屏 + 蒸馏流程屏驱动 004 `LlmPersonaBuilder`；`PersonaSummary` 读时派生；新增 `PersonaStoreException`；C1–C21）；**010 设置**（007 模型管理正式 UI 取代 dev harness + 运行模式 `RuntimeChoice` + 云端授权；`AppSettings`/`SettingsRepository`〔Hive〕/`SecureKeyStore`〔Secure Storage〕；honors 真实 `InstallErrorKind`；标记 DD-002 + `InMemoryModelStore`→磁盘缺口）。聊天历史存储定为 **SQLite**。矩阵行 006 → 📝/📝/📝，新增行 009/010；一致性核验通过（9 文件齐、交叉引用无缺失、共享契约命名一致：`PersonaRepository` 006↔009、`ChatHistoryRepository` 006 独有、`AppSettings`/`RuntimeChoice` 010 独有）。**未改任何源码/pubspec**，全部待评审批准后方可编码 | Claude |
 
 ---
 
