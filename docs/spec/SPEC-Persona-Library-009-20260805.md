@@ -2,7 +2,7 @@
 
 > Technical Specification — Persona Library & Distill (persona persistence, library screen, and the distill/creation flow)
 >
-> **Version**: v1.0.1 (draft)
+> **Version**: v1.1.0 (draft)
 > **Status**: 📝 Draft (pending review)
 > **Author**: Claude
 > **Date**: 2026-08-05
@@ -17,14 +17,14 @@
 | **Spec ID** | SPEC-009 |
 | **Related PRD** | PRD-Persona-Library-009-20260805.md |
 | **Related ERD** | ERD-Persona-Library-009-20260805.md |
-| **Depends on** | Module 002 (Conversation), Module 003 (Persona, PersonaJsonCodec — read-only), Module 004 (LlmPersonaBuilder), Module 007 (model readiness) |
+| **Depends on** | Module 002 (Conversation + `ImportNotifier`/`importStateProvider`/`DataImportService` — reused), Module 003 (Persona, PersonaJsonCodec — read-only), Module 004 (LlmPersonaBuilder), Module 007 (model readiness) |
 | **Related decisions** | ADR-002, ADR-004, ADR-005 |
 
 ---
 
 ## 1. Overview
 
-This spec defines the exact interfaces, pre/postconditions, edge cases, behaviors, and test cases for Module 009: the `PersonaRepository` persistence layer, the `PersonaLibraryNotifier` and `DistillNotifier` state managers, and the honesty/resilience rules of the library and distill flow. Persisted bytes are exactly `PersonaJsonCodec.encode(persona)`; 009 introduces no second persistence schema and does not modify Modules 002/003/004/007.
+This spec defines the exact interfaces, pre/postconditions, edge cases, behaviors, and test cases for Module 009: the `PersonaRepository` persistence layer, the `PersonaLibraryNotifier` and `DistillNotifier` state managers, the **import step** (a `FilePickerFacade` seam composed with Module 002's reused `ImportNotifier`), and the honesty/resilience rules of the library and distill flow. Persisted bytes are exactly `PersonaJsonCodec.encode(persona)`; 009 introduces no second persistence schema and does not modify Modules 002/003/004/007 — including 002's parsers, `DataImportService`, and `ImportNotifier`, which the import step reuses unchanged.
 
 ---
 
@@ -72,6 +72,19 @@ This spec defines the exact interfaces, pre/postconditions, edge cases, behavior
 - **`save()`**: `Future<void>`. Precondition `phase == done && persona != null`; calls `repo.save(persona)`; on success sets `saved = true`. On failure → `failed(buildFailed)` is not used; surfaces the `PersonaStoreException` to the flow (kept in `error` as a save error) without discarding the reviewed persona.
 - **`reset()`**: back to `idle`.
 
+### 2.7 Import step (`FilePickerFacade` + reused `ImportNotifier`)
+- **`FilePickerFacade.pickFiles({List<String>? allowedExtensions})`**: `Future<List<String>>`. Returns selected file paths, or `[]` on cancel. For file-based sources (WeChat CSV/HTML, Weibo/Instagram JSON).
+- **`FilePickerFacade.pickDirectory()`**: `Future<String?>`. Returns a directory path with persistent read access for the import (iOS: a resolved security-scoped bookmark, accessed via `startAccessingSecurityScopedResource` around the read), or `null` on cancel / unsupported platform. For directory/db sources (iMessage `chat.db`, Photo-EXIF folder; ERD-002 §676).
+- Default impl wraps `file_picker: ^8.0.0`; host tests inject `FakeFilePicker`. 009 introduces no import state type of its own.
+- **Import flow contract** (in `DistillFlowScreen`):
+  - The selected `DataSource` chooses the picker: file-based → `pickFiles()`; iMessage-db / Photo-EXIF → `pickDirectory()`.
+  - Cancel (`[]` / `null`) or empty → surface "No file selected", remain in the flow, attempt nothing (no `importFiles` call).
+  - Non-empty path(s) → `ref.read(importStateProvider.notifier).importFiles(paths, source: selectedSource)` (Module 002, unchanged). Render `ImportState.phase` (`parsing`/`preprocessing`) as progress.
+  - `ImportState.phase == done` → take `ImportState.conversation` and drive `DistillNotifier.run(conversation, ...)`.
+  - `ImportState.phase == failed` → show `ImportState.error` with a retry affordance; nothing is distilled or saved.
+- **Preconditions**: none (picker may be invoked any time in the flow). **Postconditions**: on `done`, a non-null `Conversation` is available to distill; on cancel/empty/`failed`, flow state is unchanged and no persona is produced. A directory pick releases the security-scoped resource once parsing completes (v1 does not persist the bookmark across launches — ERD-009 §11).
+- **Constraint**: 009 does not parse or transform files itself, does not add a `DataSource`, and does not modify `ImportNotifier`/`DataImportService`.
+
 ---
 
 ## 3. Data Specs
@@ -103,6 +116,10 @@ This spec defines the exact interfaces, pre/postconditions, edge cases, behavior
 | E12 | Missing / partial identity (empty displayName) | 004 guarantees a non-empty `displayName` (defaulted); summary still valid; UI uses initials from it |
 | E13 | Two files decode to the same id (shouldn't happen; ids are file names) | File name is the id, so this cannot occur; a stray non-`.persona` file is ignored by enumeration |
 | E14 | Directory itself unreadable | `list()` → `PersonaStoreException`; `PersonaLibraryNotifier` → `failed(error)` |
+| E15 | Import picker cancelled | `pick()` → `[]`; "No file selected"; no `importFiles` call; flow unchanged |
+| E16 | Import empty selection | `importFiles([])` → 002 sets `ImportPhase.failed` ("No files selected"); shown with retry; nothing distilled |
+| E17 | Import parse failure | 002 `ImportState.phase == failed` (bad/unsupported file); typed `error` shown with retry; nothing distilled or saved |
+| E18 | Import success → distill | `ImportState.phase == done`, non-null `conversation`; handed to `DistillNotifier.run(...)` |
 
 ---
 
@@ -152,18 +169,23 @@ This spec defines the exact interfaces, pre/postconditions, edge cases, behavior
 | C18 | Save failure after distill | Fake repo whose `save` throws | `error` set (save error); `state.persona` retained for retry |
 | C19 (widget) | Library rows + badge + empty state | Pump `PersonaLibraryScreen` with fake state | Rows show name/relation/badge; empty state shown when `summaries == []`; `kDebugMode` harness button present |
 | C20 (widget) | Distill flow states | Pump distill flow through idle/running/done/failed | Progress + log on running; review card + notes on done; no-model prompt routes to 010; error + retry on failed |
-| C21 (device, ADR-005) | End-to-end | Physical device, Gemma 3 1B | Import → distill → save → relaunch → `list` shows it → `load` → push 006 chat |
+| C22 (widget) | Import cancel / empty | Pump import step with `FakeFilePicker` returning `[]` | "No file selected"; `importFiles` not called; no distill |
+| C23 (widget) | Import parse failure | `FakeFilePicker` returns a path; fake `ImportNotifier` → `failed(error)` | Error + retry shown; nothing distilled or saved |
+| C24 (widget) | Import success → distill hand-off | `FakeFilePicker.pickFiles` returns a path; fake `ImportNotifier` → `done(conversation)` | `conversation` passed to `DistillNotifier.run(...)`; flow advances to distill |
+| C25 (widget) | Directory-source import | Select an iMessage/Photo-EXIF source; `FakeFilePicker.pickDirectory` returns a dir | `importFiles([dir], source:)` called with the directory path; cancel (`null`) → no import |
+| C21 (device, ADR-005) | End-to-end | Physical device, Gemma 3 1B | Real import (pick a WeChat export) → distill → save → relaunch → `list` shows it → `load` → push 006 chat |
 
 ---
 
 ## 8. Dependencies
-- **002**: `Conversation` (distill input).
+- **002**: `Conversation` (distill input); `ImportNotifier` / `importStateProvider` / `DataImportService` / `DataSource` / `ParseOptions` — the parser/data layer the import step drives (reused unchanged).
 - **003**: `Persona`, `persona_layers.dart`, `PersonaJsonCodec`, `PersonaSchemaException`, `Confidence` (read-only reuse).
 - **004**: `LlmPersonaBuilder.build`, `LlmBuildOptions`, `PersonaRuntime`, `PersonaRuntimeMode` (distillation; not modified).
 - **007**: `ModelRepository.getActiveModelHandle()` (model readiness).
 - **010** (sibling): route target for the no-model prompt.
 - **008** (future): encrypting `PersonaBytesTransform` + backup exclusion via the seam.
 - Package: `path_provider` (app documents directory) — device only; tests use the filesystem seam.
+- Package: `file_picker: ^8.0.0` (import step) — device only, behind `FilePickerFacade` (`pickFiles` / `pickDirectory`); tests inject `FakeFilePicker`. New dependency (ERD-002 §646 listed it as candidate only).
 
 ## 9. Constraints
 - No modification to Modules 002/003/004/007; `Persona` gets no new field (no avatar).
@@ -182,11 +204,13 @@ This spec defines the exact interfaces, pre/postconditions, edge cases, behavior
 - [ ] `PersonaSummary` derives `hasInsufficientMaterial` / `lowestLayerConfidence` correctly (C11).
 - [ ] Distill: happy path → done → save; fallback → valid saveable persona; no-model → gated to 010; build error → failed, nothing saved (C13–C18).
 - [ ] Library and distill widgets render rows/badges/empty/progress/review/no-model/error states (C19, C20).
-- [ ] On-device: import → distill → save → reopen → chat handoff works (C21).
-- [ ] Modules 002/003/004/007 are unmodified; no new persistence format introduced.
+- [ ] Import step: cancel/empty → no distill; parse failure → typed retryable error; success → `Conversation` handed to distill (C22–C24).
+- [ ] On-device: real import → distill → save → reopen → chat handoff works (C21).
+- [ ] Modules 002/003/004/007 are unmodified (parsers/`DataImportService`/`ImportNotifier` reused as-is); no new persistence format introduced.
 
 ## 11. Change Log
 | Version | Date | Change | Author |
 |---------|------|--------|--------|
 | v1.0 | 2026-08-05 | Initial draft (PersonaRepository + PersonaSummary + notifiers; edge cases, behaviors, C1–C21 test specs) | Claude |
 | v1.0.1 | 2026-08-05 | PR #16 review round — trio version bump; no spec-body change (seam change is ERD-009) | Claude |
+| v1.1.0 | 2026-08-07 | Scope expansion — import step spec: §2.7 `FilePickerFacade` + reused 002 `ImportNotifier` contract, edge cases E15–E18, tests C22–C24 (+ C21 uses a real import), `file_picker` dependency, acceptance updated. **PR #18 self-review:** §2.7 split into `pickFiles()` / `pickDirectory()` (directory sources + security-scoped access, ERD-002 §676); pinned `^8.0.0`; added test C25 (directory-source import) | Claude |
