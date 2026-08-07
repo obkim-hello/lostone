@@ -2,7 +2,7 @@
 
 > Product Requirements Document — Persona Library & Distill (persona persistence, library screen, and the distill/creation flow)
 >
-> **Version**: v1.0.1 (draft)
+> **Version**: v1.1.0 (draft)
 > **Status**: 📝 Draft (pending review)
 > **Author**: Claude
 > **Date**: 2026-08-05
@@ -17,12 +17,12 @@
 | **PRD ID** | PRD-009 |
 | **Related ERD** | ERD-Persona-Library-009-20260805.md |
 | **Related Spec** | SPEC-Persona-Library-009-20260805.md |
-| **Depends on** | Module 002 (Conversation), Module 003 (Persona, PersonaJsonCodec — read-only), Module 004 (LlmPersonaBuilder), Module 007 (model readiness for distill) |
+| **Depends on** | Module 002 (Conversation + `ImportNotifier`/`DataImportService` — the parser/data layer, reused), Module 003 (Persona, PersonaJsonCodec — read-only), Module 004 (LlmPersonaBuilder), Module 007 (model readiness for distill) |
 | **Related decisions** | ADR-002, ADR-004, ADR-005 |
 | **Approval date** | — |
 | **Approver** | — |
 
-> **Module map (Phase 4 UI).** The user-facing app is split into three modules, each with its own PRD/ERD/Spec trio: **006 Chat Interface** (the chat screen + chat history), **009 Persona Library & Distill** (this doc — persona persistence, the library, and the distill/creation flow), and **010 Settings** (model-management UI on 007 + runtime/mode + cloud authorization). This module is the **foundation the other two build on**: it owns the `PersonaRepository` that 006 loads from, and the create/keep/reopen/delete lifecycle for personas. It *consumes* the Module 004 `LlmPersonaBuilder` to distill, *reads* model readiness from 007 (routing the install/switch UI to 010), and *reuses* the Module 003 `Persona` shape and `PersonaJsonCodec` without modification.
+> **Module map (Phase 4 UI).** The user-facing app is split into three modules, each with its own PRD/ERD/Spec trio: **006 Chat Interface** (the chat screen + chat history), **009 Persona Library & Distill** (this doc — persona persistence, the library, and the distill/creation flow), and **010 Settings** (model-management UI on 007 + runtime/mode + cloud authorization). This module is the **foundation the other two build on**: it owns the `PersonaRepository` that 006 loads from, and the create/keep/reopen/delete lifecycle for personas. It *consumes* the Module 004 `LlmPersonaBuilder` to distill, *reads* model readiness from 007 (routing the install/switch UI to 010), and *reuses* the Module 003 `Persona` shape and `PersonaJsonCodec` without modification. It also **owns the production import entry point** — the file/source-picker UI at the head of the create flow that drives Module 002's `ImportNotifier` to turn a chat export (WeChat, iMessage, …) into a `Conversation`. Module 002 deferred its import UI to Phase 4 (`PRD-Data-Import-002` §out-of-scope); 009 is where that UI lands, because the create flow is the only place a `Conversation` is needed. Parsing itself stays in 002 (unchanged); 009 adds only the UI that invokes it.
 
 ---
 
@@ -32,13 +32,15 @@
 
 Modules 002–004 and 007 delivered the offline pipeline: import a chat export into a `Conversation` (002), preprocess and split it (003), distill a five-layer `Persona` on a local model (004), with model download/activation managed by 007. Today this pipeline is only exercised through the debug-only harness (`LlmHarnessScreen`, `kDebugMode`), which distills one persona **into memory** and **persists nothing** — quit the app and the persona is gone. There is also no production home content: `home_screen.dart` shows an app-name placeholder plus the dev harness button.
 
-Module 009 turns "creating and keeping a persona" into a production surface. It introduces the **persona persistence layer** (`PersonaRepository`, one `.persona` file per persona under the app documents directory), the **persona library screen** (the new production home: list saved personas, open one to chat, view details, delete, empty state), and the **distill/creation flow** (take an imported `Conversation`, run `LlmPersonaBuilder.build(...)` with progress, review the result honestly, save it). Because the chat screen (006) loads its persona via `PersonaRepository.load(id)`, this module must land first among the Phase-4 UI trio.
+Module 009 turns "creating and keeping a persona" into a production surface. It introduces the **persona persistence layer** (`PersonaRepository`, one `.persona` file per persona under the app documents directory), the **persona library screen** (the new production home: list saved personas, open one to chat, view details, delete, empty state), and the **distill/creation flow** (import a chat export into a `Conversation`, run `LlmPersonaBuilder.build(...)` with progress, review the result honestly, save it). Because the chat screen (006) loads its persona via `PersonaRepository.load(id)`, this module must land first among the Phase-4 UI trio.
+
+**The import-UI gap this closes.** Module 002 shipped the full parser/data layer — the WeChat/iMessage/Weibo/Instagram/EXIF parsers, the `Conversation` model, `DataImportService`, and the `ImportNotifier`/`importStateProvider` state managers — but **explicitly deferred the user-facing import screen** ("导入 UI 的最终视觉设计稿" out of scope; produced by "the Phase-4 UI module"). No Phase-4 module had picked it up, so today `ImportNotifier.importFiles(...)` is reachable only from tests and the sole end-to-end path is the hardcoded sample in the `kDebugMode` `LlmHarnessScreen`. **Importing a real chat export is currently impossible in production.** 009 owns that import UI as the front door of its create flow: pick file(s) → choose source → drive 002's `ImportNotifier` → get a `Conversation` → distill.
 
 ### 1.2 Goals
 
 1. **Persist personas durably.** A distilled `Persona` survives app restarts, is enumerable newest-first, and is reloadable by id — the storage contract 006 consumes.
 2. **Make the library the home.** Replace the placeholder body of `home_screen.dart` with a persona library: list, open → chat (006), detail view, delete with confirmation, and an inviting empty state.
-3. **Own the create flow.** Pick an imported `Conversation` → distill via Module 004 with visible progress → review (surfacing "insufficient material" notes and per-layer confidence honestly) → save.
+3. **Own the create flow, import included.** Import a chat export (file/source picker → Module 002 `ImportNotifier` → `Conversation`) → distill via Module 004 with visible progress → review (surfacing "insufficient material" notes and per-layer confidence honestly) → save. This is the first production path from a raw export to a saved persona.
 4. **Be honest and never fail silently.** Corrupt/unsupported `.persona` files are skipped (logged, never crash the list); distill failures surface a typed, actionable message; a distill with no ready model routes the user to 010 rather than spinning.
 5. **Preserve upstream contracts.** The `Persona` five-layer shape, `PersonaJsonCodec`, `LlmPersonaBuilder`, and the 003 statistical fallback are reused, not modified. Provide an injection seam so Module 008 can encrypt at rest / exclude from backup without changing the repository contract.
 
@@ -48,7 +50,8 @@ Module 009 turns "creating and keeping a persona" into a production surface. It 
 - **Persona persistence (`PersonaRepository`)** — `save` / `list` / `load` / `delete` over one `${persona.id}.persona` file each, in the app documents directory, encoded with `PersonaJsonCodec`. Corrupt-file-skipping `list`; typed errors on `load`.
 - **Persona summaries (`PersonaSummary`)** — a lightweight list projection (id, display name, relation, generatedAt, insufficient-material flag, lowest-layer confidence) so the library need not fully decode every file's heavy fields for display.
 - **Persona library screen** — the production home: list (newest first, initials avatar, confidence / "based on limited data" badge), open → push 006 chat, persona detail view (five layers, notes, source summary), delete with confirmation, empty state.
-- **Distill / creation flow** — select an imported `Conversation` (from 002) → run `LlmPersonaBuilder.build(...)` with progress (`idle → running → done → failed`) → review the resulting persona and its honest notes → save via `PersonaRepository`.
+- **Import entry point (UI only)** — a file/source-picker surface at the head of the create flow: pick one or more export files (via `file_picker`), optionally choose the `DataSource`, and drive Module 002's `ImportNotifier.importFiles(...)` to produce a `Conversation`. 009 owns the *screen and its states* (idle / picking / parsing / done / failed, surfaced from `ImportState`); it reuses 002's parsers/service unchanged. Supported sources are exactly what 002 parses (WeChat, iMessage, Weibo, Instagram, Photo EXIF).
+- **Distill / creation flow** — take the just-imported (or previously imported) `Conversation` → run `LlmPersonaBuilder.build(...)` with progress (`idle → running → done → failed`) → review the resulting persona and its honest notes → save via `PersonaRepository`.
 - **Model-readiness gate** — read 007 (`getActiveModelHandle`); if no ready/active model, present an actionable prompt routing to the 010 install/activate flow (009 does not implement model management).
 - **008 encryption seam** — a byte-transform / codec-wrapper injection point on the repository, mirroring Module 002's `MediaStore` backup-exclusion hook.
 
@@ -57,7 +60,7 @@ Module 009 turns "creating and keeping a persona" into a production surface. It 
 - Model-management UI, runtime/mode selection, cloud authorization, key entry → **Module 010** (009 only reads readiness and routes there).
 - Encryption at rest / biometric lock / backup exclusion → **Module 008** (009 provides only the injection seam).
 - The distillation engine, Runtime abstraction, prompt engineering, statistical fallback → **Module 004** (reused, not modified).
-- Import/parsing of chat exports → **Module 002** (009 consumes the resulting `Conversation`).
+- **Parsing** of chat exports (the parsers, `DataImportService`, `ImportNotifier`, `Conversation` model) → **Module 002** (reused unchanged; 009 adds only the UI that *invokes* it and consumes the resulting `Conversation`). 009 does **not** modify any parser or add a new source format.
 - Persona **editing** (editing hard rules, renaming, re-distilling in place) → future (v1 is create / keep / reopen / delete). An **avatar image** field does not exist in the 003 `Persona` and is not added here (see §10 / Technical Debt).
 
 ---
@@ -89,6 +92,11 @@ Module 009 turns "creating and keeping a persona" into a production surface. It 
 
 **Acceptance:** Starting a distill with no ready/active model shows an actionable prompt that routes to the Module 010 install/activate flow; returning with a ready model lets me distill.
 
+### Story 6 — Import my chat history
+> As a new user, I want to import my exported chat history (e.g. a WeChat export) from within the app, so I have a conversation to distill — without needing a debug build.
+
+**Acceptance:** From the create flow I can pick my export file(s), optionally pick the source type, and see parsing progress; on success the resulting `Conversation` flows straight into distill. A cancelled pick returns me to the flow unchanged; an empty selection or a parse failure shows a typed, retryable message (never a silent dead-end).
+
 ---
 
 ## 3. Feature List
@@ -106,6 +114,7 @@ Module 009 turns "creating and keeping a persona" into a production surface. It 
 | F7 | Delete with confirmation | Confirm dialog → `delete(id)` (idempotent) → row removed | P0 |
 | F8 | Persona detail view | Read-only view of the five layers, tags, memories summary, notes, and source summary | P1 |
 | F9 | Corrupt-file resilience | `list` skips corrupt/unsupported files with a log; `load` surfaces a typed error | P0 |
+| F10 | Import entry point (UI) | File/source picker (`file_picker`) at the head of the create flow → drives 002 `ImportNotifier.importFiles(...)` → `Conversation`; surfaces `ImportState` (picking / parsing / done / failed); no parser changes | P0 |
 
 ### 3.2 Auxiliary features
 
@@ -145,6 +154,7 @@ Module 009 turns "creating and keeping a persona" into a production surface. It 
 ## 5. Data Requirements
 
 ### 5.1 Input
+- Export file path(s) + optional `DataSource` — picked in 009's import UI, passed to Module 002's `ImportNotifier.importFiles(...)`.
 - `Conversation` — an imported, preprocessed conversation from Module 002 (input to distill).
 - `LlmBuildOptions` — run mode / model / temperature / split identifiers / default display name (Module 004; defaults local).
 - `PersonaRuntime` — the Module 004 runtime (local `LiteRtRuntime` by default), wired from a ready 007 model handle.
@@ -168,10 +178,10 @@ Module 009 turns "creating and keeping a persona" into a production surface. It 
 ### 6.1 UI surfaces
 - **Persona library screen (home)**: app bar (title + create/distill action), scrollable persona list (initials avatar, display name, relation, relative generatedAt, confidence / "limited data" badge), empty state (invite to create), overflow per-row action (open / view details / delete). Keeps the existing `kDebugMode` harness button.
 - **Persona detail view**: read-only five layers, tags, memories summary, notes ("insufficient material"), source summary (message counts, sources, version); actions: open chat, delete.
-- **Distill / creation flow**: source picker (choose an imported `Conversation`), run button, progress indicator + log, review card (identity + confidence badges + notes), save / discard; no-model prompt routing to 010; typed error state with retry.
+- **Distill / creation flow**: **import step** (file picker via `file_picker`, optional source selector, parse progress + typed error/retry, sourced from `ImportState`) → source picker (use the just-imported `Conversation`, or choose a previously imported one), run button, progress indicator + log, review card (identity + confidence badges + notes), save / discard; no-model prompt routing to 010; typed error state with retry.
 
 ### 6.2 Interaction flows
-1. **Distill → review → save**: enter create flow → pick a `Conversation` → (readiness check; if no model → route to 010) → run `build(...)` with progress → review honest result → save → return to library showing the new persona.
+1. **Import → distill → review → save**: enter create flow → import a chat export (pick file(s) → optional source → 002 `ImportNotifier` parses → `Conversation`) → (readiness check; if no model → route to 010) → run `build(...)` with progress → review honest result → save → return to library showing the new persona. (A previously imported `Conversation` may be reused without re-importing.)
 2. **Open → chat**: library → tap a persona → `load(id)` → push the Module 006 chat screen.
 3. **Delete**: library → row action delete → confirm → `delete(id)` → row removed.
 4. **Corrupt file present**: library `list()` skips it with a log; the rest of the library renders normally.
@@ -194,7 +204,7 @@ Module 009 turns "creating and keeping a persona" into a production surface. It 
 - The production persona library screen (new home body) + persona detail view + distill flow.
 
 ### 7.2 Depends on
-- **002**: `Conversation` (distill input).
+- **002**: `Conversation` (distill input); `ImportNotifier` / `importStateProvider` / `DataImportService` / `DataSource` / `ParseOptions` — the parser/data layer the 009 import UI drives (reused unchanged).
 - **003**: `Persona` + layers, `PersonaJsonCodec` / `PersonaSchemaException` (read-only reuse; not modified).
 - **004**: `LlmPersonaBuilder.build(...)`, `LlmBuildOptions`, `PersonaRuntimeMode`, `PersonaRuntime` (distill).
 - **007**: `ModelRepository.getActiveModelHandle()` (model readiness; null → route to 010).
@@ -219,6 +229,8 @@ Module 009 turns "creating and keeping a persona" into a production surface. It 
 - [ ] Tapping a persona loads it and pushes the Module 006 chat screen.
 
 ### 8.3 Distill flow
+- [ ] The create flow can import a chat export: pick file(s) → optional source → 002 `ImportNotifier.importFiles(...)` → a `Conversation`, with parse progress shown and typed, retryable errors on empty selection / cancel / parse failure (no silent dead-end).
+- [ ] The imported `Conversation` flows straight into distill without leaving the flow; parsers/`DataImportService` are unmodified (009 adds UI only).
 - [ ] Distilling an imported `Conversation` runs `LlmPersonaBuilder.build(...)`, shows progress, then a review of the result including any "insufficient material" notes.
 - [ ] Saving from review persists the persona and returns to the library with it listed.
 - [ ] Distill with no ready/active model shows an actionable prompt routing to 010 (not a dead spinner).
@@ -230,7 +242,7 @@ Module 009 turns "creating and keeping a persona" into a production surface. It 
 - [ ] Distill failure surfaces a typed, retryable error; nothing is saved on failure.
 
 ### 8.5 Contracts preserved
-- [ ] Modules 002/003/004/007 are reused, not modified.
+- [ ] Modules 002/003/004/007 are reused, not modified — including 002's parsers, `DataImportService`, and `ImportNotifier` (009 adds only the import UI that drives them).
 - [ ] `.persona` bytes are produced/consumed only by `PersonaJsonCodec`; no new persistence format is introduced.
 - [ ] The 008 encryption seam is present and exercised by a wrapper in tests without changing the `PersonaRepository` contract.
 
@@ -245,6 +257,7 @@ Module 009 turns "creating and keeping a persona" into a production surface. It 
 
 ### 9.2 Widget
 - Library screen: list rows, badges, empty state, delete-confirm, open-navigation (mocked), harness button in `kDebugMode`.
+- Import step: file-picker invocation (mocked `file_picker`), source selection, `ImportState` progress (picking / parsing / done / failed), empty-selection / cancel / parse-failure typed errors + retry, hand-off of the resulting `Conversation` into distill.
 - Distill flow: source picker, progress, review card with notes/confidence, no-model prompt, error/retry, save.
 
 ### 9.3 Integration / on-device (UAT)
@@ -262,6 +275,8 @@ Module 009 turns "creating and keeping a persona" into a production surface. It 
 | Users expect avatar images | Perceived incompleteness | 003 `Persona` has no avatar field; use initials + relation + badge; note avatar as future Technical Debt only (do not modify 003) |
 | LLM non-determinism → flaky distill tests | Flaky CI | Distill tests use a fake builder / `MockRuntime`; quality judged on-device only |
 | Duplicate ids from re-distilling the same `Conversation` | Silent overwrite | `id` is deterministic (004); `save` is last-writer-wins and the review step warns when overwriting an existing id |
+| `file_picker` not yet in `pubspec.yaml` (ERD-002 listed it as candidate only) | Import UI cannot pick files | 009 adds `file_picker` as a real dependency (pinned); import UI wraps it behind a seam so widget tests mock the picker (no native dialog in host tests) |
+| Import surface overlaps Module 002's deferred UI | Ownership ambiguity / rework | 009 formally owns the import *UI* (screen + states); 002 keeps parsers/service/`ImportNotifier` — the split is recorded here and in DOCUMENT-STATUS.md so 002 is not reopened |
 
 ---
 
@@ -295,3 +310,4 @@ Module 009 turns "creating and keeping a persona" into a production surface. It 
 |---------|------|--------|--------|
 | v1.0 | 2026-08-05 | Initial draft (persona persistence + library + distill flow; 3-module Phase-4 split) | Claude |
 | v1.0.1 | 2026-08-05 | PR #16 review round — trio version bump; no PRD-body change (seam change is ERD-009) | Claude |
+| v1.1.0 | 2026-08-07 | Scope expansion — 009 now owns the **production import UI entry point** (file/source picker → 002 `ImportNotifier` → `Conversation`) at the head of the create flow, closing the Phase-4 import-UI gap (002 deferred its UI, no module had claimed it). Parsing stays in 002 (reused unchanged). Added Story 6, F10, import in §1/§3/§5/§6/§8/§9, `file_picker` dependency + risk rows | Claude |

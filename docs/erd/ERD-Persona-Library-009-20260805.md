@@ -2,7 +2,7 @@
 
 > Engineering Requirements Document — Persona Library & Distill (persona persistence, library screen, and the distill/creation flow)
 >
-> **Version**: v1.0.1 (draft)
+> **Version**: v1.1.0 (draft)
 > **Status**: 📝 Draft (pending review)
 > **Author**: Claude
 > **Date**: 2026-08-05
@@ -17,7 +17,7 @@
 | **ERD ID** | ERD-009 |
 | **Related PRD** | PRD-Persona-Library-009-20260805.md |
 | **Related Spec** | SPEC-Persona-Library-009-20260805.md |
-| **Depends on** | Module 002 (Conversation), Module 003 (Persona, PersonaJsonCodec — read-only), Module 004 (LlmPersonaBuilder), Module 007 (model readiness) |
+| **Depends on** | Module 002 (Conversation + `ImportNotifier`/`importStateProvider`/`DataImportService` — reused), Module 003 (Persona, PersonaJsonCodec — read-only), Module 004 (LlmPersonaBuilder), Module 007 (model readiness) |
 | **Related decisions** | ADR-002, ADR-004, ADR-005 |
 
 ---
@@ -29,8 +29,9 @@
 - Define the **008 encryption seam**: a byte-transform / codec-wrapper injection point so encryption-at-rest / backup-exclusion drops in without changing the `PersonaRepository` contract (mirrors Module 002's `MediaStore` backup-exclusion hook).
 - Define the **filesystem seam**: an abstraction over the persona directory so host tests use a temp dir / in-memory fs and the device uses `path_provider`.
 - Define the **library screen** widget tree + **`PersonaLibraryNotifier`** (StateNotifier: list / refresh / delete) and the **distill flow** + **`DistillNotifier`** (StateNotifier: run `build` with progress; states `idle / running / done / failed`; then `save`).
+- Define the **import entry point** at the head of the distill flow: a `file_picker`-backed source picker that drives Module 002's `ImportNotifier.importFiles(...)` to produce a `Conversation`. 009 owns the widget + state surfacing (`ImportState`); it does not touch 002's parsers or `DataImportService`.
 - Define the **model-readiness read** from Module 007 and the actionable route to Module 010 (009 does not implement model management).
-- Preserve upstream contracts: Modules 002/003/004/007 are reused read-only; no changes to `Persona`, `PersonaJsonCodec`, or `LlmPersonaBuilder`.
+- Preserve upstream contracts: Modules 002/003/004/007 are reused read-only; no changes to `Persona`, `PersonaJsonCodec`, `LlmPersonaBuilder`, or 002's `ImportNotifier`/`DataImportService`/parsers.
 
 ---
 
@@ -56,6 +57,9 @@ Home (HomeScreen body replaced) ─ PersonaLibraryScreen
   ├─ row tap → PersonaRepository.load(id) → push ChatScreen (Module 006)
   ├─ row → PersonaDetailScreen (read-only five layers + notes + source)
   └─ create action → DistillFlowScreen
+        ├─ import step → importStateProvider / ImportNotifier.importFiles(paths)  (Module 002)
+        │     ├─ FilePickerFacade.pick() → file paths (file_picker; seam for tests)
+        │     └─ ImportState (picking/parsing/done/failed) → Conversation
         └─ DistillNotifier (StateNotifier<DistillState>)
               ├─ readiness: ModelRepository.getActiveModelHandle()  (Module 007)
               │     └─ null → actionable prompt → route to Module 010
@@ -75,12 +79,13 @@ PersonaRepository (this module)
 - **`PersonaBytesTransform`** — `List<int> onWrite(List<int>)` / `List<int> onRead(List<int>)`, identity by default; Module 008 supplies an encrypting transform and a backup-exclusion hook on `PersonaDirectory` without touching the repository contract.
 - **`PersonaLibraryNotifier`** — loads summaries on init, exposes `refresh()` and `delete(id)`, holds an immutable `PersonaLibraryState`.
 - **`DistillNotifier`** — orchestrates readiness check → `build(...)` (progress via `onLog`) → holds `DistillState` (`idle / running / done / failed`, carrying the resulting `Persona` and progress lines) → `save()`.
-- **UI**: `PersonaLibraryScreen` (home body), `PersonaDetailScreen`, `DistillFlowScreen`.
+- **Import step** — the head of `DistillFlowScreen`. A `FilePickerFacade` (abstract; default `FilePickerFacade` wrapping `file_picker`, test seam `FakeFilePicker`) yields file paths; the screen then calls `ref.read(importStateProvider.notifier).importFiles(paths, source: …)` (Module 002, reused unchanged) and renders `ImportState` (`picking / parsing / preprocessing / done / failed`). On `done` the resulting `Conversation` is handed to `DistillNotifier.run(...)`; on `failed`/empty/cancel it shows a typed, retryable message. No new notifier is introduced for import — 009 reuses 002's `ImportNotifier`; only the `FilePickerFacade` seam is new.
+- **UI**: `PersonaLibraryScreen` (home body), `PersonaDetailScreen`, `DistillFlowScreen` (import step + distill).
 
 ### 3.3 Module dependencies
 | Module | Interface used | Purpose |
 |--------|----------------|---------|
-| 002 | `Conversation` | Distill input |
+| 002 | `Conversation`; `ImportNotifier` / `importStateProvider` / `DataImportService` / `DataSource` / `ParseOptions` | Distill input + the parser/data layer the import UI drives (reused unchanged) |
 | 003 | `Persona`, layers, `PersonaJsonCodec`, `PersonaSchemaException` | Persisted shape + codec (read-only) |
 | 004 | `LlmPersonaBuilder.build`, `LlmBuildOptions`, `PersonaRuntime`, `PersonaRuntimeMode` | Distillation (reused) |
 | 007 | `ModelRepository.getActiveModelHandle()` | Model readiness for distill |
@@ -199,7 +204,16 @@ abstract class PersonaBytesTransform {
   List<int> onWrite(List<int> plain);
   List<int> onRead(List<int> stored);
 }
+
+/// Import file-picker seam. Default wraps `file_picker`; tests inject a fake.
+abstract class FilePickerFacade {
+  /// Returns picked file paths, or `[]` if the user cancels.
+  Future<List<String>> pick({List<String>? allowedExtensions});
+}
+// DefaultFilePickerFacade (file_picker) | FakeFilePicker (host tests)
 ```
+
+The import step composes `FilePickerFacade` (paths) with Module 002's `ImportNotifier.importFiles(paths, source:)` — no new import state type; `ImportState` is consumed as-is.
 
 ### 5.3 Notifiers (Riverpod, pinned style)
 ```dart
@@ -261,6 +275,7 @@ final StateNotifierProvider<DistillNotifier, DistillState>
 
 ### 7.2 Widget
 - Library screen: rows, initials avatar, confidence/"limited data" badge, empty state, delete-confirm, open-navigation (mocked), `kDebugMode` harness button retained.
+- Import step (`FakeFilePicker` + fake/real `ImportNotifier`): picker invoked → paths → `parsing` progress → `done` hands `Conversation` to distill; cancel (`[]`) and empty selection → typed message, no distill; parse failure (`ImportPhase.failed`) → error + retry.
 - Distill flow: source picker, progress + log, review card (notes/confidence), no-model prompt, error/retry, save.
 
 ### 7.3 Integration / on-device (ADR-005)
@@ -279,7 +294,7 @@ final StateNotifierProvider<DistillNotifier, DistillState>
 - Local-by-default distill; cloud opt-in honored (010-owned); no raw text / keys in logs.
 
 ## 10. Deployment
-- Ships as part of the Flutter app; the library becomes the production `HomeScreen` body (keeps the `kDebugMode` harness button). No new native config beyond `path_provider` (already implied by app documents usage). iOS 16.0+ (ADR-005).
+- Ships as part of the Flutter app; the library becomes the production `HomeScreen` body (keeps the `kDebugMode` harness button). No new native config beyond `path_provider` (already implied by app documents usage) and **`file_picker`** (new dependency for the import step; pinned — ERD-002 had listed it as a candidate only). iOS: `file_picker` needs no extra entitlement for document picking. iOS 16.0+ (ADR-005).
 
 ## 11. Technical Debt
 - **Avatar image**: `Persona` (003) has no avatar field; v1 uses initials + relation + badge. Adding an avatar would require a 003 schema change — deferred, noted here only.
@@ -292,3 +307,4 @@ final StateNotifierProvider<DistillNotifier, DistillState>
 |---------|------|--------|--------|
 | v1.0 | 2026-08-05 | Initial draft (PersonaRepository + library + distill flow; 008 encryption seam + filesystem test seam; two StateNotifiers) | Claude |
 | v1.0.1 | 2026-08-05 | PR #16 review — added Settings→distill runtime binding seam (`cloudKeyStoreProvider` read-path, aligns with ERD-006 §3.4) | Claude |
+| v1.1.0 | 2026-08-07 | Scope expansion — import UI entry point: new `FilePickerFacade` seam (default `file_picker`, `FakeFilePicker` in tests) composed with 002's reused `ImportNotifier.importFiles(...)` at the head of `DistillFlowScreen`; no new import notifier/state. Updated goals, §3 diagram/components, 002 dependency row, §5.2 seam, §7.2 widget tests, `file_picker` dependency | Claude |
