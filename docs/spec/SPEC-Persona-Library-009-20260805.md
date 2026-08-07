@@ -73,13 +73,16 @@ This spec defines the exact interfaces, pre/postconditions, edge cases, behavior
 - **`reset()`**: back to `idle`.
 
 ### 2.7 Import step (`FilePickerFacade` + reused `ImportNotifier`)
-- **`FilePickerFacade.pick({List<String>? allowedExtensions})`**: `Future<List<String>>`. Returns the selected file paths, or `[]` when the user cancels. Default impl wraps `file_picker`; host tests inject `FakeFilePicker`. 009 introduces no import state type of its own.
+- **`FilePickerFacade.pickFiles({List<String>? allowedExtensions})`**: `Future<List<String>>`. Returns selected file paths, or `[]` on cancel. For file-based sources (WeChat CSV/HTML, Weibo/Instagram JSON).
+- **`FilePickerFacade.pickDirectory()`**: `Future<String?>`. Returns a directory path with persistent read access for the import (iOS: a resolved security-scoped bookmark, accessed via `startAccessingSecurityScopedResource` around the read), or `null` on cancel / unsupported platform. For directory/db sources (iMessage `chat.db`, Photo-EXIF folder; ERD-002 §676).
+- Default impl wraps `file_picker: ^8.0.0`; host tests inject `FakeFilePicker`. 009 introduces no import state type of its own.
 - **Import flow contract** (in `DistillFlowScreen`):
-  - `pick()` → `[]` (cancel) or empty → surface "No file selected", remain in the flow, attempt nothing (no `importFiles` call). 
-  - Non-empty paths → `ref.read(importStateProvider.notifier).importFiles(paths, source: selectedSource)` (Module 002, unchanged). Render `ImportState.phase` (`parsing`/`preprocessing`) as progress.
+  - The selected `DataSource` chooses the picker: file-based → `pickFiles()`; iMessage-db / Photo-EXIF → `pickDirectory()`.
+  - Cancel (`[]` / `null`) or empty → surface "No file selected", remain in the flow, attempt nothing (no `importFiles` call).
+  - Non-empty path(s) → `ref.read(importStateProvider.notifier).importFiles(paths, source: selectedSource)` (Module 002, unchanged). Render `ImportState.phase` (`parsing`/`preprocessing`) as progress.
   - `ImportState.phase == done` → take `ImportState.conversation` and drive `DistillNotifier.run(conversation, ...)`.
   - `ImportState.phase == failed` → show `ImportState.error` with a retry affordance; nothing is distilled or saved.
-- **Preconditions**: none (picker may be invoked any time in the flow). **Postconditions**: on `done`, a non-null `Conversation` is available to distill; on cancel/empty/`failed`, flow state is unchanged and no persona is produced.
+- **Preconditions**: none (picker may be invoked any time in the flow). **Postconditions**: on `done`, a non-null `Conversation` is available to distill; on cancel/empty/`failed`, flow state is unchanged and no persona is produced. A directory pick releases the security-scoped resource once parsing completes (v1 does not persist the bookmark across launches — ERD-009 §11).
 - **Constraint**: 009 does not parse or transform files itself, does not add a `DataSource`, and does not modify `ImportNotifier`/`DataImportService`.
 
 ---
@@ -168,7 +171,8 @@ This spec defines the exact interfaces, pre/postconditions, edge cases, behavior
 | C20 (widget) | Distill flow states | Pump distill flow through idle/running/done/failed | Progress + log on running; review card + notes on done; no-model prompt routes to 010; error + retry on failed |
 | C22 (widget) | Import cancel / empty | Pump import step with `FakeFilePicker` returning `[]` | "No file selected"; `importFiles` not called; no distill |
 | C23 (widget) | Import parse failure | `FakeFilePicker` returns a path; fake `ImportNotifier` → `failed(error)` | Error + retry shown; nothing distilled or saved |
-| C24 (widget) | Import success → distill hand-off | `FakeFilePicker` returns a path; fake `ImportNotifier` → `done(conversation)` | `conversation` passed to `DistillNotifier.run(...)`; flow advances to distill |
+| C24 (widget) | Import success → distill hand-off | `FakeFilePicker.pickFiles` returns a path; fake `ImportNotifier` → `done(conversation)` | `conversation` passed to `DistillNotifier.run(...)`; flow advances to distill |
+| C25 (widget) | Directory-source import | Select an iMessage/Photo-EXIF source; `FakeFilePicker.pickDirectory` returns a dir | `importFiles([dir], source:)` called with the directory path; cancel (`null`) → no import |
 | C21 (device, ADR-005) | End-to-end | Physical device, Gemma 3 1B | Real import (pick a WeChat export) → distill → save → relaunch → `list` shows it → `load` → push 006 chat |
 
 ---
@@ -181,7 +185,7 @@ This spec defines the exact interfaces, pre/postconditions, edge cases, behavior
 - **010** (sibling): route target for the no-model prompt.
 - **008** (future): encrypting `PersonaBytesTransform` + backup exclusion via the seam.
 - Package: `path_provider` (app documents directory) — device only; tests use the filesystem seam.
-- Package: `file_picker` (import step) — device only, behind `FilePickerFacade`; tests inject `FakeFilePicker`. New dependency (ERD-002 listed it as candidate only).
+- Package: `file_picker: ^8.0.0` (import step) — device only, behind `FilePickerFacade` (`pickFiles` / `pickDirectory`); tests inject `FakeFilePicker`. New dependency (ERD-002 §646 listed it as candidate only).
 
 ## 9. Constraints
 - No modification to Modules 002/003/004/007; `Persona` gets no new field (no avatar).
@@ -209,4 +213,4 @@ This spec defines the exact interfaces, pre/postconditions, edge cases, behavior
 |---------|------|--------|--------|
 | v1.0 | 2026-08-05 | Initial draft (PersonaRepository + PersonaSummary + notifiers; edge cases, behaviors, C1–C21 test specs) | Claude |
 | v1.0.1 | 2026-08-05 | PR #16 review round — trio version bump; no spec-body change (seam change is ERD-009) | Claude |
-| v1.1.0 | 2026-08-07 | Scope expansion — import step spec: §2.7 `FilePickerFacade` + reused 002 `ImportNotifier` contract, edge cases E15–E18, tests C22–C24 (+ C21 uses a real import), `file_picker` dependency, acceptance updated | Claude |
+| v1.1.0 | 2026-08-07 | Scope expansion — import step spec: §2.7 `FilePickerFacade` + reused 002 `ImportNotifier` contract, edge cases E15–E18, tests C22–C24 (+ C21 uses a real import), `file_picker` dependency, acceptance updated. **PR #18 self-review:** §2.7 split into `pickFiles()` / `pickDirectory()` (directory sources + security-scoped access, ERD-002 §676); pinned `^8.0.0`; added test C25 (directory-source import) | Claude |

@@ -58,7 +58,8 @@ Home (HomeScreen body replaced) ─ PersonaLibraryScreen
   ├─ row → PersonaDetailScreen (read-only five layers + notes + source)
   └─ create action → DistillFlowScreen
         ├─ import step → importStateProvider / ImportNotifier.importFiles(paths)  (Module 002)
-        │     ├─ FilePickerFacade.pick() → file paths (file_picker; seam for tests)
+        │     ├─ FilePickerFacade.pickFiles() | pickDirectory() → path(s) (file_picker; seam for tests)
+        │     │     └─ dir sources (iMessage db / Photo-EXIF) → security-scoped bookmark (ERD-002 §676)
         │     └─ ImportState (picking/parsing/done/failed) → Conversation
         └─ DistillNotifier (StateNotifier<DistillState>)
               ├─ readiness: ModelRepository.getActiveModelHandle()  (Module 007)
@@ -79,7 +80,7 @@ PersonaRepository (this module)
 - **`PersonaBytesTransform`** — `List<int> onWrite(List<int>)` / `List<int> onRead(List<int>)`, identity by default; Module 008 supplies an encrypting transform and a backup-exclusion hook on `PersonaDirectory` without touching the repository contract.
 - **`PersonaLibraryNotifier`** — loads summaries on init, exposes `refresh()` and `delete(id)`, holds an immutable `PersonaLibraryState`.
 - **`DistillNotifier`** — orchestrates readiness check → `build(...)` (progress via `onLog`) → holds `DistillState` (`idle / running / done / failed`, carrying the resulting `Persona` and progress lines) → `save()`.
-- **Import step** — the head of `DistillFlowScreen`. A `FilePickerFacade` (abstract; default `FilePickerFacade` wrapping `file_picker`, test seam `FakeFilePicker`) yields file paths; the screen then calls `ref.read(importStateProvider.notifier).importFiles(paths, source: …)` (Module 002, reused unchanged) and renders `ImportState` (`picking / parsing / preprocessing / done / failed`). On `done` the resulting `Conversation` is handed to `DistillNotifier.run(...)`; on `failed`/empty/cancel it shows a typed, retryable message. No new notifier is introduced for import — 009 reuses 002's `ImportNotifier`; only the `FilePickerFacade` seam is new.
+- **Import step** — the head of `DistillFlowScreen`. A `FilePickerFacade` (abstract; default wraps `file_picker`, test seam `FakeFilePicker`) yields path(s) — `pickFiles()` for file-based sources (WeChat CSV/HTML, Weibo/Instagram JSON) or `pickDirectory()` for directory/db sources (iMessage `chat.db`, Photo-EXIF folder, ERD-002 §676). The screen then calls `ref.read(importStateProvider.notifier).importFiles(paths, source: …)` (Module 002, reused unchanged) and renders `ImportState` (`picking / parsing / preprocessing / done / failed`). On `done` the resulting `Conversation` is handed to `DistillNotifier.run(...)`; on `failed`/empty/cancel it shows a typed, retryable message. No new notifier is introduced for import — 009 reuses 002's `ImportNotifier`; only the `FilePickerFacade` seam is new.
 - **UI**: `PersonaLibraryScreen` (home body), `PersonaDetailScreen`, `DistillFlowScreen` (import step + distill).
 
 ### 3.3 Module dependencies
@@ -205,15 +206,22 @@ abstract class PersonaBytesTransform {
   List<int> onRead(List<int> stored);
 }
 
-/// Import file-picker seam. Default wraps `file_picker`; tests inject a fake.
+/// Import picker seam. Default wraps `file_picker`; tests inject a fake.
 abstract class FilePickerFacade {
-  /// Returns picked file paths, or `[]` if the user cancels.
-  Future<List<String>> pick({List<String>? allowedExtensions});
+  /// Pick one or more export files. Returns paths, or `[]` if cancelled.
+  /// Used by file-based sources (WeChat CSV/HTML, Weibo/Instagram JSON).
+  Future<List<String>> pickFiles({List<String>? allowedExtensions});
+
+  /// Pick a directory and return a path with **persistent** read access
+  /// (iOS: a resolved security-scoped bookmark). Returns `null` if cancelled.
+  /// Used by directory/db sources (iMessage `chat.db`, Photo-EXIF folder) —
+  /// see ERD-002 §676. Null on platforms without directory picking.
+  Future<String?> pickDirectory();
 }
 // DefaultFilePickerFacade (file_picker) | FakeFilePicker (host tests)
 ```
 
-The import step composes `FilePickerFacade` (paths) with Module 002's `ImportNotifier.importFiles(paths, source:)` — no new import state type; `ImportState` is consumed as-is.
+The import step chooses `pickFiles` vs `pickDirectory` from the selected `DataSource` (file-based → `pickFiles`; iMessage-db / Photo-EXIF → `pickDirectory`), then composes the resulting path(s) with Module 002's `ImportNotifier.importFiles(paths, source:)` — no new import state type; `ImportState` is consumed as-is. **iOS security-scoped bookmark:** directory sources need a bookmark resolved for the duration of the import (`file_picker` returns a security-scoped path; the facade is responsible for `startAccessingSecurityScopedResource` / stop around the read). v1 does not persist bookmarks across launches — a re-import re-picks. See §11 Technical Debt.
 
 ### 5.3 Notifiers (Riverpod, pinned style)
 ```dart
@@ -294,17 +302,18 @@ final StateNotifierProvider<DistillNotifier, DistillState>
 - Local-by-default distill; cloud opt-in honored (010-owned); no raw text / keys in logs.
 
 ## 10. Deployment
-- Ships as part of the Flutter app; the library becomes the production `HomeScreen` body (keeps the `kDebugMode` harness button). No new native config beyond `path_provider` (already implied by app documents usage) and **`file_picker`** (new dependency for the import step; pinned — ERD-002 had listed it as a candidate only). iOS: `file_picker` needs no extra entitlement for document picking. iOS 16.0+ (ADR-005).
+- Ships as part of the Flutter app; the library becomes the production `HomeScreen` body (keeps the `kDebugMode` harness button). No new native config beyond `path_provider` (already implied by app documents usage) and **`file_picker: ^8.0.0`** (new dependency for the import step; the version ERD-002 §646 had listed as a candidate). iOS: a one-shot document/directory pick needs no special entitlement; **directory sources additionally require security-scoped bookmark access** around the read (`file_picker` provides the security-scoped path) — file-based sources do not. iOS 16.0+ (ADR-005).
 
 ## 11. Technical Debt
 - **Avatar image**: `Persona` (003) has no avatar field; v1 uses initials + relation + badge. Adding an avatar would require a 003 schema change — deferred, noted here only.
 - **`go_router`**: imperative `Navigator` retained for v1; router migration deferred.
 - **Persona editing / rename / in-place re-distill**: not in v1; save is create/overwrite only.
 - **Library scale**: full-decode `list()` is fine for tens of personas; if libraries grow large, adopt the header-only `summarize` seam or a small index/cache.
+- **Persistent directory access**: v1 resolves an iOS security-scoped bookmark only for the duration of one import; it does not persist the bookmark across launches, so re-importing an iMessage `chat.db` / Photo-EXIF folder re-picks the directory. Persisting bookmarks (incremental re-import without re-picking) is deferred.
 
 ## 12. Change Log
 | Version | Date | Change | Author |
 |---------|------|--------|--------|
 | v1.0 | 2026-08-05 | Initial draft (PersonaRepository + library + distill flow; 008 encryption seam + filesystem test seam; two StateNotifiers) | Claude |
 | v1.0.1 | 2026-08-05 | PR #16 review — added Settings→distill runtime binding seam (`cloudKeyStoreProvider` read-path, aligns with ERD-006 §3.4) | Claude |
-| v1.1.0 | 2026-08-07 | Scope expansion — import UI entry point: new `FilePickerFacade` seam (default `file_picker`, `FakeFilePicker` in tests) composed with 002's reused `ImportNotifier.importFiles(...)` at the head of `DistillFlowScreen`; no new import notifier/state. Updated goals, §3 diagram/components, 002 dependency row, §5.2 seam, §7.2 widget tests, `file_picker` dependency | Claude |
+| v1.1.0 | 2026-08-07 | Scope expansion — import UI entry point: new `FilePickerFacade` seam (default `file_picker`, `FakeFilePicker` in tests) composed with 002's reused `ImportNotifier.importFiles(...)` at the head of `DistillFlowScreen`; no new import notifier/state. Updated goals, §3 diagram/components, 002 dependency row, §5.2 seam, §7.2 widget tests, `file_picker` dependency. **PR #18 self-review:** seam split into `pickFiles()` / `pickDirectory()` (directory sources need iOS security-scoped bookmark, ERD-002 §676); pinned `^8.0.0`; softened §10 entitlement note; added §11 persistent-bookmark Technical Debt | Claude |

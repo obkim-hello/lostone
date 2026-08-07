@@ -300,10 +300,10 @@
 ### 待办
 - [ ] 三文档评审（v1.1.0，含导入 UI 范围扩展）
 - [ ] 三文档批准（批准后方可编码）
-- [ ] 编写测试用例（C1–C24，含导入步骤 C22–C24）→ 实现 → 验证
+- [ ] 编写测试用例（C1–C25，含导入步骤 C22–C25）→ 实现 → 验证
 - [ ] `PersonaRepository` + `PersonaDirectory`（宿主内存实现）落地
 - [ ] 人物库屏 + 蒸馏流程屏（`PersonaLibraryNotifier`/`DistillNotifier`）
-- [ ] 导入步骤：`FilePickerFacade`（`file_picker`）+ 复用 002 `ImportNotifier`；`file_picker` 加入 `pubspec.yaml`
+- [ ] 导入步骤：`FilePickerFacade`（`pickFiles`/`pickDirectory`，`file_picker: ^8.0.0`）+ 复用 002 `ImportNotifier`；目录源（iMessage db / Photo-EXIF）iOS security-scoped 访问（ERD-002 §676）；`file_picker` 加入 `pubspec.yaml`
 - [ ] 与模块 006（Persona 载入）/ 004（蒸馏）/ 002（导入数据层）对接
 
 ---
@@ -526,7 +526,7 @@ Spec：⚪ 待创建
 | 2026-08-05 | — | **PR #16 评审修订（Phase 4 九文档同升 v1.0.1，仍草稿）**：处理 1 Major + 2 Minor + 1 nit——(Major，模块 010) 安装状态与 **post-#14 真实流程**对齐：`flutter_gemma` 安装器实际只发 `downloading → ready` / `failed(canceled|network|unknownModel|authRequired|insufficientStorage|unsupportedDevice|unknown)`，**从不发 `ModelState.verifying` / `InstallErrorKind.corrupted`**（PR #14 移除了从未真正执行的 sha256 校验）；PRD-010 加"Install states — honesty note"、目标 4/F2/F9/进度控件/验收项均标注 `corrupted` 为 defensive-only，ERD-010 错误映射行 + SPEC-010 安装生命周期/E15/C8/C14 全部重述为 `downloading → ready`（`verifying`/`corrupted` 仅防御性处理、不作为预期步骤宣传）；**根因（模块 007 PRD/ERD/SPEC 与 `model_install.dart` 枚举 docstring 的旧 sha256/verifying 措辞）以 dated 勘误 blockquote 就地标注**（不重写已批准正文、待后续单独 reconcile）。(Minor 1) ERD-006 新增 **§3.4 Settings→`ChatOptions`/runtime 绑定接缝**（runtime→mode + PersonaRuntime 选择、cloudAuthorized、temperature、fail-safe 默认）。(Minor 2) ERD-010 新增 **`cloudKeyStoreProvider` 云端 API-key 读路径规格**，由 006 §3.4 与 009 蒸馏接缝共同消费（缺 key → 006 `RuntimeError.unauthorized` / 009 回落统计兜底；`maxPrivacy` 永不读 key）。(nit) ERD-006 "Depends on" 补列模块 010。**未改任何源码/pubspec**，仍草稿待批准 | Claude |
 | 2026-08-05 | — | ✅ **批准模块 010（设置）三文档**（Project Owner）：PRD/ERD/SPEC 状态转"已批准"、批准日期 2026-08-05、三文档升 v1.0.2。矩阵行 010 → ✅/✅/✅、三文档齐全、开发状态转"开发中"，解除阻塞，进入 TDD 编码（分支 `feature/PRD-010-settings`）。010 依赖 007/004 均已完成，可独立开发；006/009 仍草稿待批准 | Project Owner |
 | 2026-08-06 | PR #17 | **PR #17 评审修订（模块 010 实现 + 文档对账）**：处理 Owner 评审 2 Major + minors/test-gaps——(Major 1，代码) 密钥写入错误不再被静默吞掉：`settings_screen.dart` 的密钥 Save/Clear 改经 `_guarded` 包裹并 await（与非密钥 setter 一致，兑现 E17/C24"不吞错"不变量）；`appSettingsProvider` 补 `onSaveError`（记日志）并对 `loadInitial()` 加 `catchError`，keychain/Hive 读写失败不再逃逸至未处理 async zone。(Major 2，流程) **本条记录 v1.0.3 = 编码后文档-代码对账，非新批准**；追踪表（矩阵行 010 + 详细状态表）与 README 同步为"✅ v1.0.2 · 🔶 v1.0.3 待复批"，避免追踪表滞后于其所追踪文档；v1.0.3 增量（`cloudEndpoint`/`deactivate`/`allowOverTier` 等）**待 Owner 复批**。(minors) SPEC-010 §2.3/C2"四字段"→"五字段"；补测试缺口 G1（`copyWith` 保留非空字段分支）/G2（安装流原始错误→`failed(unknown)`）/G3（密钥写入失败不吞错，UI 层 SnackBar）。全套测试通过、`flutter analyze` 干净（仅遗留无关 `avoid_print`）| Claude |
-| 2026-08-07 | docs/PRD-009-import-ui | **模块 009 范围扩展 → 导入 UI 入口（三文档同升 v1.1.0，仍草稿）**：发现 **Phase-4 导入 UI 缺口**——模块 002 交付了完整解析/数据层（WeChat/iMessage/Weibo/Instagram/EXIF 解析器、`Conversation`、`DataImportService`、`ImportNotifier`/`importStateProvider`）但**明确推迟了导入界面**至"Phase-4 UI 模块"，而 006/009/010 均未认领；今日 `importFiles(...)` 仅测试可达、生产唯一端到端路径是 `kDebugMode` `LlmHarnessScreen` 硬编码样例——**生产环境无法导入真实聊天记录**。经确认由**模块 009 认领导入 UI**（蒸馏/创建流程的入口）。PRD/ERD/SPEC-009 v1.1.0：新增 Story 6 + F10 + `FilePickerFacade` 接缝（默认 `file_picker`，宿主 `FakeFilePicker`）复用 002 `ImportNotifier`（不新增导入状态类型/不改任何解析器）；边界 E15–E18、测试 C22–C24（C21 改真机真实导入）；新增 `file_picker` 依赖（ERD-002 原仅候选）。**未改任何源码/pubspec**，仍草稿待评审批准（分支 `docs/PRD-009-import-ui`）| Claude |
+| 2026-08-07 | docs/PRD-009-import-ui | **模块 009 范围扩展 → 导入 UI 入口（三文档同升 v1.1.0，仍草稿）**：发现 **Phase-4 导入 UI 缺口**——模块 002 交付了完整解析/数据层（WeChat/iMessage/Weibo/Instagram/EXIF 解析器、`Conversation`、`DataImportService`、`ImportNotifier`/`importStateProvider`）但**明确推迟了导入界面**至"Phase-4 UI 模块"，而 006/009/010 均未认领；今日 `importFiles(...)` 仅测试可达、生产唯一端到端路径是 `kDebugMode` `LlmHarnessScreen` 硬编码样例——**生产环境无法导入真实聊天记录**。经确认由**模块 009 认领导入 UI**（蒸馏/创建流程的入口）。PRD/ERD/SPEC-009 v1.1.0：新增 Story 6 + F10 + `FilePickerFacade` 接缝（默认 `file_picker`，宿主 `FakeFilePicker`）复用 002 `ImportNotifier`（不新增导入状态类型/不改任何解析器）；边界 E15–E18、测试 C22–C24（C21 改真机真实导入）；新增 `file_picker` 依赖（ERD-002 原仅候选）。**PR #18 自评修订**：`FilePickerFacade` 拆为 `pickFiles()` / `pickDirectory()`（目录源 iMessage db / Photo-EXIF 需 iOS security-scoped 访问，ERD-002 §676）；`file_picker` 固定 `^8.0.0`；软化 iOS entitlement 表述 + 补 §11 持久 bookmark 技术债；新增测试 C25。**未改任何源码/pubspec**，仍草稿待评审批准（分支 `docs/PRD-009-import-ui`）| Claude |
 
 ---
 
