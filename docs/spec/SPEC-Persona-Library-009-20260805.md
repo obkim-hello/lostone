@@ -2,8 +2,8 @@
 
 > Technical Specification — Persona Library & Distill (persona persistence, library screen, and the distill/creation flow)
 >
-> **Version**: v1.1.0 (draft)
-> **Status**: 📝 Draft (pending review)
+> **Version**: v1.1.1
+> **Status**: ✅ Approved (Project Owner, 2026-08-07)
 > **Author**: Claude
 > **Date**: 2026-08-05
 > **Priority**: P0
@@ -214,3 +214,4 @@ This spec defines the exact interfaces, pre/postconditions, edge cases, behavior
 | v1.0 | 2026-08-05 | Initial draft (PersonaRepository + PersonaSummary + notifiers; edge cases, behaviors, C1–C21 test specs) | Claude |
 | v1.0.1 | 2026-08-05 | PR #16 review round — trio version bump; no spec-body change (seam change is ERD-009) | Claude |
 | v1.1.0 | 2026-08-07 | Scope expansion — import step spec: §2.7 `FilePickerFacade` + reused 002 `ImportNotifier` contract, edge cases E15–E18, tests C22–C24 (+ C21 uses a real import), `file_picker` dependency, acceptance updated. **PR #18 self-review:** §2.7 split into `pickFiles()` / `pickDirectory()` (directory sources + security-scoped access, ERD-002 §676); pinned `^8.0.0`; added test C25 (directory-source import) | Claude |
+| v1.1.1 | 2026-08-07 | ✅ **Approved (Project Owner)** — trio status → Approved, approval date 2026-08-07; development unblocked. No content change | Project Owner |

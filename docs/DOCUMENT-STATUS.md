@@ -16,7 +16,7 @@
 | 006 | 聊天界面（对话 + 聊天历史 SQLite，Phase 4）| 📝 草稿 | 📝 草稿 | 📝 草稿 | ⚠️ 草稿完成 | 🚫 阻塞 |
 | 007 | 模型管理（提前至 Phase 3，004 本地路径前置）| ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | ✅ 已完成 |
 | 008 | 数据安全 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
-| 009 | 人物库与蒸馏（Persona 持久化 + 库 + 蒸馏流程 + 导入 UI 入口，Phase 4，v1.1.0）| 📝 草稿 | 📝 草稿 | 📝 草稿 | ⚠️ 草稿完成 | 🚫 阻塞 |
+| 009 | 人物库与蒸馏（Persona 持久化 + 库 + 蒸馏流程 + 导入 UI 入口，Phase 4，v1.1.1）| ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 三文档齐全 | 🚧 开发中 |
 | 010 | 设置（模型管理 UI + 运行模式 + 云端授权，Phase 4）| ✅ v1.0.2（🔶 v1.0.3 待复批）| ✅ v1.0.2（🔶 v1.0.3 待复批）| ✅ v1.0.2（🔶 v1.0.3 待复批）| ✅ 是 | 🚧 开发中（PR #17）|
 
 ---
@@ -277,19 +277,19 @@
 ### 文档信息
 | 文档类型 | 文件名 | 状态 | 完成时间 | 批准时间 | 文件路径 |
 |----------|--------|------|---------|---------|---------|
-| PRD | PRD-Persona-Library-009-20260805.md | 📝 草稿 | 2026-08-05 | — | docs/prd/PRD-Persona-Library-009-20260805.md |
-| ERD | ERD-Persona-Library-009-20260805.md | 📝 草稿 | 2026-08-05 | — | docs/erd/ERD-Persona-Library-009-20260805.md |
-| Spec | SPEC-Persona-Library-009-20260805.md | 📝 草稿 | 2026-08-05 | — | docs/spec/SPEC-Persona-Library-009-20260805.md |
+| PRD | PRD-Persona-Library-009-20260805.md | ✅ 已批准 (v1.1.1) | 2026-08-05 | 2026-08-07 | docs/prd/PRD-Persona-Library-009-20260805.md |
+| ERD | ERD-Persona-Library-009-20260805.md | ✅ 已批准 (v1.1.1) | 2026-08-05 | 2026-08-07 | docs/erd/ERD-Persona-Library-009-20260805.md |
+| Spec | SPEC-Persona-Library-009-20260805.md | ✅ 已批准 (v1.1.1) | 2026-08-05 | 2026-08-07 | docs/spec/SPEC-Persona-Library-009-20260805.md |
 
 ### 三文档齐全检查
-- ✅ PRD 已创建（草稿）
-- ✅ ERD 已创建（草稿）
-- ✅ Spec 已创建（草稿）
+- ✅ PRD 已批准（v1.1.1，2026-08-07）
+- ✅ ERD 已批准（v1.1.1，2026-08-07）
+- ✅ Spec 已批准（v1.1.1，2026-08-07）
 - ✅ 编号一致（009）
 - ✅ 日期一致（20260805）
 - ✅ 头部关联字段互指正确（PRD↔ERD↔Spec）
-- ⚠️ 状态：草稿，**待评审批准**
-- 🚫 **开发状态：阻塞**（待三文档批准）
+- ✅ 状态：**三文档已批准**（Project Owner，2026-08-07）
+- 🚧 **开发状态：开发中**（三文档批准，解除阻塞，进入 TDD 编码）
 
 ### 范围摘要
 - 模块定位（Phase 4）：**Persona 持久化 + 人物库 + 蒸馏流程 + 导入入口 UI**——填补当前"仅内存 `PersonaJsonCodec`、无落盘"的缺口，并**填补 Phase-4 导入 UI 缺口**（模块 002 交付了解析/数据层但推迟了导入界面，无模块认领；今日生产环境无法导入真实聊天记录，仅 `kDebugMode` harness 用硬编码样例）。新增 `PersonaRepository`（由注入的 `PersonaCodec` + `PersonaDirectory`〔宿主用 `MemoryPersonaDirectory`〕+ `PersonaBytesTransform`〔008 加密接缝〕组合）；人物库屏（列表/删除/打开）；蒸馏流程屏（**导入步骤 → 蒸馏**，驱动模块 004 `LlmPersonaBuilder`）。
@@ -298,8 +298,8 @@
 - 依赖：003（`Persona`/`PersonaCodec`）、004（`LlmPersonaBuilder` 蒸馏）、002（`Conversation` 输入 + `ImportNotifier`/`importStateProvider`/`DataImportService` 导入数据层，复用不改）、007（模型就绪）；008 加密为预留注入点。新增 `file_picker` 依赖（ERD-002 原仅列为候选）。
 
 ### 待办
-- [ ] 三文档评审（v1.1.0，含导入 UI 范围扩展）
-- [ ] 三文档批准（批准后方可编码）
+- [x] 三文档评审（v1.1.1，含导入 UI 范围扩展）
+- [x] 三文档批准（批准后方可编码）
 - [ ] 编写测试用例（C1–C25，含导入步骤 C22–C25）→ 实现 → 验证
 - [ ] `PersonaRepository` + `PersonaDirectory`（宿主内存实现）落地
 - [ ] 人物库屏 + 蒸馏流程屏（`PersonaLibraryNotifier`/`DistillNotifier`）
@@ -527,6 +527,7 @@ Spec：⚪ 待创建
 | 2026-08-05 | — | ✅ **批准模块 010（设置）三文档**（Project Owner）：PRD/ERD/SPEC 状态转"已批准"、批准日期 2026-08-05、三文档升 v1.0.2。矩阵行 010 → ✅/✅/✅、三文档齐全、开发状态转"开发中"，解除阻塞，进入 TDD 编码（分支 `feature/PRD-010-settings`）。010 依赖 007/004 均已完成，可独立开发；006/009 仍草稿待批准 | Project Owner |
 | 2026-08-06 | PR #17 | **PR #17 评审修订（模块 010 实现 + 文档对账）**：处理 Owner 评审 2 Major + minors/test-gaps——(Major 1，代码) 密钥写入错误不再被静默吞掉：`settings_screen.dart` 的密钥 Save/Clear 改经 `_guarded` 包裹并 await（与非密钥 setter 一致，兑现 E17/C24"不吞错"不变量）；`appSettingsProvider` 补 `onSaveError`（记日志）并对 `loadInitial()` 加 `catchError`，keychain/Hive 读写失败不再逃逸至未处理 async zone。(Major 2，流程) **本条记录 v1.0.3 = 编码后文档-代码对账，非新批准**；追踪表（矩阵行 010 + 详细状态表）与 README 同步为"✅ v1.0.2 · 🔶 v1.0.3 待复批"，避免追踪表滞后于其所追踪文档；v1.0.3 增量（`cloudEndpoint`/`deactivate`/`allowOverTier` 等）**待 Owner 复批**。(minors) SPEC-010 §2.3/C2"四字段"→"五字段"；补测试缺口 G1（`copyWith` 保留非空字段分支）/G2（安装流原始错误→`failed(unknown)`）/G3（密钥写入失败不吞错，UI 层 SnackBar）。全套测试通过、`flutter analyze` 干净（仅遗留无关 `avoid_print`）| Claude |
 | 2026-08-07 | docs/PRD-009-import-ui | **模块 009 范围扩展 → 导入 UI 入口（三文档同升 v1.1.0，仍草稿）**：发现 **Phase-4 导入 UI 缺口**——模块 002 交付了完整解析/数据层（WeChat/iMessage/Weibo/Instagram/EXIF 解析器、`Conversation`、`DataImportService`、`ImportNotifier`/`importStateProvider`）但**明确推迟了导入界面**至"Phase-4 UI 模块"，而 006/009/010 均未认领；今日 `importFiles(...)` 仅测试可达、生产唯一端到端路径是 `kDebugMode` `LlmHarnessScreen` 硬编码样例——**生产环境无法导入真实聊天记录**。经确认由**模块 009 认领导入 UI**（蒸馏/创建流程的入口）。PRD/ERD/SPEC-009 v1.1.0：新增 Story 6 + F10 + `FilePickerFacade` 接缝（默认 `file_picker`，宿主 `FakeFilePicker`）复用 002 `ImportNotifier`（不新增导入状态类型/不改任何解析器）；边界 E15–E18、测试 C22–C24（C21 改真机真实导入）；新增 `file_picker` 依赖（ERD-002 原仅候选）。**PR #18 自评修订**：`FilePickerFacade` 拆为 `pickFiles()` / `pickDirectory()`（目录源 iMessage db / Photo-EXIF 需 iOS security-scoped 访问，ERD-002 §676）；`file_picker` 固定 `^8.0.0`；软化 iOS entitlement 表述 + 补 §11 持久 bookmark 技术债；新增测试 C25。**未改任何源码/pubspec**，仍草稿待评审批准（分支 `docs/PRD-009-import-ui`）| Claude |
+| 2026-08-07 | docs/approve-009 | ✅ **批准模块 009（人物库与蒸馏，含导入 UI 入口）三文档**（Project Owner）：PRD/ERD/SPEC 状态转"已批准"、批准日期 2026-08-07、三文档同升 v1.1.1。矩阵行 009 → ✅/✅/✅、三文档齐全、开发状态转"开发中"，解除阻塞，进入 TDD 编码。009 依赖 002/003/004/007 均已完成，可独立开发 | Project Owner |
 
 ---
 

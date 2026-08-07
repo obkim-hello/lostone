@@ -2,8 +2,8 @@
 
 > Product Requirements Document — Persona Library & Distill (persona persistence, library screen, and the distill/creation flow)
 >
-> **Version**: v1.1.0 (draft)
-> **Status**: 📝 Draft (pending review)
+> **Version**: v1.1.1
+> **Status**: ✅ Approved (Project Owner, 2026-08-07)
 > **Author**: Claude
 > **Date**: 2026-08-05
 > **Priority**: P0
@@ -19,8 +19,8 @@
 | **Related Spec** | SPEC-Persona-Library-009-20260805.md |
 | **Depends on** | Module 002 (Conversation + `ImportNotifier`/`DataImportService` — the parser/data layer, reused), Module 003 (Persona, PersonaJsonCodec — read-only), Module 004 (LlmPersonaBuilder), Module 007 (model readiness for distill) |
 | **Related decisions** | ADR-002, ADR-004, ADR-005 |
-| **Approval date** | — |
-| **Approver** | — |
+| **Approval date** | 2026-08-07 |
+| **Approver** | Project Owner |
 
 > **Module map (Phase 4 UI).** The user-facing app is split into three modules, each with its own PRD/ERD/Spec trio: **006 Chat Interface** (the chat screen + chat history), **009 Persona Library & Distill** (this doc — persona persistence, the library, and the distill/creation flow), and **010 Settings** (model-management UI on 007 + runtime/mode + cloud authorization). This module is the **foundation the other two build on**: it owns the `PersonaRepository` that 006 loads from, and the create/keep/reopen/delete lifecycle for personas. It *consumes* the Module 004 `LlmPersonaBuilder` to distill, *reads* model readiness from 007 (routing the install/switch UI to 010), and *reuses* the Module 003 `Persona` shape and `PersonaJsonCodec` without modification. It also **owns the production import entry point** — the file/source-picker UI at the head of the create flow that drives Module 002's `ImportNotifier` to turn a chat export (WeChat, iMessage, …) into a `Conversation`. Module 002 deferred its import UI to Phase 4 (`PRD-Data-Import-002` §out-of-scope); 009 is where that UI lands, because the create flow is the only place a `Conversation` is needed. Parsing itself stays in 002 (unchanged); 009 adds only the UI that invokes it.
 
@@ -312,3 +312,4 @@ Module 009 turns "creating and keeping a persona" into a production surface. It 
 | v1.0 | 2026-08-05 | Initial draft (persona persistence + library + distill flow; 3-module Phase-4 split) | Claude |
 | v1.0.1 | 2026-08-05 | PR #16 review round — trio version bump; no PRD-body change (seam change is ERD-009) | Claude |
 | v1.1.0 | 2026-08-07 | Scope expansion — 009 now owns the **production import UI entry point** (file/source picker → 002 `ImportNotifier` → `Conversation`) at the head of the create flow, closing the Phase-4 import-UI gap (002 deferred its UI, no module had claimed it). Parsing stays in 002 (reused unchanged). Added Story 6, F10, import in §1/§3/§5/§6/§8/§9, `file_picker` dependency + risk rows. **PR #18 self-review:** pinned `file_picker: ^8.0.0`; import supports file *and* directory pick (iMessage-db / Photo-EXIF need a security-scoped directory per ERD-002 §676) + added risk row | Claude |
+| v1.1.1 | 2026-08-07 | ✅ **Approved (Project Owner)** — trio PRD/ERD/Spec status → Approved, approval date 2026-08-07; development unblocked (matrix row 009 → ✅/✅/✅). No content change | Project Owner |
