@@ -20,6 +20,10 @@ class MockInstaller implements ModelInstaller {
   final Map<String, StreamController<InstallEvent>> _controllers =
       <String, StreamController<InstallEvent>>{};
 
+  /// Model ids whose install stream should emit a raw error (not a `failed`
+  /// event) after the planned events, exercising the repository's `onError`.
+  final Set<String> streamErrors = <String>{};
+
   int installCallCount = 0;
 
   @override
@@ -42,6 +46,10 @@ class MockInstaller implements ModelInstaller {
         }
         controller.add(event);
       }
+      if (streamErrors.contains(descriptor.id) && !controller.isClosed) {
+        controller.addError(Exception('stream boom'));
+        return;
+      }
       final bool terminal = events.isNotEmpty &&
           (events.last.state == ModelState.ready ||
               events.last.state == ModelState.failed);
@@ -58,6 +66,31 @@ class MockInstaller implements ModelInstaller {
     if (controller != null && !controller.isClosed) {
       await controller.close();
     }
+  }
+
+  final Set<String> deleted = <String>{};
+  final Set<String> installedOnDisk = <String>{};
+  final List<String> activated = <String>[];
+  int deactivateCalls = 0;
+
+  @override
+  Future<bool> isInstalled(ModelDescriptor descriptor) async =>
+      installedOnDisk.contains(descriptor.id);
+
+  @override
+  Future<void> delete(ModelDescriptor descriptor) async {
+    deleted.add(descriptor.id);
+    installedOnDisk.remove(descriptor.id);
+  }
+
+  @override
+  Future<void> activate(ModelDescriptor descriptor) async {
+    activated.add(descriptor.id);
+  }
+
+  @override
+  Future<void> deactivate() async {
+    deactivateCalls++;
   }
 }
 
@@ -274,6 +307,26 @@ void main() {
     });
   });
 
+  group('G2 安装流原始错误', () {
+    test('stream onError → failed(unknown)，无半成品', () async {
+      final MockInstaller installer = MockInstaller(
+        (ModelDescriptor d, int a) => <InstallEvent>[
+          _downloading(d.id, d.sizeBytes ~/ 3, d.sizeBytes),
+        ],
+      )..streamErrors.add(smol.id);
+      final InMemoryModelStore store = InMemoryModelStore();
+      final DefaultModelRepository repo =
+          _repo(installer: installer, store: store);
+
+      final List<InstallEvent> events = await repo.install(smol.id).toList();
+
+      expect(events.last.state, ModelState.failed);
+      expect(events.last.error, InstallErrorKind.unknown);
+      expect(repo.stateOf(smol.id), ModelState.failed);
+      expect(await store.exists(smol.id), isFalse);
+    });
+  });
+
   group('T9 空间不足预检', () {
     test('failed(insufficientStorage)，不触发下载', () async {
       final MockInstaller installer =
@@ -345,6 +398,52 @@ void main() {
     });
   });
 
+  group('单激活语义', () {
+    test('setActive 通过安装器激活；deactivate 清空并通知安装器', () async {
+      final MockInstaller installer = MockInstaller(
+        (ModelDescriptor d, int a) => _happy(d),
+      );
+      final DefaultModelRepository repo = _repo(installer: installer);
+      await repo.install(smol.id).toList();
+
+      await repo.setActive(smol.id);
+      expect(installer.activated, contains(smol.id));
+      expect(await repo.getActiveModelHandle(), isNotNull);
+
+      await repo.deactivate();
+      expect(installer.deactivateCalls, 1);
+      expect(await repo.getActiveModelHandle(), isNull);
+      expect(repo.stateOf(smol.id), ModelState.ready);
+    });
+
+    test('删除激活模型时清除插件激活标识', () async {
+      final MockInstaller installer = MockInstaller(
+        (ModelDescriptor d, int a) => _happy(d),
+      );
+      final DefaultModelRepository repo = _repo(installer: installer);
+      await repo.install(smol.id).toList();
+      await repo.setActive(smol.id);
+
+      await repo.delete(smol.id);
+
+      expect(installer.deactivateCalls, 1);
+      expect(installer.deleted, contains(smol.id));
+      expect(await repo.getActiveModelHandle(), isNull);
+    });
+
+    test('激活新模型即替换旧激活（仅一个激活）', () async {
+      final DefaultModelRepository repo = _repo();
+      await repo.install(smol.id).toList();
+      await repo.install(gemma3.id, hfToken: 'hf_x').toList();
+
+      await repo.setActive(smol.id);
+      expect((await repo.getActiveModelHandle())!.id, smol.id);
+
+      await repo.setActive(gemma3.id);
+      expect((await repo.getActiveModelHandle())!.id, gemma3.id);
+    });
+  });
+
   group('T13 删除激活模型', () {
     test('删除后 getActiveModelHandle==null', () async {
       final DefaultModelRepository repo = _repo();
@@ -354,6 +453,50 @@ void main() {
 
       await repo.delete(smol.id);
       expect(await repo.getActiveModelHandle(), isNull);
+      expect(repo.stateOf(smol.id), ModelState.notInstalled);
+      expect(repo.installed(), isEmpty);
+    });
+
+    test('delete removes the model from the underlying store', () async {
+      final MockInstaller installer = MockInstaller(
+        (ModelDescriptor d, int a) => _happy(d),
+      );
+      final DefaultModelRepository repo = _repo(installer: installer);
+      await repo.install(smol.id).toList();
+
+      await repo.delete(smol.id);
+
+      expect(installer.deleted, contains(smol.id));
+    });
+  });
+
+  group('syncInstalled reflects on-disk truth', () {
+    test('a model present on disk becomes ready after sync', () async {
+      final MockInstaller installer = MockInstaller(
+        (ModelDescriptor d, int a) => _happy(d),
+      )..installedOnDisk.add(smol.id);
+      final DefaultModelRepository repo = _repo(installer: installer);
+
+      expect(repo.stateOf(smol.id), ModelState.notInstalled);
+      await repo.syncInstalled();
+
+      expect(repo.stateOf(smol.id), ModelState.ready);
+      expect(
+        repo.installed().map((InstalledModel m) => m.descriptor.id),
+        contains(smol.id),
+      );
+    });
+
+    test('a model absent on disk is cleared after sync', () async {
+      final MockInstaller installer = MockInstaller(
+        (ModelDescriptor d, int a) => _happy(d),
+      );
+      final DefaultModelRepository repo = _repo(installer: installer);
+      await repo.install(smol.id).toList();
+      expect(repo.stateOf(smol.id), ModelState.ready);
+
+      await repo.syncInstalled();
+
       expect(repo.stateOf(smol.id), ModelState.notInstalled);
       expect(repo.installed(), isEmpty);
     });

@@ -8,6 +8,7 @@ import '../models/app_config.dart';
 import '../models/environment_status.dart';
 import '../utils/app_logger.dart';
 import 'app_errors.dart';
+import 'settings/settings_repository.dart';
 
 /// Hive 中用于存放应用元数据的 Box 名称。
 const String kAppConfigBoxName = 'lostone';
@@ -185,6 +186,7 @@ class AppInitializer {
   Future<void> _defaultStorageInitializer() async {
     await Hive.initFlutter();
     await Hive.openBox<dynamic>(kAppConfigBoxName);
+    await Hive.openBox<dynamic>(HiveSettingsRepository.boxName);
     await const FlutterSecureStorage().readAll();
   }
 

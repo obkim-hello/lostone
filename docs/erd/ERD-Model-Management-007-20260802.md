@@ -2,7 +2,7 @@
 
 > 工程需求文档 - 模型管理（端侧 LLM 模型下载 / 存储 / 切换）
 >
-> **版本**：v1.0.1
+> **版本**：v1.0.2
 > **状态**：✅ 已批准（Project Owner，2026-08-04）
 > **作者**：Claude
 > **日期**：2026-08-02
@@ -80,9 +80,10 @@
 | minTier | `DeviceTier` | 推荐最低设备档 |
 | sourceUrl | `String` | 下载地址 |
 | requiresToken | `bool` | 是否需 HF token |
-| sha256 | `String?` | 完整性校验（可选）|
+| family | `ModelFamily` | 架构族（gemmaIt/gemma4/general），映射 flutter_gemma ModelType |
+| description | `String` | 用户可见简短说明（默认空字符串）|
 
-内置目录（v1）：`smollm-135m`（冒烟/CPU）、`gemma3-1b-it-int4`（0.5GB，设备默认）、`gemma4-e2b`（2.4GB，高质量）。
+内置目录（v1）：`smollm-135m`（冒烟/CPU）、`gemma3-1b-it-int4`（0.5GB，设备默认）、`gemma4-e2b`（2.4GB，高质量）、`gemma4-e4b`（Gemma 4 E4B，~3.66GB，highEnd）。
 
 ### 3.2 `InstalledModel`
 `{descriptor, filePath, installedBytes, state: ModelState, installedAt}`。
@@ -116,13 +117,15 @@
 ```dart
 abstract class ModelRepository {
   List<ModelDescriptor> catalog({DeviceTier? recommendFor});
-  Future<List<InstalledModel>> installed();
+  List<InstalledModel> installed();             // 同步快照（内存态）
+  Future<void> syncInstalled();                 // 将内存态与插件磁盘真相对账；refresh 时调用
 
   Stream<InstallEvent> install(String modelId, {String? hfToken});
   Future<void> cancel(String modelId);
-  Future<void> delete(String modelId);
+  Future<void> delete(String modelId);          // 删除激活模型时先 installer.deactivate 清插件激活标识再删文件
 
-  Future<void> setActive(String modelId);      // 仅 ready 可激活
+  Future<void> setActive(String modelId);       // 单激活语义：设新激活即替换旧激活；委托 installer.activate 驱动插件
+  Future<void> deactivate();                    // 清除激活，保留文件，幂等
   Future<ModelHandle?> getActiveModelHandle();  // null = 无就绪模型（模块 004 兜底）
   ModelState stateOf(String modelId);
 }
@@ -133,6 +136,10 @@ abstract class ModelRepository {
 abstract class ModelInstaller {
   Stream<InstallEvent> install(ModelDescriptor d, {String? hfToken});
   Future<void> cancel(String modelId);
+  Future<bool> isInstalled(ModelDescriptor d);  // 底层是否已安装，反映磁盘真相
+  Future<void> delete(ModelDescriptor d);       // 删除文件，幂等
+  Future<void> activate(ModelDescriptor d);     // 设为唯一激活，替换旧激活；委托 flutter_gemma
+  Future<void> deactivate();                    // 清除激活标识（clearActiveInferenceIdentity），保留文件，幂等
 }
 // 默认实现 FlutterGemmaInstaller：
 //   FlutterGemma.installModel(modelType: ...).fromNetwork(d.sourceUrl).install()
@@ -228,6 +235,7 @@ abstract class DeviceCapabilities {      // GPU/内存探测 + 引擎/后端选�
 | 2026-08-02 | v1.0（草稿）| 初始草稿（依据 ADR-005、PRD-007、模块 004 契约需求）| Claude |
 | 2026-08-04 | v1.0.1（草稿）| PR #13 评审修订：封装对象由 legacy `ModelFileManager` 改为 builder API `installModel().fromNetwork().install()`；flutter_gemma 锁版本 v1.5.0→v1.5.2 | Claude |
 | 2026-08-04 | v1.0.1（已批准）| ✅ Project Owner 批准三文档；宿主核心 + 设备 slice 已落地；DD-002 记于设计债务登记表 | Project Owner |
+| 2026-08-06 | v1.0.2 | 文档-代码对账（post-#16）：ModelInstaller 增 isInstalled/delete/activate/deactivate；ModelRepository 增 syncInstalled/deactivate、installed() 改同步返回、setActive 单激活委托、delete 先 deactivate；ModelDescriptor 增 family/description、移除 sha256；内置目录补 gemma4-e4b | Claude |
 
 ---
 

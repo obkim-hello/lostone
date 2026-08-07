@@ -17,7 +17,7 @@
 | 007 | 模型管理（提前至 Phase 3，004 本地路径前置）| ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | ✅ 已完成 |
 | 008 | 数据安全 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
 | 009 | 人物库与蒸馏（Persona 持久化 + 库 + 蒸馏流程，Phase 4）| 📝 草稿 | 📝 草稿 | 📝 草稿 | ⚠️ 草稿完成 | 🚫 阻塞 |
-| 010 | 设置（模型管理 UI + 运行模式 + 云端授权，Phase 4）| 📝 草稿 | 📝 草稿 | 📝 草稿 | ⚠️ 草稿完成 | 🚫 阻塞 |
+| 010 | 设置（模型管理 UI + 运行模式 + 云端授权，Phase 4）| ✅ v1.0.2（🔶 v1.0.3 待复批）| ✅ v1.0.2（🔶 v1.0.3 待复批）| ✅ v1.0.2（🔶 v1.0.3 待复批）| ✅ 是 | 🚧 开发中（PR #17）|
 
 ---
 
@@ -312,19 +312,21 @@
 ### 文档信息
 | 文档类型 | 文件名 | 状态 | 完成时间 | 批准时间 | 文件路径 |
 |----------|--------|------|---------|---------|---------|
-| PRD | PRD-Settings-010-20260805.md | 📝 草稿 | 2026-08-05 | — | docs/prd/PRD-Settings-010-20260805.md |
-| ERD | ERD-Settings-010-20260805.md | 📝 草稿 | 2026-08-05 | — | docs/erd/ERD-Settings-010-20260805.md |
-| Spec | SPEC-Settings-010-20260805.md | 📝 草稿 | 2026-08-05 | — | docs/spec/SPEC-Settings-010-20260805.md |
+| PRD | PRD-Settings-010-20260805.md | ✅ 已批准 v1.0.2 · 🔶 v1.0.3 待复批 | 2026-08-06 | 2026-08-05（v1.0.2）| docs/prd/PRD-Settings-010-20260805.md |
+| ERD | ERD-Settings-010-20260805.md | ✅ 已批准 v1.0.2 · 🔶 v1.0.3 待复批 | 2026-08-06 | 2026-08-05（v1.0.2）| docs/erd/ERD-Settings-010-20260805.md |
+| Spec | SPEC-Settings-010-20260805.md | ✅ 已批准 v1.0.2 · 🔶 v1.0.3 待复批 | 2026-08-06 | 2026-08-05（v1.0.2）| docs/spec/SPEC-Settings-010-20260805.md |
+
+> 🔶 **v1.0.3 = 编码后文档-代码对账（2026-08-06，作者 Claude，未经 Owner 复批）**：新增 `cloudEndpoint`/`setCloudEndpoint`、`ModelManagerNotifier.deactivate`、v1-UI 说明、`allowOverTier` 无条件等增量（PR #17 评审 Major 2）。契约在 v1.0.2 批准后有所增长，**待 Project Owner 对 v1.0.3 增量复批**后方可将状态整体转"已批准 v1.0.3"。
 
 ### 三文档齐全检查
-- ✅ PRD 已创建（草稿）
-- ✅ ERD 已创建（草稿）
-- ✅ Spec 已创建（草稿）
+- ✅ PRD 已批准（v1.0.2）· 🔶 v1.0.3 增量待复批
+- ✅ ERD 已批准（v1.0.2）· 🔶 v1.0.3 增量待复批
+- ✅ Spec 已批准（v1.0.2）· 🔶 v1.0.3 增量待复批
 - ✅ 编号一致（010）
 - ✅ 日期一致（20260805）
 - ✅ 头部关联字段互指正确（PRD↔ERD↔Spec）
-- ⚠️ 状态：草稿，**待评审批准**
-- 🚫 **开发状态：阻塞**（待三文档批准）
+- ✅ 状态：**已批准**（2026-08-05，Project Owner）
+- 🚧 **开发状态：开发中**（TDD 进行）
 
 ### 范围摘要
 - 模块定位（Phase 4）：**设置界面**——模块 007 的**模型管理正式 UI**（目录/下载进度/激活/删除，取代 004 dev-only harness）+ 运行模式选择（本地/云端 `RuntimeChoice`）+ 云端 API Key 授权。新增 `AppSettings`/`RuntimeChoice`/`SettingsRepository`/`SecureKeyStore`。
@@ -333,12 +335,16 @@
 - 依赖：007（`ModelRepository` 模型管理）、004（`PersonaRuntimeMode`/云端授权门控）；008 加密为密钥存储承接。
 
 ### 待办
-- [ ] 三文档评审
-- [ ] 三文档批准（批准后方可编码）
-- [ ] 编写测试用例 → 实现 → 验证
-- [ ] `SettingsRepository`（Hive）+ `SecureKeyStore`（Secure Storage）落地
-- [ ] 设置屏 + `ModelManagerNotifier`（消费 007 安装事件流）
-- [ ] 与模块 007（模型管理）/ 004（运行模式）对接
+- [x] 三文档评审
+- [x] 三文档批准（2026-08-05，Project Owner）
+- [x] `SettingsRepository`（Hive）+ `SecureKeyStore`（Secure Storage）落地
+- [x] 设置屏 + `ModelManagerNotifier`（消费 007 安装事件流）+ 模型管理 UI 落地
+- [x] 与模块 007（模型管理）/ 004（运行模式）对接
+- [ ] 编写测试用例 → 实现 → 验证（TDD 进行中，核心已覆盖；下列 v1 延后项待补）
+- [ ] HF token 输入字段（v1 从设置屏延后）
+- [ ] 温度（Advanced）滑块（v1 延后）
+- [ ] 超档安装二次确认对话框（v1 恒传 `allowOverTier: true`，确认流延后）
+- [ ] 真机 UAT（安装 Gemma 3 1B → 激活 → 006/009 读取模式/授权）
 
 ---
 
@@ -517,6 +523,8 @@ Spec：⚪ 待创建
 | 2026-08-05 | — | **Modules 004 & 007 closed out**: DOCUMENT-STATUS matrix + detail status set to ✅ 已完成, checklists reconciled. Root `README.md` module table synced. Only non-blocking follow-up remaining is ADR-005 on-device persona-quality validation (distill → chat → judge "像不像本人" on Gemma 3 1B) + T21 physical-device smoke. | Claude |
 | 2026-08-05 | — | **Phase 4 UI split into 3 modules — 9 draft docs created** (PRD/ERD/Spec ×3, 编号 006/009/010, 日期 20260805, 交叉引用互指): **006 聊天界面**（`ChatScreen` on 004 `ChatEngine` + 新增 SQLite `ChatHistoryRepository` 聊天历史；system prompt 仅 `PromptTemplate.render()`，对话无统计兜底；`sqflite_common_ffi` 宿主接缝 + 008 加密 `DatabaseFactory` 注入点；C1–C34）；**009 人物库与蒸馏**（新增 `PersonaRepository` = `PersonaCodec`+`PersonaDirectory`〔`MemoryPersonaDirectory` 宿主〕+`PersonaBytesTransform`〔008 接缝〕填补"仅内存无落盘"缺口 + 人物库屏 + 蒸馏流程屏驱动 004 `LlmPersonaBuilder`；`PersonaSummary` 读时派生；新增 `PersonaStoreException`；C1–C21）；**010 设置**（007 模型管理正式 UI 取代 dev harness + 运行模式 `RuntimeChoice` + 云端授权；`AppSettings`/`SettingsRepository`〔Hive〕/`SecureKeyStore`〔Secure Storage〕；honors 真实 `InstallErrorKind`；标记 DD-002 + `InMemoryModelStore`→磁盘缺口）。聊天历史存储定为 **SQLite**。矩阵行 006 → 📝/📝/📝，新增行 009/010；一致性核验通过（9 文件齐、交叉引用无缺失、共享契约命名一致：`PersonaRepository` 006↔009、`ChatHistoryRepository` 006 独有、`AppSettings`/`RuntimeChoice` 010 独有）。**未改任何源码/pubspec**，全部待评审批准后方可编码 | Claude |
 | 2026-08-05 | — | **PR #16 评审修订（Phase 4 九文档同升 v1.0.1，仍草稿）**：处理 1 Major + 2 Minor + 1 nit——(Major，模块 010) 安装状态与 **post-#14 真实流程**对齐：`flutter_gemma` 安装器实际只发 `downloading → ready` / `failed(canceled|network|unknownModel|authRequired|insufficientStorage|unsupportedDevice|unknown)`，**从不发 `ModelState.verifying` / `InstallErrorKind.corrupted`**（PR #14 移除了从未真正执行的 sha256 校验）；PRD-010 加"Install states — honesty note"、目标 4/F2/F9/进度控件/验收项均标注 `corrupted` 为 defensive-only，ERD-010 错误映射行 + SPEC-010 安装生命周期/E15/C8/C14 全部重述为 `downloading → ready`（`verifying`/`corrupted` 仅防御性处理、不作为预期步骤宣传）；**根因（模块 007 PRD/ERD/SPEC 与 `model_install.dart` 枚举 docstring 的旧 sha256/verifying 措辞）以 dated 勘误 blockquote 就地标注**（不重写已批准正文、待后续单独 reconcile）。(Minor 1) ERD-006 新增 **§3.4 Settings→`ChatOptions`/runtime 绑定接缝**（runtime→mode + PersonaRuntime 选择、cloudAuthorized、temperature、fail-safe 默认）。(Minor 2) ERD-010 新增 **`cloudKeyStoreProvider` 云端 API-key 读路径规格**，由 006 §3.4 与 009 蒸馏接缝共同消费（缺 key → 006 `RuntimeError.unauthorized` / 009 回落统计兜底；`maxPrivacy` 永不读 key）。(nit) ERD-006 "Depends on" 补列模块 010。**未改任何源码/pubspec**，仍草稿待批准 | Claude |
+| 2026-08-05 | — | ✅ **批准模块 010（设置）三文档**（Project Owner）：PRD/ERD/SPEC 状态转"已批准"、批准日期 2026-08-05、三文档升 v1.0.2。矩阵行 010 → ✅/✅/✅、三文档齐全、开发状态转"开发中"，解除阻塞，进入 TDD 编码（分支 `feature/PRD-010-settings`）。010 依赖 007/004 均已完成，可独立开发；006/009 仍草稿待批准 | Project Owner |
+| 2026-08-06 | PR #17 | **PR #17 评审修订（模块 010 实现 + 文档对账）**：处理 Owner 评审 2 Major + minors/test-gaps——(Major 1，代码) 密钥写入错误不再被静默吞掉：`settings_screen.dart` 的密钥 Save/Clear 改经 `_guarded` 包裹并 await（与非密钥 setter 一致，兑现 E17/C24"不吞错"不变量）；`appSettingsProvider` 补 `onSaveError`（记日志）并对 `loadInitial()` 加 `catchError`，keychain/Hive 读写失败不再逃逸至未处理 async zone。(Major 2，流程) **本条记录 v1.0.3 = 编码后文档-代码对账，非新批准**；追踪表（矩阵行 010 + 详细状态表）与 README 同步为"✅ v1.0.2 · 🔶 v1.0.3 待复批"，避免追踪表滞后于其所追踪文档；v1.0.3 增量（`cloudEndpoint`/`deactivate`/`allowOverTier` 等）**待 Owner 复批**。(minors) SPEC-010 §2.3/C2"四字段"→"五字段"；补测试缺口 G1（`copyWith` 保留非空字段分支）/G2（安装流原始错误→`failed(unknown)`）/G3（密钥写入失败不吞错，UI 层 SnackBar）。全套测试通过、`flutter analyze` 干净（仅遗留无关 `avoid_print`）| Claude |
 
 ---
 

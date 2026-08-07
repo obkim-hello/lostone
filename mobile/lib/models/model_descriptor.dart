@@ -85,6 +85,7 @@ class ModelDescriptor {
     required this.minTier,
     required this.sourceUrl,
     this.requiresToken = false,
+    this.description = '',
   });
 
   /// 稳定标识（如 `gemma3-1b-it-int4`）。
@@ -114,6 +115,10 @@ class ModelDescriptor {
   /// 是否需要 Hugging Face token。
   final bool requiresToken;
 
+  /// Plain-language, user-facing summary of what this model is good for and its
+  /// trade-offs (size vs. quality). Empty when no copy is provided.
+  final String description;
+
   @override
   bool operator ==(Object other) =>
       other is ModelDescriptor &&
@@ -125,18 +130,20 @@ class ModelDescriptor {
       setEquals(other.capabilities, capabilities) &&
       other.minTier == minTier &&
       other.sourceUrl == sourceUrl &&
-      other.requiresToken == requiresToken;
+      other.requiresToken == requiresToken &&
+      other.description == description;
 
   @override
   int get hashCode => Object.hash(
-        id,
-        displayName,
-        format,
-        family,
-        sizeBytes,
-        Object.hashAllUnordered(capabilities),
-        minTier,
-        sourceUrl,
-        requiresToken,
-      );
+    id,
+    displayName,
+    format,
+    family,
+    sizeBytes,
+    Object.hashAllUnordered(capabilities),
+    minTier,
+    sourceUrl,
+    requiresToken,
+    description,
+  );
 }

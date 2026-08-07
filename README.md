@@ -27,7 +27,7 @@
 
 ## 📚 项目状态
 
-**当前阶段**：Phase 1 - 数据导入（模块 002 开发中）｜ Phase 2 - Persona 生成（模块 003 ✅ 已完成）｜ Phase 3 - LLM 集成 ✅ 已完成（模块 007 模型管理 + 模块 004 LLM 集成，PR #14 merged 2026-08-05；host TDD 291 passing、analyze clean、iOS on-device install verified；ADR-005 on-device quality validation pending, non-blocking）｜ **Phase 4 - UI 实现 📝 文档中**（模块 006 聊天界面 + 009 人物库与蒸馏 + 010 设置，9 文档草稿完成，待评审批准）
+**当前阶段**：Phase 1 - 数据导入（模块 002 开发中）｜ Phase 2 - Persona 生成（模块 003 ✅ 已完成）｜ Phase 3 - LLM 集成 ✅ 已完成（模块 007 模型管理 + 模块 004 LLM 集成，PR #14 merged 2026-08-05；host TDD 291 passing、analyze clean、iOS on-device install verified；ADR-005 on-device quality validation pending, non-blocking）｜ **Phase 4 - UI 实现 🚧 进行中**（模块 010 设置 ✅ 已批准 v1.0.2（🔶 v1.0.3 待复批）· 开发中（PR #17）；模块 006 聊天界面 + 009 人物库与蒸馏 文档草稿完成，待评审批准）
 
 **已完成**：
 - ✅ 项目文档体系建立
@@ -43,7 +43,7 @@
 - 🚧 模块 002（数据导入）——三文档已批准（v1.0）；核心切片**已完成**（模型 + WeChatParser CSV/TXT/HTML 流式 + WeFlowParser（真实微信 WeFlow 导出 JSON/CSV/TXT/HTML 四格式）+ InstagramParser + WeiboParser（direct_messages API v2 JSON）+ IMessageParser（chat.db 只读，含 attributedBody 回退）+ PhotoExifParser（EXIF/GPS）+ MediaStore 分层字节落地（ERD §4.4）+ 预处理 + 导入编排 + Apple 时间转换 + Riverpod 导入状态层，测试 122/122、analyze 0 警告，四轮代理评审并修复 SPEC 合规缺口）；ERD §3.4 文件范围内的解析器全部落地，10 万条流式吞吐已宿主验证（ERD §7.3）；原生存储装配、导入 UI（Phase 4）、5GB 设备内存采样、微博/WeFlow 契约 Owner 终审分阶段推进
 - 📝 模块 006（聊天界面，Phase 4）——三文档**草稿完成**（PRD/ERD/Spec，编号 006，2026-08-05，待评审批准）。正式聊天界面：`ChatScreen` 消费模块 004 `ChatEngine`（流式对话 / 硬规则强制 / 本地云端切换）+ 模块 007 激活模型 + 模块 009 `PersonaRepository` 载入 `Persona`；**新增 SQLite 聊天历史**（`ChatHistoryRepository`）。system prompt 仅 `PromptTemplate.render()`、对话无统计兜底
 - 📝 模块 009（人物库与蒸馏，Phase 4）——三文档**草稿完成**（PRD/ERD/Spec，编号 009，2026-08-05，待评审批准）。**Persona 持久化 + 人物库 + 蒸馏流程**：新增 `PersonaRepository`（`PersonaCodec` + `PersonaDirectory` + `PersonaBytesTransform`〔008 加密接缝〕）填补"仅内存无落盘"缺口；人物库屏 + 蒸馏流程屏驱动模块 004 `LlmPersonaBuilder`；不重写 003/004（只读复用）
-- 📝 模块 010（设置，Phase 4）——三文档**草稿完成**（PRD/ERD/Spec，编号 010，2026-08-05，待评审批准）。**设置界面**：模块 007 模型管理正式 UI（取代 004 dev harness）+ 运行模式（本地/云端 `RuntimeChoice`）+ 云端 API Key 授权；`AppSettings`/`SettingsRepository`〔Hive〕/`SecureKeyStore`〔Secure Storage〕；标记 DD-002 + `InMemoryModelStore`→磁盘缺口
+- 🚧 模块 010（设置，Phase 4）——三文档**已批准**（v1.0.2，2026-08-05，Project Owner）；🔶 **v1.0.3 编码后文档-代码对账增量待 Owner 复批**（PR #17 评审 Major 2），**开发中**（TDD，分支 `feature/PRD-010-settings`）。**设置界面**：模块 007 模型管理正式 UI（取代 004 dev harness）+ 运行模式（本地/云端 `RuntimeChoice`）+ 云端 API Key 授权；`AppSettings`/`SettingsRepository`〔Hive〕/`SecureKeyStore`〔Secure Storage〕；标记 DD-002 + `InMemoryModelStore`→磁盘缺口
 
 **查看详细进度**：[开发路线图](docs/overview/ROADMAP.md) · [文档状态](docs/DOCUMENT-STATUS.md)
 
@@ -172,7 +172,7 @@ lostone/
 | 006 - 聊天界面（对话 + 聊天历史） | [PRD](docs/prd/PRD-Chat-Interface-006-20260805.md) | [ERD](docs/erd/ERD-Chat-Interface-006-20260805.md) | [Spec](docs/spec/SPEC-Chat-Interface-006-20260805.md) | 📝 草稿（待评审批准） |
 | 007 - 模型管理（提前至 Phase 3） | [PRD](docs/prd/PRD-Model-Management-007-20260802.md) | [ERD](docs/erd/ERD-Model-Management-007-20260802.md) | [Spec](docs/spec/SPEC-Model-Management-007-20260802.md) | ✅ 已批准（v1.0.1）· ✅ 已完成 |
 | 009 - 人物库与蒸馏 | [PRD](docs/prd/PRD-Persona-Library-009-20260805.md) | [ERD](docs/erd/ERD-Persona-Library-009-20260805.md) | [Spec](docs/spec/SPEC-Persona-Library-009-20260805.md) | 📝 草稿（待评审批准） |
-| 010 - 设置（模型管理 UI + 运行模式 + 云端授权） | [PRD](docs/prd/PRD-Settings-010-20260805.md) | [ERD](docs/erd/ERD-Settings-010-20260805.md) | [Spec](docs/spec/SPEC-Settings-010-20260805.md) | 📝 草稿（待评审批准） |
+| 010 - 设置（模型管理 UI + 运行模式 + 云端授权） | [PRD](docs/prd/PRD-Settings-010-20260805.md) | [ERD](docs/erd/ERD-Settings-010-20260805.md) | [Spec](docs/spec/SPEC-Settings-010-20260805.md) | ✅ 已批准（v1.0.2，2026-08-05）· 🔶 v1.0.3 待复批 · 🚧 开发中（PR #17）|
 | ... | ... | ... | ... | ... |
 
 **查看完整状态**：[DOCUMENT-STATUS.md](docs/DOCUMENT-STATUS.md)
@@ -186,7 +186,7 @@ lostone/
 | **框架** | Flutter 3.38+ |
 | **语言** | Dart 3.11+ |
 | **本地 AI** | Google AI Edge LiteRT |
-| **支持模型** | Gemma 4, Llama 3.2, Qwen 2.5, Phi-3 |
+| **模型目录** | SmolLM2 135M（冒烟）、Gemma 3 1B、Gemma 4 E2B、Gemma 4 E4B（flutter_gemma 引擎另支持 Llama/Qwen/Phi 等）|
 | **云端 API** | OpenAI, Anthropic, Google Gemini |
 | **状态管理** | Riverpod |
 | **本地数据库** | Hive + SQLite |
