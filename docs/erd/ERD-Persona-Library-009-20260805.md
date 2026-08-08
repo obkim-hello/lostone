@@ -2,8 +2,8 @@
 
 > Engineering Requirements Document — Persona Library & Distill (persona persistence, library screen, and the distill/creation flow)
 >
-> **Version**: v1.1.0 (draft)
-> **Status**: 📝 Draft (pending review)
+> **Version**: v1.1.1
+> **Status**: ✅ Approved (Project Owner, 2026-08-07)
 > **Author**: Claude
 > **Date**: 2026-08-05
 > **Priority**: P0
@@ -317,3 +317,4 @@ final StateNotifierProvider<DistillNotifier, DistillState>
 | v1.0 | 2026-08-05 | Initial draft (PersonaRepository + library + distill flow; 008 encryption seam + filesystem test seam; two StateNotifiers) | Claude |
 | v1.0.1 | 2026-08-05 | PR #16 review — added Settings→distill runtime binding seam (`cloudKeyStoreProvider` read-path, aligns with ERD-006 §3.4) | Claude |
 | v1.1.0 | 2026-08-07 | Scope expansion — import UI entry point: new `FilePickerFacade` seam (default `file_picker`, `FakeFilePicker` in tests) composed with 002's reused `ImportNotifier.importFiles(...)` at the head of `DistillFlowScreen`; no new import notifier/state. Updated goals, §3 diagram/components, 002 dependency row, §5.2 seam, §7.2 widget tests, `file_picker` dependency. **PR #18 self-review:** seam split into `pickFiles()` / `pickDirectory()` (directory sources need iOS security-scoped bookmark, ERD-002 §676); pinned `^8.0.0`; softened §10 entitlement note; added §11 persistent-bookmark Technical Debt | Claude |
+| v1.1.1 | 2026-08-07 | ✅ **Approved (Project Owner)** — trio status → Approved, approval date 2026-08-07; development unblocked. No content change | Project Owner |

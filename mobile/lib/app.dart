@@ -5,6 +5,7 @@ import 'models/app_config.dart';
 import 'providers/app_providers.dart';
 import 'screens/home_screen.dart';
 import 'theme/app_theme.dart';
+import 'widgets/debug_tap_detector.dart';
 
 /// Lostone 应用根组件。
 ///
@@ -21,6 +22,8 @@ class LostoneApp extends ConsumerWidget {
       debugShowCheckedModeBanner: config.isDebug,
       theme: AppTheme.light(),
       home: const HomeScreen(),
+      builder: (BuildContext context, Widget? child) =>
+          DebugTapDetector(child: child ?? const SizedBox.shrink()),
     );
   }
 }

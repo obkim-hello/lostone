@@ -63,6 +63,21 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   Future<void> setCloudAuthorized(bool authorized) =>
       _persist(state.copyWith(cloudAuthorized: authorized));
 
+  /// Sets the cloud API wire format (OpenAI/Anthropic) and persists it.
+  Future<void> setCloudProvider(CloudProvider provider) =>
+      _persist(state.copyWith(cloudProvider: provider));
+
+  /// Sets the cloud model name (non-secret) and persists it; pass `null` or an
+  /// empty string to fall back to the provider default.
+  Future<void> setCloudModel(String? model) {
+    final String? trimmed = model?.trim();
+    return _persist(
+      state.copyWith(
+        cloudModel: (trimmed == null || trimmed.isEmpty) ? null : trimmed,
+      ),
+    );
+  }
+
   /// Sets the cloud endpoint base URL (non-secret) and persists it; pass `null`
   /// or an empty string to fall back to the provider default.
   Future<void> setCloudEndpoint(String? endpoint) {

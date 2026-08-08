@@ -33,9 +33,10 @@ class InMemorySettingsRepository implements SettingsRepository {
 /// Hive-backed [SettingsRepository] (ERD-010 §4.3).
 ///
 /// Stores one scalar per field in the `settings` box: `runtime` (enum name),
-/// `cloudAuthorized` (bool), `cloudEndpoint` (String?), `activeModelId`
-/// (String?), `chatTemperature` (double). Missing keys fall back to defaults.
-/// Contains no secret fields.
+/// `cloudAuthorized` (bool), `cloudProvider` (enum name), `cloudEndpoint`
+/// (String?), `cloudModel` (String?), `activeModelId` (String?),
+/// `chatTemperature` (double). Missing keys fall back to defaults. Contains no
+/// secret fields.
 class HiveSettingsRepository implements SettingsRepository {
   /// Wraps an already-open Hive [box].
   HiveSettingsRepository({required Box<dynamic> box}) : _box = box;
@@ -45,7 +46,9 @@ class HiveSettingsRepository implements SettingsRepository {
 
   static const String _kRuntime = 'runtime';
   static const String _kCloudAuthorized = 'cloudAuthorized';
+  static const String _kCloudProvider = 'cloudProvider';
   static const String _kCloudEndpoint = 'cloudEndpoint';
+  static const String _kCloudModel = 'cloudModel';
   static const String _kActiveModelId = 'activeModelId';
   static const String _kChatTemperature = 'chatTemperature';
 
@@ -59,7 +62,9 @@ class HiveSettingsRepository implements SettingsRepository {
       cloudAuthorized:
           _box.get(_kCloudAuthorized, defaultValue: defaults.cloudAuthorized)
               as bool,
+      cloudProvider: _readCloudProvider(defaults.cloudProvider),
       cloudEndpoint: _box.get(_kCloudEndpoint) as String?,
+      cloudModel: _box.get(_kCloudModel) as String?,
       activeModelId: _box.get(_kActiveModelId) as String?,
       chatTemperature:
           (_box.get(_kChatTemperature, defaultValue: defaults.chatTemperature)
@@ -73,17 +78,19 @@ class HiveSettingsRepository implements SettingsRepository {
     await _box.putAll(<String, dynamic>{
       _kRuntime: settings.runtime.name,
       _kCloudAuthorized: settings.cloudAuthorized,
+      _kCloudProvider: settings.cloudProvider.name,
       _kChatTemperature: settings.chatTemperature,
     });
-    if (settings.cloudEndpoint == null) {
-      await _box.delete(_kCloudEndpoint);
+    await _putOrDelete(_kCloudEndpoint, settings.cloudEndpoint);
+    await _putOrDelete(_kCloudModel, settings.cloudModel);
+    await _putOrDelete(_kActiveModelId, settings.activeModelId);
+  }
+
+  Future<void> _putOrDelete(String key, String? value) async {
+    if (value == null) {
+      await _box.delete(key);
     } else {
-      await _box.put(_kCloudEndpoint, settings.cloudEndpoint);
-    }
-    if (settings.activeModelId == null) {
-      await _box.delete(_kActiveModelId);
-    } else {
-      await _box.put(_kActiveModelId, settings.activeModelId);
+      await _box.put(key, value);
     }
   }
 
@@ -94,6 +101,17 @@ class HiveSettingsRepository implements SettingsRepository {
     }
     return RuntimeChoice.values.firstWhere(
       (RuntimeChoice c) => c.name == name,
+      orElse: () => fallback,
+    );
+  }
+
+  CloudProvider _readCloudProvider(CloudProvider fallback) {
+    final Object? name = _box.get(_kCloudProvider);
+    if (name is! String) {
+      return fallback;
+    }
+    return CloudProvider.values.firstWhere(
+      (CloudProvider p) => p.name == name,
       orElse: () => fallback,
     );
   }

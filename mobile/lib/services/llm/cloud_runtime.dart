@@ -1,5 +1,42 @@
 import 'persona_runtime.dart';
 
+/// Cloud API wire format a request is shaped for (SPEC-010 cloud section).
+///
+/// Determines the endpoint path, auth header, request body, and response
+/// parsing a [CloudTransport] uses. Two formats are supported today: the
+/// OpenAI-compatible Chat Completions API and Anthropic's Messages API.
+enum CloudProvider {
+  /// OpenAI-compatible Chat Completions (`POST /chat/completions`,
+  /// `Authorization: Bearer`). Also covers Azure OpenAI, Together, Groq, and
+  /// other OpenAI-compatible gateways via a custom endpoint.
+  openai,
+
+  /// Anthropic Messages API (`POST /messages`, `x-api-key` +
+  /// `anthropic-version`).
+  anthropic,
+}
+
+/// Presentation + default wiring for each [CloudProvider].
+extension CloudProviderInfo on CloudProvider {
+  /// Human-readable name for the settings UI.
+  String get label => switch (this) {
+        CloudProvider.openai => 'OpenAI (compatible)',
+        CloudProvider.anthropic => 'Anthropic (Claude)',
+      };
+
+  /// Default base URL used when the user leaves the endpoint blank.
+  String get defaultEndpoint => switch (this) {
+        CloudProvider.openai => 'https://api.openai.com/v1',
+        CloudProvider.anthropic => 'https://api.anthropic.com/v1',
+      };
+
+  /// Default model name used when the user leaves the model blank.
+  String get defaultModel => switch (this) {
+        CloudProvider.openai => 'gpt-4o-mini',
+        CloudProvider.anthropic => 'claude-3-5-sonnet-latest',
+      };
+}
+
 /// 一次云端推理请求（provider 无关）。
 ///
 /// [apiKey] 由构造方从 Flutter Secure Storage 读出后注入 [CloudRuntime]，再随请求
@@ -40,7 +77,11 @@ class CloudRequest {
 /// 分类逻辑因此可在宿主用假 transport 断言，无需真实网络。
 class CloudHttpException implements Exception {
   /// 创建异常。
-  const CloudHttpException({this.statusCode, this.isNetworkError = false});
+  const CloudHttpException({
+    this.statusCode,
+    this.isNetworkError = false,
+    this.detail,
+  });
 
   /// HTTP 状态码；连接层失败时为 `null`。
   final int? statusCode;
@@ -48,9 +89,14 @@ class CloudHttpException implements Exception {
   /// 是否为连接/超时等网络层失败（无状态码）。
   final bool isNetworkError;
 
+  /// Human-readable detail (a truncated response body, a parse hint, or a
+  /// connection-error message) surfaced to the user by the "Test connection"
+  /// action so a misconfigured endpoint/key is diagnosable, not just "failed".
+  final String? detail;
+
   @override
-  String toString() =>
-      'CloudHttpException(statusCode: $statusCode, network: $isNetworkError)';
+  String toString() => 'CloudHttpException(statusCode: $statusCode, '
+      'network: $isNetworkError, detail: $detail)';
 }
 
 /// 云端传输抽象（可注入的接缝）。
@@ -78,6 +124,7 @@ class CloudRuntime implements PersonaRuntime {
     required this.authorized,
     required this.model,
     this.apiKey,
+    this.apiKeyLoader,
     this.capabilities = const RuntimeCapabilities(
       contextTokens: 128000,
       maxOutputTokens: 4096,
@@ -93,20 +140,44 @@ class CloudRuntime implements PersonaRuntime {
   /// 目标模型名。
   final String model;
 
-  /// 鉴权密钥；`null`/空即视为未配置。
+  /// 鉴权密钥；`null`/空即视为未配置。优先于 [apiKeyLoader]。
   final String? apiKey;
+
+  /// Async key source used when [apiKey] is null/empty (e.g. reading Flutter
+  /// Secure Storage lazily so a synchronous provider can build this runtime
+  /// without holding the secret in memory).
+  final Future<String?> Function()? apiKeyLoader;
 
   @override
   final RuntimeCapabilities capabilities;
 
-  bool get _hasKey => apiKey != null && apiKey!.isNotEmpty;
+  Future<String?> _resolveKey() async {
+    if (apiKey != null && apiKey!.isNotEmpty) {
+      return apiKey;
+    }
+    final Future<String?> Function()? loader = apiKeyLoader;
+    return loader == null ? null : loader();
+  }
 
   @override
-  Future<bool> isAvailable() async => authorized && _hasKey;
+  Future<bool> isAvailable() async {
+    if (!authorized) {
+      return false;
+    }
+    final String? key = await _resolveKey();
+    return key != null && key.isNotEmpty;
+  }
 
   @override
   Future<RuntimeResult> generate(String prompt, {double temperature = 0.2}) async {
-    if (!authorized || !_hasKey) {
+    if (!authorized) {
+      return const RuntimeResult.failure(
+        RuntimeError.unauthorized,
+        source: RuntimeSource.cloud,
+      );
+    }
+    final String? key = await _resolveKey();
+    if (key == null || key.isEmpty) {
       return const RuntimeResult.failure(
         RuntimeError.unauthorized,
         source: RuntimeSource.cloud,
@@ -117,7 +188,7 @@ class CloudRuntime implements PersonaRuntime {
         CloudRequest(
           prompt: prompt,
           model: model,
-          apiKey: apiKey!,
+          apiKey: key,
           temperature: temperature,
         ),
       );
@@ -133,14 +204,18 @@ class CloudRuntime implements PersonaRuntime {
     double temperature = 0.7,
     int? maxNewTokens,
   }) async* {
-    if (!authorized || !_hasKey) {
+    if (!authorized) {
+      throw const RuntimeException(RuntimeError.unauthorized);
+    }
+    final String? key = await _resolveKey();
+    if (key == null || key.isEmpty) {
       throw const RuntimeException(RuntimeError.unauthorized);
     }
     final Stream<String> upstream = transport.stream(
       CloudRequest(
         prompt: prompt,
         model: model,
-        apiKey: apiKey!,
+        apiKey: key,
         temperature: temperature,
         maxNewTokens: maxNewTokens,
         stream: true,

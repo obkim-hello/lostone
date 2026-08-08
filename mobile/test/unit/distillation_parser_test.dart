@@ -48,6 +48,20 @@ void main() {
       expect(d.displayName, '阿明');
     });
 
+    test('容忍列表/对象末尾多余逗号', () {
+      final DistilledPersona d =
+          parser.parse('{"tags": ["a", "b",], "preferences": ["x",],}');
+      expect(d.tags, <String>['a', 'b']);
+      expect(d.preferences, <String>['x']);
+    });
+
+    test('容忍模型追加的第二个对象（取首个完整对象）', () {
+      const String raw =
+          '{"identity": {"displayName": "阿明"}}\n{"note": "ignored"}';
+      final DistilledPersona d = parser.parse(raw);
+      expect(d.displayName, '阿明');
+    });
+
     test('缺省字段回落默认（不抛错）', () {
       final DistilledPersona d = parser.parse('{"identity": {}}');
       expect(d.displayName, isNull);

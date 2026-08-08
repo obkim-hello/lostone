@@ -78,6 +78,25 @@ class PersonaSource {
   /// 全体并入人格，各层与 identity 的 `confidence` 强制 `low`。
   final bool segmentationResolved;
 
+  /// 返回一个按需替换字段的副本。
+  PersonaSource copyWith({
+    Set<DataSource>? sources,
+    int? totalMessages,
+    int? personMessages,
+    Set<String>? mergedMessageKeyHashes,
+    List<SourceRevision>? revisions,
+    bool? segmentationResolved,
+  }) =>
+      PersonaSource(
+        sources: sources ?? this.sources,
+        totalMessages: totalMessages ?? this.totalMessages,
+        personMessages: personMessages ?? this.personMessages,
+        mergedMessageKeyHashes:
+            mergedMessageKeyHashes ?? this.mergedMessageKeyHashes,
+        revisions: revisions ?? this.revisions,
+        segmentationResolved: segmentationResolved ?? this.segmentationResolved,
+      );
+
   @override
   bool operator ==(Object other) =>
       other is PersonaSource &&
@@ -167,6 +186,38 @@ class Persona {
   /// 每次 `build`/`update` 重新计算，不套用 `hardRules` 的「永不覆盖」语义
   /// （见 [DD-003](../../../docs/overview/DESIGN-DEBT.md)）。
   final List<String> notes;
+
+  /// 返回一个按需替换字段的副本。
+  Persona copyWith({
+    String? id,
+    int? schemaVersion,
+    int? personaVersion,
+    DateTime? generatedAt,
+    Identity? identity,
+    HardRules? hardRules,
+    ExpressionStyle? expressionStyle,
+    EmotionalLogic? emotionalLogic,
+    RelationalBehavior? relationalBehavior,
+    List<PersonaTag>? tags,
+    Memories? memories,
+    PersonaSource? source,
+    List<String>? notes,
+  }) =>
+      Persona(
+        id: id ?? this.id,
+        schemaVersion: schemaVersion ?? this.schemaVersion,
+        personaVersion: personaVersion ?? this.personaVersion,
+        generatedAt: generatedAt ?? this.generatedAt,
+        identity: identity ?? this.identity,
+        hardRules: hardRules ?? this.hardRules,
+        expressionStyle: expressionStyle ?? this.expressionStyle,
+        emotionalLogic: emotionalLogic ?? this.emotionalLogic,
+        relationalBehavior: relationalBehavior ?? this.relationalBehavior,
+        tags: tags ?? this.tags,
+        memories: memories ?? this.memories,
+        source: source ?? this.source,
+        notes: notes ?? this.notes,
+      );
 
   @override
   bool operator ==(Object other) =>

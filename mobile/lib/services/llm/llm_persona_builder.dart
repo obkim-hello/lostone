@@ -24,6 +24,18 @@ enum PersonaRuntimeMode {
   maxPrivacy,
 }
 
+/// 蒸馏被协作式取消时抛出（[LlmBuildOptions.shouldContinue] 返回 `false`）。
+///
+/// 进行中的单块推理不可中断，故取消在**块边界**生效：当前块跑完即抛出，
+/// 调用方据此丢弃进度、回到初始态（不落盘、不视作失败）。
+class DistillCancelledException implements Exception {
+  /// 创建取消异常。
+  const DistillCancelledException();
+
+  @override
+  String toString() => 'DistillCancelledException';
+}
+
 /// LLM 蒸馏生成选项（ERD-004 §3.1）。
 ///
 /// 兼含切分/置信/时钟等模块 003 兜底所需字段，便于 LLM 路径失败时无缝回落。
@@ -42,6 +54,7 @@ class LlmBuildOptions {
     this.minMessagesForMedium = 50,
     this.topN = 20,
     this.clock,
+    this.beforeChunk,
   });
 
   /// 运行模式。
@@ -79,6 +92,43 @@ class LlmBuildOptions {
 
   /// 注入式时钟（仅用于 `generatedAt` 元信息，绝不入分析结论）。
   final DateTime Function()? clock;
+
+  /// 协作式控制闸门：**每块蒸馏前** await。用于暂停/恢复/取消——暂停时其
+  /// 返回的 Future 挂起，恢复时完成；取消则抛 [DistillCancelledException]。
+  /// 为空表示不可控。进行中的单块推理不可中断，故控制在**块边界**生效。
+  final Future<void> Function()? beforeChunk;
+
+  /// 返回一个按需替换字段的副本。
+  LlmBuildOptions copyWith({
+    PersonaRuntimeMode? mode,
+    String? modelId,
+    double? temperature,
+    int? maxChunkMessages,
+    bool? cloudAuthorized,
+    Set<String>? personSenderIds,
+    Set<String>? myIdentifiers,
+    String? defaultDisplayName,
+    int? minMessagesForHigh,
+    int? minMessagesForMedium,
+    int? topN,
+    DateTime Function()? clock,
+    Future<void> Function()? beforeChunk,
+  }) =>
+      LlmBuildOptions(
+        mode: mode ?? this.mode,
+        modelId: modelId ?? this.modelId,
+        temperature: temperature ?? this.temperature,
+        maxChunkMessages: maxChunkMessages ?? this.maxChunkMessages,
+        cloudAuthorized: cloudAuthorized ?? this.cloudAuthorized,
+        personSenderIds: personSenderIds ?? this.personSenderIds,
+        myIdentifiers: myIdentifiers ?? this.myIdentifiers,
+        defaultDisplayName: defaultDisplayName ?? this.defaultDisplayName,
+        minMessagesForHigh: minMessagesForHigh ?? this.minMessagesForHigh,
+        minMessagesForMedium: minMessagesForMedium ?? this.minMessagesForMedium,
+        topN: topN ?? this.topN,
+        clock: clock ?? this.clock,
+        beforeChunk: beforeChunk ?? this.beforeChunk,
+      );
 }
 
 /// LLM 蒸馏 Persona 构建器（ERD-004 §4）。
@@ -177,13 +227,25 @@ class DefaultLlmPersonaBuilder implements LlmPersonaBuilder {
     _log('蒸馏分块数：${prompts.length}');
 
     final List<DistilledPersona> parts = <DistilledPersona>[];
-    for (final String prompt in prompts) {
+    for (int i = 0; i < prompts.length; i++) {
+      if (options.beforeChunk != null) {
+        await options.beforeChunk!();
+      }
+      _log('蒸馏第 ${i + 1}/${prompts.length} 块…');
       final DistilledPersona? d =
-          await _generateAndParse(runtime, prompt, options.temperature);
+          await _generateAndParse(runtime, prompts[i], options.temperature);
       if (d == null) {
-        return _statistical(conversation, options, note: '统计兜底：LLM 生成或解析失败');
+        _log('跳过第 ${i + 1}/${prompts.length} 块（生成或解析失败）');
+        continue;
       }
       parts.add(d);
+    }
+    if (parts.isEmpty) {
+      return _statistical(conversation, options, note: '统计兜底：LLM 生成或解析失败');
+    }
+    if (parts.length < prompts.length) {
+      _log('已跳过 ${prompts.length - parts.length}/${prompts.length} 块，'
+          '基于 ${parts.length} 块合成');
     }
 
     final DistilledPersona distilled = _mergeDistilled(parts);
@@ -628,9 +690,11 @@ class DefaultLlmPersonaBuilder implements LlmPersonaBuilder {
     String prompt,
     double temperature,
   ) async {
+    String current = prompt;
     for (int attempt = 0; attempt <= maxParseRetries; attempt++) {
+      final double temp = attempt == 0 ? temperature : 0.0;
       final RuntimeResult result =
-          await runtime.generate(prompt, temperature: temperature);
+          await runtime.generate(current, temperature: temp);
       if (!result.isOk) {
         _log('蒸馏生成失败：${result.error}');
         return null;
@@ -639,6 +703,7 @@ class DefaultLlmPersonaBuilder implements LlmPersonaBuilder {
         return parser.parse(result.text);
       } on DistillationFormatException catch (e) {
         _log('蒸馏解析失败（第 ${attempt + 1} 次）：${e.message}');
+        current = composer.repairPrompt(prompt);
       }
     }
     return null;

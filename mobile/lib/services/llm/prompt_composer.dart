@@ -39,6 +39,15 @@ class PromptComposer {
     return prompts;
   }
 
+  /// 修复重提示：在原 [prompt] 上追加「只输出 JSON」的强约束。
+  ///
+  /// 用于模型上一轮返回散文/非法 JSON 时的重试（SPEC-004 §5.8）：强调仅输出单个
+  /// JSON 对象、首字符 `{`、无前言/围栏，尽量把文本回答矫正回可解析结构。
+  String repairPrompt(String prompt) => '''
+$prompt
+
+【重要·格式修复】上一次的回答不是合法 JSON。请**只输出一个 JSON 对象**：不要任何解释、前言、思考过程或 ``` markdown 代码围栏；第一个字符必须是 `{`，最后一个字符必须是 `}`。''';
+
   String _promptFor(List<Message> messages, int chunkIndex, int chunkTotal) {
     final StringBuffer corpus = StringBuffer();
     for (int i = 0; i < messages.length; i++) {
