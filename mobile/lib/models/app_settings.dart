@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
 
+import '../services/llm/cloud_runtime.dart' show CloudProvider, CloudProviderInfo;
 import '../services/llm/llm_persona_builder.dart' show PersonaRuntimeMode;
+
+export '../services/llm/cloud_runtime.dart' show CloudProvider, CloudProviderInfo;
 
 /// User-facing runtime choice (ERD-010 §4.1); maps 1:1 to Module 004
 /// [PersonaRuntimeMode].
@@ -35,7 +38,9 @@ class AppSettings {
   const AppSettings({
     this.runtime = RuntimeChoice.local,
     this.cloudAuthorized = false,
+    this.cloudProvider = CloudProvider.openai,
     this.cloudEndpoint,
+    this.cloudModel,
     this.activeModelId,
     this.chatTemperature = 0.7,
   });
@@ -46,9 +51,18 @@ class AppSettings {
   /// Whether the user has opted in to cloud inference (default `false`).
   final bool cloudAuthorized;
 
-  /// Base URL of the OpenAI-compatible cloud endpoint, or `null` to use the
-  /// provider default. Non-secret (the API key lives only in secure storage).
+  /// Cloud API wire format (default [CloudProvider.openai]). Selects the
+  /// endpoint path, auth header, and request/response shape.
+  final CloudProvider cloudProvider;
+
+  /// Base URL of the cloud endpoint, or `null` to use the provider default
+  /// ([CloudProviderInfo.defaultEndpoint]). Non-secret (the API key lives only
+  /// in secure storage).
   final String? cloudEndpoint;
+
+  /// Target cloud model name (e.g. `gpt-4o-mini`, `claude-3-5-sonnet-latest`),
+  /// or `null` to use the provider default ([CloudProviderInfo.defaultModel]).
+  final String? cloudModel;
 
   /// Mirror of Module 007's active model id (source of truth remains
   /// `ModelRepository.getActiveModelHandle`); `null` when none is active.
@@ -60,23 +74,41 @@ class AppSettings {
   /// The Module 004 runtime mode this settings value maps to.
   PersonaRuntimeMode get runtimeMode => toRuntimeMode(runtime);
 
+  /// Base URL to call: [cloudEndpoint] when set, else the provider default.
+  String get effectiveCloudEndpoint =>
+      (cloudEndpoint == null || cloudEndpoint!.isEmpty)
+          ? cloudProvider.defaultEndpoint
+          : cloudEndpoint!;
+
+  /// Model name to call: [cloudModel] when set, else the provider default.
+  String get effectiveCloudModel =>
+      (cloudModel == null || cloudModel!.isEmpty)
+          ? cloudProvider.defaultModel
+          : cloudModel!;
+
   /// Returns a copy with the given overrides.
   ///
-  /// [activeModelId] is nullable-aware: omit it to keep the current value, or
-  /// pass `null` explicitly to clear the active model.
+  /// [cloudEndpoint], [cloudModel], and [activeModelId] are nullable-aware: omit
+  /// to keep the current value, or pass `null` explicitly to clear.
   AppSettings copyWith({
     RuntimeChoice? runtime,
     bool? cloudAuthorized,
+    CloudProvider? cloudProvider,
     Object? cloudEndpoint = _unset,
+    Object? cloudModel = _unset,
     Object? activeModelId = _unset,
     double? chatTemperature,
   }) {
     return AppSettings(
       runtime: runtime ?? this.runtime,
       cloudAuthorized: cloudAuthorized ?? this.cloudAuthorized,
+      cloudProvider: cloudProvider ?? this.cloudProvider,
       cloudEndpoint: identical(cloudEndpoint, _unset)
           ? this.cloudEndpoint
           : cloudEndpoint as String?,
+      cloudModel: identical(cloudModel, _unset)
+          ? this.cloudModel
+          : cloudModel as String?,
       activeModelId: identical(activeModelId, _unset)
           ? this.activeModelId
           : activeModelId as String?,
@@ -89,7 +121,9 @@ class AppSettings {
       other is AppSettings &&
       other.runtime == runtime &&
       other.cloudAuthorized == cloudAuthorized &&
+      other.cloudProvider == cloudProvider &&
       other.cloudEndpoint == cloudEndpoint &&
+      other.cloudModel == cloudModel &&
       other.activeModelId == activeModelId &&
       other.chatTemperature == chatTemperature;
 
@@ -97,7 +131,9 @@ class AppSettings {
   int get hashCode => Object.hash(
     runtime,
     cloudAuthorized,
+    cloudProvider,
     cloudEndpoint,
+    cloudModel,
     activeModelId,
     chatTemperature,
   );
@@ -105,6 +141,7 @@ class AppSettings {
   @override
   String toString() =>
       'AppSettings(runtime: $runtime, cloudAuthorized: $cloudAuthorized, '
-      'cloudEndpoint: $cloudEndpoint, activeModelId: $activeModelId, '
+      'cloudProvider: $cloudProvider, cloudEndpoint: $cloudEndpoint, '
+      'cloudModel: $cloudModel, activeModelId: $activeModelId, '
       'chatTemperature: $chatTemperature)';
 }

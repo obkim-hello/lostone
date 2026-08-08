@@ -160,4 +160,75 @@ void main() {
       );
     });
   });
+
+  group('CloudRuntime · apiKeyLoader（懒读密钥）', () {
+    CloudRuntime loaderRuntime(
+      _FakeTransport transport, {
+      required Future<String?> Function() loader,
+    }) =>
+        CloudRuntime(
+          transport: transport,
+          authorized: true,
+          apiKey: null,
+          apiKeyLoader: loader,
+          model: 'gpt-4o',
+        );
+
+    test('apiKey 为空时经 loader 取密钥 → isAvailable true', () async {
+      final CloudRuntime r =
+          loaderRuntime(_FakeTransport(), loader: () async => 'sk-lazy');
+      expect(await r.isAvailable(), isTrue);
+    });
+
+    test('loader 返回空 → isAvailable false，generate unauthorized', () async {
+      final _FakeTransport t = _FakeTransport();
+      final CloudRuntime r = loaderRuntime(t, loader: () async => '');
+      expect(await r.isAvailable(), isFalse);
+      expect((await r.generate('嗨')).error, RuntimeError.unauthorized);
+      expect(t.completeCalls, isEmpty);
+    });
+
+    test('generate 经 loader 密钥 → 请求携带该密钥', () async {
+      final _FakeTransport t = _FakeTransport(completeText: 'ok');
+      final CloudRuntime r = loaderRuntime(t, loader: () async => 'sk-lazy');
+      final RuntimeResult res = await r.generate('嗨');
+      expect(res.isOk, isTrue);
+      expect(t.completeCalls.single.apiKey, 'sk-lazy');
+    });
+
+    test('apiKey 非空时优先于 loader（loader 不调用）', () async {
+      final _FakeTransport t = _FakeTransport();
+      bool loaderCalled = false;
+      final CloudRuntime r = CloudRuntime(
+        transport: t,
+        authorized: true,
+        apiKey: 'sk-explicit',
+        apiKeyLoader: () async {
+          loaderCalled = true;
+          return 'sk-lazy';
+        },
+        model: 'gpt-4o',
+      );
+      await r.generate('嗨');
+      expect(loaderCalled, isFalse);
+      expect(t.completeCalls.single.apiKey, 'sk-explicit');
+    });
+  });
+
+  group('CloudProviderInfo · 默认线缆', () {
+    test('OpenAI 默认端点/模型/标签', () {
+      expect(CloudProvider.openai.defaultEndpoint, 'https://api.openai.com/v1');
+      expect(CloudProvider.openai.defaultModel, 'gpt-4o-mini');
+      expect(CloudProvider.openai.label, 'OpenAI (compatible)');
+    });
+
+    test('Anthropic 默认端点/模型/标签', () {
+      expect(
+        CloudProvider.anthropic.defaultEndpoint,
+        'https://api.anthropic.com/v1',
+      );
+      expect(CloudProvider.anthropic.defaultModel, 'claude-3-5-sonnet-latest');
+      expect(CloudProvider.anthropic.label, 'Anthropic (Claude)');
+    });
+  });
 }

@@ -225,6 +225,30 @@ void main() {
     });
   });
 
+  group('cloud provider + model setters', () {
+    test('setCloudProvider persists and survives reload', () async {
+      final InMemorySettingsRepository repo = InMemorySettingsRepository();
+      final SettingsNotifier notifier = _build(repository: repo);
+      await notifier.loadInitial();
+
+      await notifier.setCloudProvider(CloudProvider.anthropic);
+
+      expect(notifier.state.cloudProvider, CloudProvider.anthropic);
+      expect((await repo.load()).cloudProvider, CloudProvider.anthropic);
+    });
+
+    test('setCloudModel trims, blanks map to null (provider default)', () async {
+      final SettingsNotifier notifier = _build();
+      await notifier.loadInitial();
+
+      await notifier.setCloudModel('  claude-3-5-sonnet-latest  ');
+      expect(notifier.state.cloudModel, 'claude-3-5-sonnet-latest');
+
+      await notifier.setCloudModel('   ');
+      expect(notifier.state.cloudModel, isNull);
+    });
+  });
+
   group('G1 copyWith preserves set fields on unrelated writes', () {
     test('activeModelId/cloudEndpoint survive a runtime change', () async {
       final SettingsNotifier notifier = _build();

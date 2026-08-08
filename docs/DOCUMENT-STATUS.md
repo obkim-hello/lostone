@@ -16,7 +16,7 @@
 | 006 | 聊天界面（对话 + 聊天历史 SQLite，Phase 4）| 📝 草稿 | 📝 草稿 | 📝 草稿 | ⚠️ 草稿完成 | 🚫 阻塞 |
 | 007 | 模型管理（提前至 Phase 3，004 本地路径前置）| ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 是 | ✅ 已完成 |
 | 008 | 数据安全 | ⚪ 待创建 | ⚪ 待创建 | ⚪ 待创建 | ❌ 否 | 🚫 阻塞 |
-| 009 | 人物库与蒸馏（Persona 持久化 + 库 + 蒸馏流程 + 导入 UI 入口，Phase 4，v1.1.1）| ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 三文档齐全 | 🚧 开发中 |
+| 009 | 人物库与蒸馏（Persona 持久化 + 库 + 蒸馏流程 + 导入 UI 入口，Phase 4，v1.1.1）| ✅ 已批准 | ✅ 已批准 | ✅ 已批准 | ✅ 三文档齐全 | ✅ 已实现（host TDD，C21 真机待验） |
 | 010 | 设置（模型管理 UI + 运行模式 + 云端授权，Phase 4）| ✅ v1.0.2（🔶 v1.0.3 待复批）| ✅ v1.0.2（🔶 v1.0.3 待复批）| ✅ v1.0.2（🔶 v1.0.3 待复批）| ✅ 是 | 🚧 开发中（PR #17）|
 
 ---
@@ -289,7 +289,7 @@
 - ✅ 日期一致（20260805）
 - ✅ 头部关联字段互指正确（PRD↔ERD↔Spec）
 - ✅ 状态：**三文档已批准**（Project Owner，2026-08-07）
-- 🚧 **开发状态：开发中**（三文档批准，解除阻塞，进入 TDD 编码）
+- ✅ **开发状态：已实现**（宿主 TDD 全绿 `flutter test` 390 passing、`flutter analyze` clean；C1–C20/C22–C25 覆盖；C21 真机 e2e 待验，ADR-005 非阻塞）
 
 ### 范围摘要
 - 模块定位（Phase 4）：**Persona 持久化 + 人物库 + 蒸馏流程 + 导入入口 UI**——填补当前"仅内存 `PersonaJsonCodec`、无落盘"的缺口，并**填补 Phase-4 导入 UI 缺口**（模块 002 交付了解析/数据层但推迟了导入界面，无模块认领；今日生产环境无法导入真实聊天记录，仅 `kDebugMode` harness 用硬编码样例）。新增 `PersonaRepository`（由注入的 `PersonaCodec` + `PersonaDirectory`〔宿主用 `MemoryPersonaDirectory`〕+ `PersonaBytesTransform`〔008 加密接缝〕组合）；人物库屏（列表/删除/打开）；蒸馏流程屏（**导入步骤 → 蒸馏**，驱动模块 004 `LlmPersonaBuilder`）。
@@ -300,11 +300,13 @@
 ### 待办
 - [x] 三文档评审（v1.1.1，含导入 UI 范围扩展）
 - [x] 三文档批准（批准后方可编码）
-- [ ] 编写测试用例（C1–C25，含导入步骤 C22–C25）→ 实现 → 验证
-- [ ] `PersonaRepository` + `PersonaDirectory`（宿主内存实现）落地
-- [ ] 人物库屏 + 蒸馏流程屏（`PersonaLibraryNotifier`/`DistillNotifier`）
-- [ ] 导入步骤：`FilePickerFacade`（`pickFiles`/`pickDirectory`，`file_picker: ^8.0.0`）+ 复用 002 `ImportNotifier`；目录源（iMessage db / Photo-EXIF）iOS security-scoped 访问（ERD-002 §676）；`file_picker` 加入 `pubspec.yaml`
-- [ ] 与模块 006（Persona 载入）/ 004（蒸馏）/ 002（导入数据层）对接
+- [x] 编写测试用例（C1–C20、C22–C25，含导入步骤 C22–C25）→ 实现 → 验证（宿主全绿）
+- [x] `PersonaRepository` + `PersonaDirectory`（宿主内存实现 + `PathProvider` 生产实现）落地
+- [x] 人物库屏 + 蒸馏流程屏（`PersonaLibraryNotifier`/`DistillNotifier`）+ 首页接入
+- [x] 导入步骤：`FilePickerFacade`（`pickFiles`/`pickDirectory`，`file_picker: ^8.0.0`）+ 复用 002 `ImportNotifier`；`file_picker` 已加入 `pubspec.yaml`
+- [ ] 目录源（iMessage db / Photo-EXIF）iOS security-scoped 访问真机联调（ERD-002 §676，随 C21）
+- [ ] C21 真机 e2e（导入 → 蒸馏 → 保存 → 重启 → 载入，ADR-005）
+- [ ] 与模块 006（Persona 载入）对接（待 006 开发）；云端 `PersonaRuntime` 传输层为 004/006 遗留项（当前 `cloud` 选择回落本地 `LiteRtRuntime`）
 
 ---
 

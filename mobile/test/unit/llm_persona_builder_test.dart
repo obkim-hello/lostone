@@ -152,6 +152,24 @@ void main() {
       expect(p.personaVersion, 1);
     });
 
+    test('首轮返回散文、修复重试返回 JSON → 成功（非兜底）', () async {
+      final _SequenceRuntime runtime = _SequenceRuntime(<String>[
+        '好的，这个人很温柔，经常叮嘱家人……',
+        _kJson,
+      ]);
+      final List<String> logs = <String>[];
+      final Persona p = await DefaultLlmPersonaBuilder(onLog: logs.add).build(
+        _conv(_corpus()),
+        runtime: runtime,
+      );
+
+      expect(p.notes, isNot(contains('统计兜底：LLM 生成或解析失败')));
+      expect(p.identity.displayName, '妈妈');
+      expect(runtime.receivedPrompts, hasLength(2));
+      expect(runtime.receivedPrompts[1], contains('只输出一个 JSON 对象'));
+      expect(logs.any((String l) => l.startsWith('蒸馏解析失败（第 1 次）')), isTrue);
+    });
+
     test('生成结果不可解析（重试后）→ 统计兜底', () async {
       final MockRuntime runtime = MockRuntime(response: '这里没有 JSON 花括号');
       final Persona p = await DefaultLlmPersonaBuilder().build(
@@ -179,8 +197,36 @@ void main() {
       );
       expect(runtime.receivedPrompts.length, greaterThan(1));
       expect(logs, contains('蒸馏分块数：3'));
+      expect(logs, contains('蒸馏第 1/3 块…'));
+      expect(logs, contains('蒸馏第 3/3 块…'));
       expect(p.personaVersion, 1);
       expect(p.identity.displayName, '妈妈');
+    });
+
+    test('单块解析失败被跳过，其余块仍合成（不整体兜底）', () async {
+      final List<Message> msgs = <Message>[
+        _msg('记得吃饭，别累着自己', minute: 1),
+        _msg('天冷加衣，宝贝', minute: 2),
+        _msg('POISON_CHUNK 别怕', minute: 3),
+        _msg('喝茶养生', minute: 4),
+        _msg('有我在', minute: 5),
+      ];
+      final _ConditionalRuntime runtime = _ConditionalRuntime(
+        good: _kJson,
+        badMarker: 'POISON_CHUNK',
+      );
+      final List<String> logs = <String>[];
+      final Persona p = await DefaultLlmPersonaBuilder(onLog: logs.add).build(
+        _conv(msgs),
+        runtime: runtime,
+        options: const LlmBuildOptions(maxChunkMessages: 2),
+      );
+
+      expect(p.notes, isNot(contains('统计兜底：LLM 生成或解析失败')));
+      expect(p.identity.displayName, '妈妈');
+      expect(p.personaVersion, 1);
+      expect(logs, contains('跳过第 2/3 块（生成或解析失败）'));
+      expect(logs.any((String l) => l.startsWith('已跳过 1/3 块')), isTrue);
     });
 
     test('T11 非文本消息计入 totalMessages 但不进入蒸馏语料', () async {
@@ -299,6 +345,75 @@ void main() {
       );
     });
   });
+}
+
+/// 测试用 runtime：prompt 含 [badMarker] 时返回无法解析的文本，其余返回 [good]。
+/// 用于验证「单块解析失败被跳过、其余块仍合成」的韧性路径。
+class _ConditionalRuntime implements PersonaRuntime {
+  _ConditionalRuntime({required this.good, required this.badMarker});
+
+  final String good;
+  final String badMarker;
+  final List<String> receivedPrompts = <String>[];
+
+  @override
+  RuntimeCapabilities get capabilities => const RuntimeCapabilities(
+        contextTokens: 4096,
+        maxOutputTokens: 1024,
+      );
+
+  @override
+  Future<bool> isAvailable() async => true;
+
+  @override
+  Future<RuntimeResult> generate(String prompt, {double temperature = 0.2}) async {
+    receivedPrompts.add(prompt);
+    final String text = prompt.contains(badMarker) ? '这里没有 JSON' : good;
+    return RuntimeResult.ok(text, source: RuntimeSource.liteRt);
+  }
+
+  @override
+  Stream<String> generateStream(
+    String prompt, {
+    double temperature = 0.7,
+    int? maxNewTokens,
+  }) =>
+      throw UnimplementedError();
+}
+
+/// 测试用 runtime：按调用顺序依次返回注入的响应（末项之后重复末项）。
+/// 用于验证「首轮散文 → 修复重试 JSON」的修复路径。
+class _SequenceRuntime implements PersonaRuntime {
+  _SequenceRuntime(this.responses);
+
+  final List<String> responses;
+  final List<String> receivedPrompts = <String>[];
+
+  @override
+  RuntimeCapabilities get capabilities => const RuntimeCapabilities(
+        contextTokens: 4096,
+        maxOutputTokens: 1024,
+      );
+
+  @override
+  Future<bool> isAvailable() async => true;
+
+  @override
+  Future<RuntimeResult> generate(String prompt, {double temperature = 0.2}) async {
+    final int i = receivedPrompts.length < responses.length
+        ? receivedPrompts.length
+        : responses.length - 1;
+    receivedPrompts.add(prompt);
+    return RuntimeResult.ok(responses[i], source: RuntimeSource.liteRt);
+  }
+
+  @override
+  Stream<String> generateStream(
+    String prompt, {
+    double temperature = 0.7,
+    int? maxNewTokens,
+  }) =>
+      throw UnimplementedError();
 }
 
 Persona _withHardRules(Persona p, HardRules rules) => Persona(

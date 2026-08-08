@@ -1,5 +1,65 @@
 import 'package:lostone/models/conversation.dart';
+import 'package:lostone/models/evidence.dart';
+import 'package:lostone/models/memories.dart';
 import 'package:lostone/models/message.dart';
+import 'package:lostone/models/persona.dart';
+import 'package:lostone/models/persona_layers.dart';
+
+/// Minimal valid [Persona] for library/distill tests.
+Persona fixturePersona({
+  String id = 'persona-a',
+  String displayName = '妈妈',
+  DateTime? generatedAt,
+  Confidence identityConfidence = Confidence.high,
+  Confidence emotionConfidence = Confidence.medium,
+  List<String> notes = const <String>[],
+  List<String> aliases = const <String>[],
+  List<TermStat> catchphrases = const <TermStat>[],
+  List<PersonaTag> tags = const <PersonaTag>[],
+  List<Preference> preferences = const <Preference>[],
+}) =>
+    Persona(
+      id: id,
+      schemaVersion: kPersonaSchemaVersion,
+      personaVersion: 1,
+      generatedAt: generatedAt ?? DateTime.utc(2026, 8, 2, 10),
+      notes: notes,
+      identity: Identity(
+        displayName: displayName,
+        relationToUser: 'mother',
+        aliases: aliases,
+        confidence: identityConfidence,
+      ),
+      hardRules: const HardRules(),
+      expressionStyle: ExpressionStyle(
+        catchphrases: catchphrases,
+        confidence: Confidence.high,
+      ),
+      emotionalLogic: EmotionalLogic(
+        positiveRatio: 0.5,
+        negativeRatio: 0.1,
+        confidence: emotionConfidence,
+      ),
+      relationalBehavior: const RelationalBehavior(confidence: Confidence.medium),
+      tags: tags,
+      memories: Memories(
+        timeline: const TimelineSpan(start: null, end: null, messageCount: 0),
+        preferences: preferences,
+      ),
+      source: const PersonaSource(
+        sources: <DataSource>{DataSource.wechat},
+        totalMessages: 10,
+        personMessages: 5,
+        mergedMessageKeyHashes: <String>{},
+        revisions: <SourceRevision>[
+          SourceRevision(
+            personaVersion: 1,
+            personMessages: 5,
+            totalMessages: 10,
+          ),
+        ],
+      ),
+    );
 
 /// 合成消息构造器（测试专用，非真实数据）。
 Message synthMessage({

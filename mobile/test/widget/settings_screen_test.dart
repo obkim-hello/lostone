@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lostone/models/model_descriptor.dart';
 import 'package:lostone/models/model_install.dart';
 import 'package:lostone/providers/settings_providers.dart';
+import 'package:lostone/services/llm/cloud_runtime.dart';
 import 'package:lostone/screens/settings/model_management_screen.dart';
 import 'package:lostone/screens/settings/settings_screen.dart';
 import 'package:lostone/services/model/device_capabilities.dart';
@@ -135,7 +136,30 @@ class _ThrowingSecureKeyStore implements SecureKeyStore {
   Future<void> clear() async => throw StateError('keychain locked');
 }
 
-List<Override> _overrides(_FakeRepo repo, {SecureKeyStore? cloudKeyStore}) {
+class _FakeTransport implements CloudTransport {
+  _FakeTransport({this.throwOn});
+
+  final CloudHttpException? throwOn;
+
+  @override
+  Future<String> complete(CloudRequest request) async {
+    if (throwOn != null) {
+      throw throwOn!;
+    }
+    return 'pong';
+  }
+
+  @override
+  Stream<String> stream(CloudRequest request) async* {
+    yield await complete(request);
+  }
+}
+
+List<Override> _overrides(
+  _FakeRepo repo, {
+  SecureKeyStore? cloudKeyStore,
+  List<Override> extra = const <Override>[],
+}) {
   return <Override>[
     settingsRepositoryProvider.overrideWithValue(InMemorySettingsRepository()),
     cloudKeyStoreProvider.overrideWithValue(
@@ -146,6 +170,7 @@ List<Override> _overrides(_FakeRepo repo, {SecureKeyStore? cloudKeyStore}) {
       const StaticDeviceCapabilities(tier: DeviceTier.simulatorCpu),
     ),
     modelRepositoryProvider.overrideWithValue(repo),
+    ...extra,
   ];
 }
 
@@ -154,13 +179,14 @@ Future<void> _pump(
   Widget screen,
   _FakeRepo repo, {
   SecureKeyStore? cloudKeyStore,
+  List<Override> extra = const <Override>[],
 }) async {
   tester.view.physicalSize = const Size(1000, 3000);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
     ProviderScope(
-      overrides: _overrides(repo, cloudKeyStore: cloudKeyStore),
+      overrides: _overrides(repo, cloudKeyStore: cloudKeyStore, extra: extra),
       child: MaterialApp(home: screen),
     ),
   );
@@ -250,6 +276,89 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Could not save'), findsOneWidget);
+    });
+
+    testWidgets('shows supported API formats and picks Anthropic', (
+      WidgetTester tester,
+    ) async {
+      final _FakeRepo repo = _FakeRepo(catalogList: <ModelDescriptor>[]);
+      await _pump(tester, const SettingsScreen(), repo);
+
+      expect(find.byKey(const Key('cloud-provider-picker')), findsOneWidget);
+      expect(find.text('OpenAI (compatible)'), findsOneWidget);
+      expect(find.textContaining('Anthropic (Claude)'), findsWidgets);
+
+      await tester.tap(find.text('Anthropic (Claude)').first);
+      await tester.pumpAndSettle();
+
+      final ProviderContainer container = ProviderScope.containerOf(
+        tester.element(find.byType(SettingsScreen)),
+      );
+      expect(
+        container.read(appSettingsProvider).cloudProvider,
+        CloudProvider.anthropic,
+      );
+    });
+
+    testWidgets('Test connection without a key prompts to add one', (
+      WidgetTester tester,
+    ) async {
+      final _FakeRepo repo = _FakeRepo(catalogList: <ModelDescriptor>[]);
+      await _pump(
+        tester,
+        const SettingsScreen(),
+        repo,
+        extra: <Override>[
+          cloudTransportProvider.overrideWithValue(_FakeTransport()),
+        ],
+      );
+
+      await tester.tap(find.byKey(const Key('cloud-test-connection')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Add a cloud API key first.'), findsOneWidget);
+    });
+
+    testWidgets('Test connection success surfaces a positive SnackBar', (
+      WidgetTester tester,
+    ) async {
+      final _FakeRepo repo = _FakeRepo(catalogList: <ModelDescriptor>[]);
+      await _pump(
+        tester,
+        const SettingsScreen(),
+        repo,
+        cloudKeyStore: InMemorySecureKeyStore(initial: 'sk-live'),
+        extra: <Override>[
+          cloudTransportProvider.overrideWithValue(_FakeTransport()),
+        ],
+      );
+
+      await tester.tap(find.byKey(const Key('cloud-test-connection')));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Connection OK'), findsOneWidget);
+    });
+
+    testWidgets('Test connection 401 surfaces a rejection SnackBar', (
+      WidgetTester tester,
+    ) async {
+      final _FakeRepo repo = _FakeRepo(catalogList: <ModelDescriptor>[]);
+      await _pump(
+        tester,
+        const SettingsScreen(),
+        repo,
+        cloudKeyStore: InMemorySecureKeyStore(initial: 'sk-bad'),
+        extra: <Override>[
+          cloudTransportProvider.overrideWithValue(
+            _FakeTransport(throwOn: const CloudHttpException(statusCode: 401)),
+          ),
+        ],
+      );
+
+      await tester.tap(find.byKey(const Key('cloud-test-connection')));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Rejected'), findsOneWidget);
     });
   });
 

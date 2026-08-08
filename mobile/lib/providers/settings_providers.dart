@@ -4,6 +4,8 @@ import 'package:hive/hive.dart';
 import '../models/app_settings.dart';
 import '../models/model_descriptor.dart';
 import '../models/model_manager_state.dart';
+import '../services/llm/cloud_runtime.dart';
+import '../services/llm/http_cloud_transport.dart';
 import '../services/model/device_capabilities.dart';
 import '../services/model/flutter_gemma_installer.dart';
 import '../services/model/model_catalog.dart';
@@ -36,6 +38,29 @@ final Provider<SecureKeyStore> cloudKeyStoreProvider = Provider<SecureKeyStore>(
 final Provider<TokenStore> hfTokenStoreProvider = Provider<TokenStore>(
   (Ref ref) => SecureTokenStore(),
 );
+
+/// Per-request timeout for cloud inference.
+///
+/// A full distillation chunk asks the model to emit a structured JSON persona,
+/// which legitimately runs well past a short HTTP default; too tight a timeout
+/// surfaces as a misleading `RuntimeError.network` even when the endpoint is
+/// healthy (the tiny "Test connection" ping still succeeds).
+const Duration cloudRequestTimeout = Duration(seconds: 120);
+
+/// Cloud HTTP transport shaped by the user's provider/endpoint choice.
+///
+/// Rebuilds when [appSettingsProvider]'s `cloudProvider`/`cloudEndpoint`
+/// change. Used both by the distill/chat [PersonaRuntime] wiring and the
+/// settings "Test connection" action. Override in tests with a fake transport.
+final Provider<CloudTransport> cloudTransportProvider =
+    Provider<CloudTransport>((Ref ref) {
+      final AppSettings settings = ref.watch(appSettingsProvider);
+      return HttpCloudTransport(
+        format: settings.cloudProvider,
+        endpoint: settings.cloudEndpoint,
+        timeout: cloudRequestTimeout,
+      );
+    });
 
 /// Device capability probe used for model recommendation.
 ///

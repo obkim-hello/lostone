@@ -110,9 +110,10 @@ class DistillationFormatException implements Exception {
 
 /// 把模型的原始文本响应解析为 [DistilledPersona]。
 ///
-/// 约定输出为 JSON 对象；容忍前后散文与 ```json 代码围栏（取首个 `{` 到末个
-/// `}`）。整体 JSON 不可解析时抛 [DistillationFormatException]；单个字段类型
-/// 不符时**从宽**按缺省处理（不因个别噪声整体失败）。
+/// 约定输出为 JSON 对象；容忍前后散文、```json 代码围栏、**尾随的第二个对象**
+/// （端侧小模型常见）与**列表/对象末尾多余逗号**。整体 JSON 不可解析时抛
+/// [DistillationFormatException]；单个字段类型不符时**从宽**按缺省处理（不因个别
+/// 噪声整体失败）。
 class DistillationParser {
   /// 创建解析器。
   const DistillationParser();
@@ -157,16 +158,62 @@ class DistillationParser {
     if (start < 0 || end <= start) {
       throw const DistillationFormatException('响应不含 JSON 对象');
     }
-    final Object? decoded;
-    try {
-      decoded = json.decode(raw.substring(start, end + 1));
-    } on FormatException catch (e) {
-      throw DistillationFormatException('JSON 解析失败：${e.message}');
+    final String candidate = _balancedObject(raw, start) ?? raw.substring(start, end + 1);
+    final Object? decoded =
+        _tryDecode(candidate) ?? _tryDecode(_relaxJson(candidate));
+    if (decoded == null) {
+      throw const DistillationFormatException('JSON 解析失败：无法解析模型输出');
     }
     if (decoded is Map) {
       return decoded.cast<String, dynamic>();
     }
     throw const DistillationFormatException('顶层不是 JSON 对象');
+  }
+
+  Object? _tryDecode(String s) {
+    try {
+      return json.decode(s);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  /// Strips a trailing comma before a closing `}`/`]` — the most common
+  /// small-model JSON glitch `json.decode` rejects with "Unexpected character".
+  String _relaxJson(String s) =>
+      s.replaceAllMapped(RegExp(r',(\s*[}\]])'), (Match m) => m.group(1)!);
+
+  /// Returns the first brace-balanced `{...}` starting at [start] (honoring
+  /// string literals and escapes), or null if it never closes. Discards any
+  /// second object or prose the model appends after the first one.
+  String? _balancedObject(String raw, int start) {
+    int depth = 0;
+    bool inString = false;
+    bool escaped = false;
+    for (int i = start; i < raw.length; i++) {
+      final String ch = raw[i];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (ch == r'\') {
+          escaped = true;
+        } else if (ch == '"') {
+          inString = false;
+        }
+        continue;
+      }
+      if (ch == '"') {
+        inString = true;
+      } else if (ch == '{') {
+        depth++;
+      } else if (ch == '}') {
+        depth--;
+        if (depth == 0) {
+          return raw.substring(start, i + 1);
+        }
+      }
+    }
+    return null;
   }
 
   Map<String, dynamic> _obj(Object? v) =>

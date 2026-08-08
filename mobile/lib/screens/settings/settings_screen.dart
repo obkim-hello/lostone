@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/app_settings.dart';
 import '../../providers/settings_providers.dart';
+import '../../services/llm/cloud_runtime.dart';
 import '../../services/settings/settings_notifier.dart';
 import '../../theme/app_theme.dart';
 import 'model_management_screen.dart';
@@ -21,12 +22,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final TextEditingController _cloudKeyController = TextEditingController();
   final TextEditingController _cloudEndpointController =
       TextEditingController();
+  final TextEditingController _cloudModelController = TextEditingController();
   bool _endpointSeeded = false;
+  bool _modelSeeded = false;
+  bool _testingConnection = false;
 
   @override
   void dispose() {
     _cloudKeyController.dispose();
     _cloudEndpointController.dispose();
+    _cloudModelController.dispose();
     super.dispose();
   }
 
@@ -45,12 +50,78 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Future<void> _testCloudConnection() async {
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final String? key = await ref.read(cloudKeyStoreProvider).read();
+    if (!mounted) {
+      return;
+    }
+    if (key == null || key.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Add a cloud API key first.')),
+      );
+      return;
+    }
+    setState(() => _testingConnection = true);
+    final AppSettings settings = ref.read(appSettingsProvider);
+    final CloudTransport transport = ref.read(cloudTransportProvider);
+    String message;
+    try {
+      await transport.complete(
+        CloudRequest(
+          prompt: 'ping',
+          model: settings.effectiveCloudModel,
+          apiKey: key,
+          temperature: 0.7,
+          maxNewTokens: 16,
+        ),
+      );
+      message = 'Connection OK — ${settings.cloudProvider.label} responded.';
+    } on CloudHttpException catch (e) {
+      message = _cloudHttpErrorText(e);
+    } on Object catch (e) {
+      message = 'Connection failed: $e';
+    } finally {
+      if (mounted) {
+        setState(() => _testingConnection = false);
+      }
+    }
+    if (!mounted) {
+      return;
+    }
+    messenger.showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 6)),
+    );
+  }
+
+  static String _cloudHttpErrorText(CloudHttpException e) {
+    if (e.isNetworkError) {
+      return 'Could not reach the API — check the endpoint. '
+          '${e.detail ?? ''}'.trim();
+    }
+    final int? code = e.statusCode;
+    final String detail = e.detail == null ? '' : ' — ${e.detail}';
+    return switch (code) {
+      401 || 403 =>
+        'Rejected (HTTP $code) — check your API key and permissions.$detail',
+      404 =>
+        'Not found (HTTP 404) — check the endpoint base URL.$detail',
+      429 => 'Rate limited (HTTP 429) — try again shortly.$detail',
+      null => 'Connection failed$detail',
+      _ => 'Failed (HTTP $code)$detail',
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final AppSettings settings = ref.watch(appSettingsProvider);
     if (!_endpointSeeded && (settings.cloudEndpoint ?? '').isNotEmpty) {
       _cloudEndpointController.text = settings.cloudEndpoint!;
       _endpointSeeded = true;
+    }
+    if (!_modelSeeded && (settings.cloudModel ?? '').isNotEmpty) {
+      _cloudModelController.text = settings.cloudModel!;
+      _modelSeeded = true;
     }
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -108,6 +179,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onChanged: (bool value) =>
                 _guarded(() => _notifier.setCloudAuthorized(value)),
           ),
+          _CloudProviderPicker(
+            selected: settings.cloudProvider,
+            onChanged: (CloudProvider provider) =>
+                _guarded(() => _notifier.setCloudProvider(provider)),
+          ),
           _SecretField(
             fieldKey: const Key('cloud-key-field'),
             label: 'Cloud API key',
@@ -130,10 +206,45 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _PlainField(
             fieldKey: const Key('cloud-endpoint-field'),
             label: 'API endpoint',
-            hint: 'https://api.openai.com/v1',
+            hint: settings.cloudProvider.defaultEndpoint,
             controller: _cloudEndpointController,
+            helper: 'Base URL only (no /chat/completions). '
+                'E.g. z.ai → https://api.z.ai/api/paas/v4',
             onSave: (String value) =>
                 _guarded(() => _notifier.setCloudEndpoint(value)),
+          ),
+          _PlainField(
+            fieldKey: const Key('cloud-model-field'),
+            label: 'Model',
+            hint: settings.cloudProvider.defaultModel,
+            controller: _cloudModelController,
+            onSave: (String value) =>
+                _guarded(() => _notifier.setCloudModel(value)),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppTheme.gutter,
+              12,
+              AppTheme.gutter,
+              4,
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                key: const Key('cloud-test-connection'),
+                onPressed: _testingConnection ? null : _testCloudConnection,
+                icon: _testingConnection
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.wifi_tethering),
+                label: Text(
+                  _testingConnection ? 'Testing…' : 'Test connection',
+                ),
+              ),
+            ),
           ),
           const _SectionHeader('Models'),
           _NavRow(
@@ -172,6 +283,51 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       RuntimeChoice.maxPrivacy =>
         'Never invokes an LLM (statistical fallback).',
     };
+  }
+}
+
+/// Cloud API-format picker: a two-segment control (OpenAI / Claude) with a
+/// caption naming the two supported wire formats.
+class _CloudProviderPicker extends StatelessWidget {
+  const _CloudProviderPicker({required this.selected, required this.onChanged});
+
+  final CloudProvider selected;
+  final ValueChanged<CloudProvider> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppTheme.gutter, 8, AppTheme.gutter, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text('API format', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          SegmentedButton<CloudProvider>(
+            key: const Key('cloud-provider-picker'),
+            segments: <ButtonSegment<CloudProvider>>[
+              for (final CloudProvider provider in CloudProvider.values)
+                ButtonSegment<CloudProvider>(
+                  value: provider,
+                  label: Text(provider.label),
+                ),
+            ],
+            selected: <CloudProvider>{selected},
+            showSelectedIcon: false,
+            onSelectionChanged: (Set<CloudProvider> selection) =>
+                onChanged(selection.first),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Supported: OpenAI-compatible Chat Completions and Anthropic '
+            '(Claude) Messages. Point the endpoint at any OpenAI-compatible '
+            'gateway (Azure, Groq, Together, …) with the OpenAI format.',
+            style: theme.textTheme.bodySmall?.copyWith(color: AppTheme.muted),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -378,6 +534,7 @@ class _PlainField extends StatelessWidget {
     required this.hint,
     required this.controller,
     required this.onSave,
+    this.helper,
   });
 
   final Key fieldKey;
@@ -385,6 +542,7 @@ class _PlainField extends StatelessWidget {
   final String hint;
   final TextEditingController controller;
   final void Function(String value) onSave;
+  final String? helper;
 
   @override
   Widget build(BuildContext context) {
@@ -437,6 +595,16 @@ class _PlainField extends StatelessWidget {
               ),
             ],
           ),
+          if (helper != null) ...<Widget>[
+            const SizedBox(height: 6),
+            Text(
+              helper!,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: AppTheme.muted),
+            ),
+          ],
         ],
       ),
     );

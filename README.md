@@ -27,7 +27,7 @@
 
 ## 📚 项目状态
 
-**当前阶段**：Phase 1 - 数据导入（模块 002 开发中）｜ Phase 2 - Persona 生成（模块 003 ✅ 已完成）｜ Phase 3 - LLM 集成 ✅ 已完成（模块 007 模型管理 + 模块 004 LLM 集成，PR #14 merged 2026-08-05；host TDD 291 passing、analyze clean、iOS on-device install verified；ADR-005 on-device quality validation pending, non-blocking）｜ **Phase 4 - UI 实现 🚧 进行中**（模块 010 设置 ✅ 已批准 v1.0.2（🔶 v1.0.3 待复批）· 开发中（PR #17）；模块 009 人物库与蒸馏 ✅ 已批准 v1.1.1（含导入 UI 入口，2026-08-07）· 开发中；模块 006 聊天界面 文档草稿完成，待评审批准）
+**当前阶段**：Phase 1 - 数据导入（模块 002 开发中）｜ Phase 2 - Persona 生成（模块 003 ✅ 已完成）｜ Phase 3 - LLM 集成 ✅ 已完成（模块 007 模型管理 + 模块 004 LLM 集成，PR #14 merged 2026-08-05；host TDD 291 passing、analyze clean、iOS on-device install verified；ADR-005 on-device quality validation pending, non-blocking）｜ **Phase 4 - UI 实现 🚧 进行中**（模块 010 设置 ✅ 已批准 v1.0.2（🔶 v1.0.3 待复批）· 开发中（PR #17）；模块 009 人物库与蒸馏 ✅ 已批准 v1.1.1（含导入 UI 入口，2026-08-07）· ✅ 已实现（host TDD 390 passing、analyze clean；C21 真机待验，ADR-005 非阻塞）；模块 006 聊天界面 文档草稿完成，待评审批准）
 
 **已完成**：
 - ✅ 项目文档体系建立
@@ -171,7 +171,7 @@ lostone/
 | 004 - LLM 集成（蒸馏 + 对话引擎） | [PRD](docs/prd/PRD-LLM-Integration-004-20260802.md) | [ERD](docs/erd/ERD-LLM-Integration-004-20260802.md) | [Spec](docs/spec/SPEC-LLM-Integration-004-20260802.md) | ✅ 已批准（v1.1.1）· ✅ 已完成 |
 | 006 - 聊天界面（对话 + 聊天历史） | [PRD](docs/prd/PRD-Chat-Interface-006-20260805.md) | [ERD](docs/erd/ERD-Chat-Interface-006-20260805.md) | [Spec](docs/spec/SPEC-Chat-Interface-006-20260805.md) | 📝 草稿（待评审批准） |
 | 007 - 模型管理（提前至 Phase 3） | [PRD](docs/prd/PRD-Model-Management-007-20260802.md) | [ERD](docs/erd/ERD-Model-Management-007-20260802.md) | [Spec](docs/spec/SPEC-Model-Management-007-20260802.md) | ✅ 已批准（v1.0.1）· ✅ 已完成 |
-| 009 - 人物库与蒸馏（+ 导入 UI） | [PRD](docs/prd/PRD-Persona-Library-009-20260805.md) | [ERD](docs/erd/ERD-Persona-Library-009-20260805.md) | [Spec](docs/spec/SPEC-Persona-Library-009-20260805.md) | ✅ 已批准 v1.1.1（开发中） |
+| 009 - 人物库与蒸馏（+ 导入 UI） | [PRD](docs/prd/PRD-Persona-Library-009-20260805.md) | [ERD](docs/erd/ERD-Persona-Library-009-20260805.md) | [Spec](docs/spec/SPEC-Persona-Library-009-20260805.md) | ✅ 已批准 v1.1.1 · ✅ 已实现（host TDD） |
 | 010 - 设置（模型管理 UI + 运行模式 + 云端授权） | [PRD](docs/prd/PRD-Settings-010-20260805.md) | [ERD](docs/erd/ERD-Settings-010-20260805.md) | [Spec](docs/spec/SPEC-Settings-010-20260805.md) | ✅ 已批准（v1.0.2，2026-08-05）· 🔶 v1.0.3 待复批 · 🚧 开发中（PR #17）|
 | ... | ... | ... | ... | ... |
 

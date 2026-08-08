@@ -13,7 +13,12 @@ import 'lite_rt_runtime.dart';
 /// （ADR-005）；宿主仅经 [LiteRtRuntime] + 假 [GemmaEngine] 做结构/契约测试。
 class FlutterGemmaEngine implements GemmaEngine {
   /// 创建引擎。[maxTokens] 为上下文窗口（`.litertlm` 需 ≥1024）。
-  const FlutterGemmaEngine({this.maxTokens = 1024});
+  ///
+  /// 默认 4096：蒸馏 prompt（模板 + 语料分块）远超 1024，窗口过小会触发
+  /// `flutter_gemma` 的硬错误 `INVALID_ARGUMENT: Input token ids are too long`。
+  /// 注意 `flutter_gemma` 的 `getActiveModel` 按模型名缓存实例、**忽略**后续
+  /// 变化的 [maxTokens]，故各推理路径须用一致的窗口，避免先建小窗被复用。
+  const FlutterGemmaEngine({this.maxTokens = 4096});
 
   /// 上下文窗口 token 上限。
   final int maxTokens;
